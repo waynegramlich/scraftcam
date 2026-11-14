@@ -2,7 +2,7 @@
 
 Trimmed 2026-11-13: only decisions still in force and where things
 stand.  The full history is in `hg` and `git`.  Issue numbers are
-sticky (code comments cite them); new ones continue after #106.
+sticky (code comments cite them); new ones continue after #138.
 
 ## Decisions in Force
 
@@ -92,6 +92,24 @@ sticky (code comments cite them); new ones continue after #106.
   shows only [Stop All], message, [x] and the machine panel, and asks
   to stay on top (Wayland may ignore it; GNOME's own Always on Top
   works) (#90-#95).
+* Machines view vs machine view (#134-#138, 2026-11-14; replaces
+  #101's tabs, the bar of #102 kept):
+  * `machines/` directory view: a row per CNC machine (name, kind,
+    state, job progress, next-task bar, a field or two per kind);
+    non-CNC machines one line each; a short list of the next tools
+    to fetch across all machines (#134).
+  * A click opens one machine (today's tab insides) in its own
+    panel; the per-machine tabs (#101) go; expect iteration (#135).
+  * The bar is the next operator task: tool or carousel change
+    (mill, router, lathe), filament or print end (3D printer),
+    material or focus (laser) (#136).
+  * Per kind fields and a `KINDS` entry per machine kind: mill,
+    router, lathe, laser, 3D printer; only the mill now (#137).
+  * A small controller interface (status, load, start, pause,
+    resume, stop, jog, MDI, next task); LinuxCNC only now; later
+    GRBL/FluidNC, Moonraker, OPC UA; MTConnect is read only, so
+    view only, and [Stop All] reports it cannot stop it (#138).
+  * Next: start with #134, the `machines/` directory view.
 * To come: the inside of a machine tab (the user's next topic; #105:
   "did not look right", details from the user); [NC Files] as a job:
   a directory of `.nc` files, one tool each, run in name order,
