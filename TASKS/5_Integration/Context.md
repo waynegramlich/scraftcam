@@ -85,3 +85,13 @@ next manual tool task, [Stop All] always shown, a minimal form.  New
 Pending tasks: `T.cpfj~5.7` (carousel planning for a job),
 `T.rslsao~5.8` (several LinuxCNC simulators at once).  Next: the
 inside of a machine tab (see `T.osiade~5.1.9`'s `Context.md`).
+
+## 2026-11-14: `T.osiade~5.1.9` step 5 redesign, #134-#146
+
+A `machines/` list (CNC machines three lines each, others one, tools
+to fetch); a machine's controls only once it is clicked; a start
+guide; [Enable Editing] per panel; controller templates in
+`controllers/` copied into each machine by [New Machine], a template
+change followed up by its editor; vendor version fields; a key left
+out is "not initialized yet"; header-first key order.  All coded,
+awaiting the user's demo run (see `T.osiade~5.1.9`'s `Context.md`).
