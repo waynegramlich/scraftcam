@@ -249,7 +249,7 @@
           ]
         },
         "controller": {
-          "description": "The controller, by its name (a file in `controllers/`).",
+          "description": "Its own controller, copied from a template in `controllers/` (#141).",
           "anyOf": [
             {
               "$ref": "#/$defs/controller"
@@ -296,7 +296,6 @@
       "required": [
         "machine",
         "axes",
-        "spindle",
         "controller"
       ],
       "additionalProperties": false
@@ -415,9 +414,7 @@
         }
       },
       "required": [
-        "letter",
-        "travel",
-        "max_feed"
+        "letter"
       ],
       "additionalProperties": false
     },
@@ -571,10 +568,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "interface",
-        "max_rpm"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "controller": {
@@ -612,6 +606,31 @@
         "tool_change": {
           "description": "The lines that change the tool.",
           "type": "string"
+        },
+        "template": {
+          "description": "In a machine's copy: the template in `controllers/` it was copied from (#141).",
+          "type": "string"
+        },
+        "vendor": {
+          "description": "Who makes it (#144).",
+          "type": "string"
+        },
+        "product": {
+          "description": "The vendor's name for it.",
+          "type": "string"
+        },
+        "vendor_version": {
+          "description": "Its version, as the vendor writes it (e.g. \"R3.043.066\").",
+          "type": "string"
+        },
+        "vendor_triple": {
+          "description": "Our reading of `vendor_version`, MAJOR.MINOR.PATCH (e.g. \"3.43.66\"; \"0.0.0\" when unknown), filled in when `vendor_version` is entered.",
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "support_ended": {
+          "description": "When the vendor stopped updating it (left out: unknown).",
+          "format": "date"
         }
       },
       "required": [

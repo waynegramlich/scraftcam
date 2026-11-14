@@ -5,12 +5,13 @@
   read cleanly is red, with the problem as its tooltip (#125).  The
   roots open one level (#128); when the tree is read again, what was
   open stays open.
-* `Panel`: shows one item (#122): a shop file's plain fields, one
-  row each, edited in place (S3.4, `fields.py`), with its kind's
-  sketch from `Tool_Models.md` to the right (#5, #14), and the rest
-  of it as TOML, read only; another TOML file's text; a Python file's or
-  package's top docstring (#74), or the problem for an item that does
-  not read cleanly, both wrapped.
+* `Panel`: shows one item (#122), one machine's controls (#135), or
+  the `machines/` summary (#134, `machines.py`): a shop file's plain
+  fields, one row each, edited in place (S3.4, `fields.py`), with its
+  kind's sketch from `Tool_Models.md` to the right (#5, #14), and the
+  rest of it as TOML, read only; another TOML file's text; a Python
+  file's or package's top docstring (#74), or the problem for an item
+  that does not read cleanly, both wrapped.
 * `TreeWatcher`: reads the trees again whenever a file or directory
   in them changes outside the GUI (#11, #123), so there is no
   [Refresh].  The
@@ -19,10 +20,10 @@
 
 import functools
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..packages import require
+from ..shops import KINDS, not_initialized, vendor_triple
 from .app import App
 from .fields import (
     Row,
@@ -34,6 +35,13 @@ from .fields import (
     with_value,
     write_item,
 )
+from .machines import (
+    MachineControl,
+    MachinesView,
+    MachineTab,
+    is_machines_directory,
+)
+from .templates import FollowUp, FollowUpView, follow_ups, is_template
 from .theme import colors, sketch_text
 from .tree import DIRECTORY, ERROR, FILE, PACKAGE, SHOP, Node, docstring
 
@@ -64,12 +72,9 @@ from PySide6.QtWidgets import (  # noqa: E402
     QLayout,
     QLineEdit,
     QPlainTextEdit,
-    QProgressBar,
     QScrollArea,
     QSplitter,
     QSplitterHandle,
-    QTabBar,
-    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -80,14 +85,6 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 # A splitter's handle: wide enough to see and grab, in the palette's
 # colors, so it shows in light and dark mode alike (#25).
-# A machine tab's bar: its steps, its least width (pixels), how
-# many minutes count as soon, and soon's color (#102).
-BAR_STEPS: int = 1000
-BAR_WIDTH: int = 140
-SOON: float = 1.0
-SOON_COLOR: str = "#e0a000"
-FILL_COLOR: str = "#3d7fd6"
-
 HANDLE_WIDTH: int = 7
 HANDLE_STYLE: str = (
     "QSplitter::handle { background: palette(mid); } "
@@ -142,140 +139,70 @@ def item_text(node: Node) -> str:
     return docstring(node.path)
 
 
-# Class `MachineControl`:
-@dataclass(frozen=True, slots=True)
-class MachineControl:
-    """A machine's controls, as a panel shows them (step 5, #52).
-
-    The HMI (`scraftcam.hmi.lcnc_hmi.HMI`) is one; the GUI knows it
-    only through these, so that it needs no LinuxCNC to start.
-
-    Attributes:
-    * `name` (`str`): What the panel's title calls it.
-    * `widget` (`QWidget`): The controls, filling the panel (#59).
-    * `busy` (`Callable[[], str]`): Why nothing may close yet (the
-      machine runs, or its spindle is on), or `""` (#56).
-    * `stop` (`Callable[[], None]`): Stops the machine at once.
-    * `on_minimal` (`Callable[[Callable[[bool], None]], None]`): Hands
-      the controls what to call when they go minimal (True) or full
-      (False), so the window can shrink with them (#94).
-    * `due` (`Callable[[], Due | None]`): When the operator is next
-      needed (#102); `None` with no program.
-
-    Constructor:
-    * `MachineControl(name, widget, busy, stop, on_minimal, due)`
-    """
-
-    # Constructor arguments:
-    name: str = field(init=True)
-    widget: QWidget = field(init=True)
-    busy: Callable[[], str] = field(init=True)
-    stop: Callable[[], None] = field(init=True)
-    on_minimal: Callable[[Callable[[bool], None]], None] = field(init=True)
-    due: Callable[[], "Due | None"] = field(init=True)
-
-
-# Class `Due`:
-@dataclass(frozen=True, slots=True)
-class Due:
-    """When a machine next needs its operator (#102, #103).
-
-    Attributes:
-    * `what` (`str`): What then: a tool (`T05`), or `end`.
-    * `left` (`float`): Minutes until then (0 when waiting now).
-    * `span` (`float`): Minutes from the one before to it.
-    * `waiting` (`bool`): True when it waits for the operator now.
-
-    Constructor:
-    * `Due(what, left, span, waiting)`
-    """
-
-    # Constructor arguments:
-    what: str = field(init=True)
-    left: float = field(init=True)
-    span: float = field(init=True)
-    waiting: bool = field(init=True)
-
-
-# Class `MachineTab`:
-class MachineTab(QWidget):
-    """A machine tab's header: its name over its bar (#101, #102).
-
-    The bar fills, from black, as the operator's next tool task (a
-    carousel swap, or a change by hand) comes, and is full when it is
-    due; it starts again from black after it (#106).  Its text is the
-    time left.  The urgency shows in marks as well as color, for
-    operators who are color blind: "3:42"; within `SOON` minutes,
-    amber, "▲ 0:40"; waiting now, red and blinking, "■ NOW".
-
-    Attributes:
-    * `meter` (`QProgressBar`): The time left, as a share of the wait.
-    """
-
-    def __init__(self, name: str) -> None:
-        """Make the header.
-
-        Arguments:
-        * `name` (`str`): The machine's name.
-        """
-        super().__init__()
-        layout: QVBoxLayout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(1)
-        label: QLabel = QLabel(name)
-        label.setStyleSheet("font-weight: bold")
-        layout.addWidget(label)
-        self.meter: QProgressBar = QProgressBar()
-        self.meter.setRange(0, BAR_STEPS)
-        self.meter.setTextVisible(True)
-        self.meter.setMinimumWidth(BAR_WIDTH)
-        layout.addWidget(self.meter)
-
-    def show_due(self, due: Due | None, blink: bool) -> None:
-        """Show when the operator is next needed.
-
-        Arguments:
-        * `due` (`Due | None`): When; `None` with no program.
-        * `blink` (`bool`): Which half of a blink this is.
-        """
-        if due is None:
-            self.meter.setValue(0)
-            self.meter.setFormat("no program")
-            self.meter.setStyleSheet("")
-            return
-        color: str
-        if due.waiting:
-            self.meter.setValue(BAR_STEPS)
-            self.meter.setFormat("■ NOW")
-            color = colors().problem if blink else colors().quiet
-        else:
-            done: float = 1.0 - min(max(due.left / due.span, 0.0), 1.0)
-            self.meter.setValue(round(done * BAR_STEPS))
-            soon: bool = due.left <= SOON
-            self.meter.setFormat(f"{'▲ ' if soon else ''}{minutes(due.left)}")
-            color = SOON_COLOR if soon else FILL_COLOR
-        self.meter.setToolTip(
-            "Until the end" if due.what == "end" else f"Until {due.what}"
-        )
-        self.meter.setStyleSheet(
-            "QProgressBar { background: black; color: white;"
-            " text-align: center; }"
-            f" QProgressBar::chunk {{ background: {color}; }}"
-        )
-
-
-# Function `minutes()`:
-def minutes(amount: float) -> str:
-    """Return minutes as `M:SS`.
-
-    Arguments:
-    * `amount` (`float`): The minutes.
+# Function `no_controls()`:
+def no_controls() -> list[MachineControl]:
+    """Return no machines: a panel's `controls` until the window's.
 
     Returns:
-    * (`str`): E.g. `3:42`.
+    * (`list[MachineControl]`): `[]`.
     """
-    seconds: int = max(round(amount * 60.0), 0)
-    return f"{seconds // 60}:{seconds % 60:02d}"
+    return []
+
+
+# Function `no_machine()`:
+def no_machine(_name: str) -> None:
+    """Do nothing: a panel's `open_machine` and `say` until the window's."""
+
+
+# Function `guide_label()`:
+def guide_label() -> QLabel:
+    """Return the label a panel shows its guide in, hidden (#139).
+
+    Returns:
+    * (`QLabel`): Wrapped, at the top left.
+    """
+    label: QLabel = QLabel()
+    label.setWordWrap(True)
+    label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+    label.hide()
+    return label
+
+
+# Function `shared()`:
+def shared(
+    orientation: Qt.Orientation, first: QWidget, second: QWidget
+) -> QSplitter:
+    """Return a splitter between two widgets, the first taking 2:1.
+
+    Arguments:
+    * `orientation` (`Qt.Orientation`): Side by side, or one above.
+    * `first` (`QWidget`): The left or upper one.
+    * `second` (`QWidget`): The other.
+
+    Returns:
+    * (`QSplitter`): The splitter, holding both.
+    """
+    split: QSplitter = splitter(orientation)
+    split.addWidget(first)
+    split.addWidget(second)
+    split.setStretchFactor(0, 2)
+    split.setStretchFactor(1, 1)
+    split.setSizes(SHARES)
+    return split
+
+
+# Function `missing_label()`:
+def missing_label() -> QLabel:
+    """Return the label for the fields not initialized yet, hidden.
+
+    Returns:
+    * (`QLabel`): Wrapped, in the quiet color (not a problem, #145).
+    """
+    label: QLabel = QLabel()
+    label.setWordWrap(True)
+    label.setStyleSheet(f"color: {colors().quiet}")
+    label.hide()
+    return label
 
 
 # Class `Panel`:
@@ -287,11 +214,29 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
     * `text` (`QPlainTextEdit`): What the item holds, read only (for
       a shop file, what its fields do not show).
     * `node` (`Node | None`): The item shown, if any.
-    * `machines` (`list[MachineControl]`): The machines it controls,
-      if any (`show_machine()`), a tab each; then it shows nothing
-      else (#101).
-    * `headers` (`list[MachineTab]`): Their tabs' headers.
-    * `machine_tabs` (`QTabWidget`): The machines' tabs.
+    * `machines` (`list[MachineControl]`): The machine it controls,
+      if any (`show_machine()`), at most one (#135); then it shows
+      nothing else.
+    * `header` (`MachineTab | None`): Its header: its name over its
+      bar.
+    * `summary` (`MachinesView | None`): The `machines/` summary,
+      while it shows that (#134).
+    * `controls` (`Callable[[], list[MachineControl]]`): Gives the
+      machines connected, for the summary (set by the window).
+    * `open_machine` (`Callable[[str], None]`): Shows a machine's
+      own panel, by name (set by the window).
+    * `guide` (`QLabel`): The guide shown at start, until an item or
+      machine is (#139).
+    * `missing` (`QLabel`): The fields the item needs to run that it
+      does not have yet, "Not initialized yet" (#145), hidden when
+      none.
+    * `follow_up` (`FollowUpView | None`): What a change to the
+      controller template shown means for its machines (#142).
+    * `say` (`Callable[[str], None]`): Reports a problem (set by the
+      window).
+    * `editing` (`bool`): True while its fields may be edited
+      ([Enable Editing], #140); a new item starts read only, unless
+      it was just made.
     * `clicked` (`Signal`): Sent when the panel is clicked.
     * `entries` (`dict[str, QLineEdit | QPlainTextEdit]`): Each
       field's entry, by key.
@@ -322,9 +267,15 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         super().__init__()
         self.node: Node | None = None
         self.machines: list[MachineControl] = []
-        self.headers: list[MachineTab] = []
-        self.machine_tabs: QTabWidget = QTabWidget()
-        self.machine_tabs.hide()
+        self.header: MachineTab | None = None
+        self.summary: MachinesView | None = None
+        self.controls: Callable[[], list[MachineControl]] = no_controls
+        self.open_machine: Callable[[str], None] = no_machine
+        self.editing: bool = False
+        self.follow_up: FollowUpView | None = None
+        self.say: Callable[[str], None] = no_machine
+        self.guide: QLabel = guide_label()
+        self.missing: QLabel = missing_label()
         self.item: dict[str, object] = {}
         self.rows: list[Row] = []
         self.entries: dict[str, QLineEdit | QPlainTextEdit] = {}
@@ -346,22 +297,18 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(self.title)
+        layout.addWidget(self.missing)
 
         # The field rows, with the sketch to their right, above the
         # text; the user drags the lines between them (#25).
-        self.top: QSplitter = splitter(Qt.Orientation.Horizontal)
-        self.top.addWidget(self.fields)
-        self.top.addWidget(self.sketch)
-        self.top.setStretchFactor(0, 2)
-        self.top.setStretchFactor(1, 1)
-        self.top.setSizes(SHARES)
-        self.split: QSplitter = splitter(Qt.Orientation.Vertical)
-        self.split.addWidget(self.top)
-        self.split.addWidget(self.text)
-        self.split.setStretchFactor(0, 2)
-        self.split.setStretchFactor(1, 1)
-        self.split.setSizes(SHARES)
+        self.top: QSplitter = shared(
+            Qt.Orientation.Horizontal, self.fields, self.sketch
+        )
+        self.split: QSplitter = shared(
+            Qt.Orientation.Vertical, self.top, self.text
+        )
         layout.addWidget(self.split, 1)
+        layout.addWidget(self.guide, 1)
         self.text.viewport().installEventFilter(self)
         self.set_current(False)
 
@@ -401,41 +348,73 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         self.clicked.emit()
 
     def show_machine(self, machine: MachineControl) -> None:
-        """Add a machine's controls, as a tab, in place of any item.
+        """Show a machine's controls, in place of any item.
 
-        A tree click never replaces them (#58); each machine has a tab
-        of its own, its header the machine's name over its bar (#101).
+        A tree click never replaces them (#58); a panel holds one
+        machine, its header the machine's name over its bar (#135).
 
         Arguments:
         * `machine` (`MachineControl`): The controls.
         """
+        assert not self.machines, "a panel holds one machine"
+        self.drop_summary()
+        self.guide.hide()
         self.machines.append(machine)
         self.node = None
-        self.title.setText("Machines")
-        self.title.setStyleSheet("")
+        self.title.hide()
         self.split.hide()
-        if self.machine_tabs.count() == 0:
-            layout: QLayout | None = self.layout()
-            assert layout is not None
-            layout.addWidget(self.machine_tabs)
-        index: int = self.machine_tabs.addTab(machine.widget, "")
-        header: MachineTab = MachineTab(machine.name)
-        self.machine_tabs.tabBar().setTabButton(
-            index, QTabBar.ButtonPosition.LeftSide, header
-        )
-        self.headers.append(header)
-        self.machine_tabs.show()
+        self.header = MachineTab(machine.name)
+        layout: QLayout | None = self.layout()
+        assert isinstance(layout, QVBoxLayout)
+        layout.addWidget(self.header)
+        layout.addWidget(machine.widget, 1)
 
     def show_dues(self, blink: bool) -> None:
-        """Bring each machine tab's bar up to date (#102).
+        """Bring the machine's bar, or the summary, up to date (#102).
 
         Arguments:
         * `blink` (`bool`): Which half of a blink this is.
         """
-        machine: MachineControl
-        header: MachineTab
-        for machine, header in zip(self.machines, self.headers, strict=True):
-            header.show_due(machine.due(), blink)
+        if self.header is not None:
+            self.header.show_due(self.machines[0].due(), blink)
+        if self.summary is not None:
+            self.summary.refresh(blink)
+
+    def set_editing(self, editing: bool) -> None:
+        """Let the fields be edited, or make them read only (#140).
+
+        Arguments:
+        * `editing` (`bool`): True to let them be edited.
+        """
+        self.editing = editing
+        row: Row
+        for row in self.rows:
+            entry: QLineEdit | QPlainTextEdit | None = self.entries.get(
+                row.schema.key
+            )
+            if entry is not None:
+                entry.setReadOnly(not (row.editable and editing))
+
+    def show_guide(self, text: str) -> None:
+        """Show the guide, until an item or a machine is shown (#139).
+
+        Arguments:
+        * `text` (`str`): The guide, as plain text.
+        """
+        self.title.setText("scraftcam")
+        self.title.setStyleSheet("font-weight: bold; font-size: 16pt")
+        self.split.hide()
+        self.guide.setText(text)
+        self.guide.show()
+
+    def drop_summary(self) -> None:
+        """Take the `machines/` summary away, if it is shown."""
+        if self.summary is not None:
+            layout: QLayout | None = self.layout()
+            assert layout is not None
+            layout.removeWidget(self.summary)
+            self.summary.deleteLater()
+            self.summary = None
 
     def set_current(self, current: bool) -> None:
         """Outline the panel, or not.
@@ -445,16 +424,25 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         """
         self.setStyleSheet(CURRENT_STYLE if current else OTHER_STYLE)
 
-    def show_node(self, node: Node, units: str = "in") -> None:
+    def show_node(
+        self, node: Node, units: str = "in", *, created: bool = False
+    ) -> None:
         """Show an item.
 
         Arguments:
         * `node` (`Node`): The item.
         * `units` (`str`): The shop's units, `"in"` or `"mm"`.
+        * `created` (`bool`): True if it was just made: a new item then
+          opens with editing enabled (#140).
         """
         # The file holds what this panel just wrote: keep the rows,
-        # and the cursor in them.
+        # and the cursor in them.  Another item starts read only,
+        # unless it was just made.
         same: bool = self.node is not None and self.node.path == node.path
+        previous: dict[str, object] = self.item if same else {}
+        if not same:
+            self.editing = created
+            self.show_follow_ups([])
         self.node = node
         self.units = units
         if same and self.written and node.kind in (SHOP, FILE):
@@ -464,6 +452,20 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
             except (OSError, UnicodeDecodeError):
                 pass
         self.written = ""
+        self.drop_summary()
+        self.missing.hide()
+
+        # The `machines/` directory: its summary, in place of the rest.
+        self.guide.hide()
+        self.split.setVisible(not is_machines_directory(node))
+        if is_machines_directory(node):
+            self.title.setText(node.label())
+            self.title.setStyleSheet("")
+            self.summary = MachinesView(node, self.controls, self.open_machine)
+            layout: QLayout | None = self.layout()
+            assert isinstance(layout, QVBoxLayout)
+            layout.addWidget(self.summary, 1)
+            return
 
         # The title, and the text.
         self.title.setText(node.label())
@@ -487,9 +489,15 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
             self.text.setPlainText(item_text(node))
             return
         self.fill_rows()
+        self.show_missing()
         rest: str = rest_text(self.item)
         self.text.setVisible(bool(rest))
         self.text.setPlainText(rest)
+
+        # A template changed outside the panel ([Edit]): follow it up
+        # (#142).
+        if previous and previous != self.item and is_template(node.path):
+            self.show_follow_ups(follow_ups(node.path, previous, self.item))
 
         # Once laid out, move the lines in until they meet the rows.
         QTimer.singleShot(0, self.fit)
@@ -595,7 +603,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
                 entry.editingFinished.connect(
                     functools.partial(self.write, key)
                 )
-            entry.setReadOnly(not row.editable)
+            entry.setReadOnly(not (row.editable and self.editing))
             entry.setToolTip(row.schema.meaning)
             shown: QLabel = QLabel(row.shown)
             shown.setStyleSheet(f"color: {colors().quiet}")
@@ -663,8 +671,58 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         )
         if changed is None or changed == self.item or self.node is None:
             return
+
+        # A controller's `vendor_version`: our reading of it too (#144).
+        triple: QLineEdit | QPlainTextEdit | None = self.entries.get(
+            "vendor_triple"
+        )
+        if key == "vendor_version" and changed.get("kind") == "controller":
+            changed["vendor_triple"] = vendor_triple(
+                str(changed.get("vendor_version", ""))
+            )
+            if isinstance(triple, QLineEdit):
+                triple.setText(str(changed["vendor_triple"]))
+                self.row("vendor_triple").text = triple.text()
+
+        # Written; then what is still missing.
         self.written = write_item(self.node.path, changed)
+        old: dict[str, object] = self.item
         self.item = changed
+        self.show_missing()
+
+        # A template changed: follow it up, at once (#142).
+        if is_template(self.node.path):
+            self.show_follow_ups(follow_ups(self.node.path, old, changed))
+
+    def show_missing(self) -> None:
+        """Say which fields the item does not have yet, if any (#145)."""
+        kind: object = self.item.get("kind")
+        missing: list[str] = (
+            not_initialized(self.item, kind)
+            if isinstance(kind, str) and kind in KINDS
+            else []
+        )
+        self.missing.setText(
+            "Not initialized yet: " + ", ".join(missing) if missing else ""
+        )
+        self.missing.setVisible(bool(missing))
+
+    def show_follow_ups(self, found: list[FollowUp]) -> None:
+        """Show what a template change means for its machines (#142).
+
+        Arguments:
+        * `found` (`list[FollowUp]`): What to show; none takes the
+          list away.
+        """
+        layout: QLayout | None = self.layout()
+        assert isinstance(layout, QVBoxLayout)
+        if self.follow_up is not None:
+            layout.removeWidget(self.follow_up)
+            self.follow_up.deleteLater()
+            self.follow_up = None
+        if found:
+            self.follow_up = FollowUpView(found, self.say)
+            layout.addWidget(self.follow_up)
 
 
 # Function `bad_style()`:

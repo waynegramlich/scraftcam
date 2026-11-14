@@ -127,6 +127,7 @@ FORMS: tuple[str, ...] = (
     "choice",
     "choice_list",
     "version",
+    "triple",
     "date",
     "table",
     "list",
@@ -167,6 +168,9 @@ class TableField:  # pylint: disable=too-many-instance-attributes
       maps material names to tables of the kind named by `of`.
     * `meaning` (`str`): What it is, in Markdown.
     * `required` (`bool`): True if it must be there.
+    * `needed` (`bool`): True if it is needed only to run a program:
+      left out, it is "not initialized yet", not a problem
+      (`T.osiade~5.1.9` #145).
     * `of` (`str`): The kind of a `"table"` or `"list"`.
     * `choices` (`tuple[str, ...]`):
       The strings a `"choice"` takes, whatever their capitals.
@@ -180,7 +184,8 @@ class TableField:  # pylint: disable=too-many-instance-attributes
       sketch.
 
     Constructor:
-    * `TableField(key, form, meaning, required, of, choices, open, letter)`
+    * `TableField(key, form, meaning, required, of, choices, open, letter,
+      needed)`
     """
 
     # Constructor arguments:
@@ -192,6 +197,7 @@ class TableField:  # pylint: disable=too-many-instance-attributes
     choices: tuple[str, ...] = field(init=True, default=())
     open: bool = field(init=True, default=False)
     letter: str = field(init=True, default="")
+    needed: bool = field(init=True, default=False)
 
     # Method `TableField.__post_init__()`:
     def __post_init__(self) -> None:
@@ -385,7 +391,7 @@ TOOL_KINDS: tuple[str, ...] = (
 )
 
 # A shop's top file, and its directories in the order they are read
-# (a machine names its controller, so controllers come first), each
+# (controller templates first), each
 # with the kinds of file it holds.
 SHOP_FILE: str = "shop.toml"
 SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -675,13 +681,14 @@ address = "700 All American Way, Sunnyvale, CA 94086"
                     "spindle",
                     "table",
                     "The spindle.",
-                    required=True,
                     of="spindle",
+                    needed=True,
                 ),
                 TableField(
                     "controller",
                     "table",
-                    "The controller, by its name (a file in `controllers/`).",
+                    "Its own controller, copied from a template in "
+                    "`controllers/` (#141).",
                     required=True,
                     of="controller",
                 ),
@@ -711,7 +718,12 @@ kind = "machine"
 language = "English"
 version = "0.0.1"
 machine = "mill"
-controller = "LinuxCNC"
+
+[controller]
+name = "LinuxCNC"
+template = "LinuxCNC"
+post_processor = "linuxcnc"
+tool_change = "T{number:02d} M6"
 
 [tool_table.tools]
 1 = "1/4 in 2 flute carbide end mill"
@@ -766,8 +778,12 @@ spoke_length = "2.5 in"
                     required=True,
                     choices=("X", "Y", "Z"),
                 ),
-                TableField("travel", "length", "How far it moves.", True),
-                TableField("max_feed", "feed", "Its fastest feed.", True),
+                TableField(
+                    "travel", "length", "How far it moves.", needed=True
+                ),
+                TableField(
+                    "max_feed", "feed", "Its fastest feed.", needed=True
+                ),
                 TableField(
                     "max_acceleration",
                     "acceleration",
@@ -829,12 +845,14 @@ t_slot_depth = "0.75 in"
                     "interface",
                     "choice",
                     "What its tool holders fit.",
-                    required=True,
                     choices=INTERFACES,
                     open=True,
+                    needed=True,
                 ),
                 TableField("min_rpm", "speed", "Its slowest speed."),
-                TableField("max_rpm", "speed", "Its fastest speed.", True),
+                TableField(
+                    "max_rpm", "speed", "Its fastest speed.", needed=True
+                ),
                 TableField(
                     "reversible", "boolean", "True if it runs backwards."
                 ),
@@ -877,6 +895,33 @@ air = false
                     "tool_change",
                     "string",
                     "The lines that change the tool.",
+                ),
+                TableField(
+                    "template",
+                    "string",
+                    "In a machine's copy: the template in `controllers/` "
+                    "it was copied from (#141).",
+                ),
+                TableField("vendor", "string", "Who makes it (#144)."),
+                TableField("product", "string", "The vendor's name for it."),
+                TableField(
+                    "vendor_version",
+                    "string",
+                    "Its version, as the vendor writes it (e.g. "
+                    '"R3.043.066").',
+                ),
+                TableField(
+                    "vendor_triple",
+                    "triple",
+                    "Our reading of `vendor_version`, MAJOR.MINOR.PATCH "
+                    '(e.g. "3.43.66"; "0.0.0" when unknown), filled in '
+                    "when `vendor_version` is entered.",
+                ),
+                TableField(
+                    "support_ended",
+                    "date",
+                    "When the vendor stopped updating it (left out: "
+                    "unknown).",
                 ),
             ),
             True,
@@ -1740,12 +1785,15 @@ file carries in its `version` key.
 In the tables, a row whose first cell is empty continues the row
 above it, so that no line is too wide to read in a text editor.
 
+A key "required to run" may be left out: it is then not initialized
+yet, which is not a problem until a program is run on the machine.
+
 ## The Shop's Directory
 
 ```
 shop/
   shop.toml                the shop (`shop`)
-  controllers/linuxcnc.toml   a controller (`controller`)
+  controllers/linuxcnc.toml   a controller template (`controller`)
   machines/shop_mill.toml     a machine, with its tool table (`machine`)
   tool_materials/carbide.toml what tools are made of (`tool_material`)
   tools/1_4_in_end_mill.toml  a tool (`end_mill`, `drill`, ...)
@@ -1759,9 +1807,11 @@ shop/
 * Each file is one item, of a kind its directory holds; a file of
   another kind there is refused.
 * No two items of a kind may share a name (no two tools at all).
-* A machine names its controller by name (`controller = "LinuxCNC"`),
-  and holds its tool table (`[tool_table.tools]`), which names tools
-  by name.  Any other table is written in place.
+* A file in `controllers/` is a template: a new machine gets its own
+  copy, a `[controller]` table with `template` naming where it came
+  from, which may then be changed for that machine alone.  A machine
+  holds its tool table (`[tool_table.tools]`), which names tools by
+  name.  Every other table is written in place.
 * The reader fills in the shop's `machines`, `tools`, `tooling` and
   `materials` from the directories.
 * The example shop is `examples/shop/`.
@@ -2271,8 +2321,8 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
       Every file read so far, checked, by its path.
     * `problems` (`list[str]`): Every problem found so far.
     * `named` (`dict[str, dict[str, dict[str, object]]]`):
-      The items read so far, by kind and then name, so a table can be
-      given by name (a machine's controller).
+      The items read so far, by kind and then name, so no two of a
+      kind share a name.
     * `machine_tables` (`list[tuple[str, _Source, KeyPath, object]]`):
       Every machine's name, where its `tool_table` is, and the table.
     * `tool_uses` (`list[tuple[_Source, KeyPath, str]]`):
@@ -2445,43 +2495,6 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
         items[name] = contents
         return contents
 
-    # Method `_Reader.by_name()`:
-    def by_name(
-        self, name: str, kind: TableKind, path: KeyPath, source: _Source
-    ) -> dict[str, object]:
-        """Return an item given by its name (a machine's controller).
-
-        Arguments:
-        * `name` (`str`): Its name.
-        * `kind` (`TableKind`): The kind of table that belongs here.
-        * `path` (`KeyPath`): Where it is named.
-        * `source` (`_Source`): The file that names it.
-
-        Returns:
-        * (`dict[str, object]`):
-          The item, or `{}` if there is none (noted).
-        """
-        # `"@FILE"` references are gone (`T.osiade~5.1.9` #130).
-        if name.startswith("@"):
-            self.problem(
-                source,
-                path,
-                f'"{name}": files are no longer named with "@"; each '
-                "item is a file in one of the shop's directories, and a "
-                "table is given in place, or by its name",
-            )
-            return {}
-        items: dict[str, dict[str, object]] = self.named.get(kind.kind, {})
-        if name not in items:
-            known: str = ", ".join(f'"{item}"' for item in items) or "none"
-            self.problem(
-                source,
-                path,
-                f'no `{kind.kind}` named "{name}" (there are: {known})',
-            )
-            return {}
-        return items[name]
-
     # Method `_Reader.table()`:
     def table(
         self,
@@ -2492,23 +2505,33 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
         *,
         whole: bool = False,
     ) -> dict[str, object]:
-        """Check a table, or find one given by its name.
+        """Check a table.
+
+        A table is given in place, never by a name: a machine holds its
+        own copy of its controller, copied from a template in
+        `controllers/` (`T.osiade~5.1.9` #141).
 
         Arguments:
-        * `value` (`object`): The table, or the name of one.
+        * `value` (`object`): The table.
         * `kind` (`TableKind`): What kind of table it must be.
         * `path` (`KeyPath`): Where it is.
         * `source` (`_Source`): The file it is in.
         * `whole` (`bool`): True if it is a whole file.
 
         Returns:
-        * (`dict[str, object]`):
-          The table, with every table given by name replaced by it.
+        * (`dict[str, object]`): The table, checked, or `{}`.
         """
-        # Find a table given by name, and refuse anything else but a
-        # table.
+        # A name in place of a table: no longer (#141); anything else
+        # but a table: refused.
         if isinstance(value, str):
-            return self.by_name(value, kind, path, source)
+            self.problem(
+                source,
+                path,
+                f'"{value}": give the `{kind.kind}` in place, as a '
+                f"[{shown_path(path)}] table (a machine holds its own "
+                "copy, made from a template in `controllers/`)",
+            )
+            return {}
         if not isinstance(value, dict):
             self.problem(
                 source, path, f"{value!r} is not a `{kind.kind}` table"
@@ -2919,6 +2942,9 @@ def scalar_problem(value: object, schema: TableField) -> str:
         problem = measurement_problem(value, UNITS[form])
     elif form in ("string", "choice", "version"):
         problem = _string_problem(value, schema)
+    elif form == "triple":
+        if not isinstance(value, str) or VERSION.fullmatch(value) is None:
+            problem = f"{value!r} is not MAJOR.MINOR.PATCH (such as 2.9.4)"
     elif form in ("integer", "positive_integer"):
         problem = _integer_problem(value, positive=form == "positive_integer")
     elif form == "holder_list":
@@ -3187,6 +3213,65 @@ def check_tool(
     return f"{kind}s", tool
 
 
+# Function `not_initialized()`:
+def not_initialized(item: dict[str, object], kind: str) -> list[str]:
+    """Return the fields an item needs to run that it does not have yet.
+
+    A field `needed` but left out is "not initialized yet", not a
+    problem (`T.osiade~5.1.9` #145); its tables and lists are looked
+    into, the ones that are there.
+
+    Arguments:
+    * `item` (`dict[str, object]`): The item, or one of its tables.
+    * `kind` (`str`): Its kind's name (a key of `KINDS`).
+
+    Returns:
+    * (`list[str]`): Where each one is, e.g. `spindle`,
+      `axes[X].travel`.
+    """
+    missing: list[str] = []
+    schema: TableField
+    for schema in KINDS[kind].fields:
+        value: object = item.get(schema.key)
+        if value is None:
+            if schema.needed:
+                missing.append(schema.key)
+        elif schema.form == "table" and isinstance(value, dict):
+            missing.extend(
+                f"{schema.key}.{inner}"
+                for inner in not_initialized(value, schema.of)
+            )
+        elif schema.form == "list" and isinstance(value, list):
+            entry: object
+            for number, entry in enumerate(value):
+                if isinstance(entry, dict):
+                    which: object = entry.get("letter", number)
+                    missing.extend(
+                        f"{schema.key}[{which}].{inner}"
+                        for inner in not_initialized(entry, schema.of)
+                    )
+    return missing
+
+
+# Function `vendor_triple()`:
+def vendor_triple(text: str) -> str:
+    """Return our reading of a vendor's version, MAJOR.MINOR.PATCH (#144).
+
+    The first three whole numbers in it, any more left out, those
+    missing as 0: "R3.043.066" is "3.43.66", "2.9" is "2.9.0", "Series
+    0i-F" is "0.0.0".
+
+    Arguments:
+    * `text` (`str`): The version, as the vendor writes it.
+
+    Returns:
+    * (`str`): E.g. `"3.43.66"`; `"0.0.0"` with no number in it.
+    """
+    numbers: list[int] = [int(found) for found in re.findall(r"\d+", text)]
+    numbers = (numbers + [0, 0, 0])[:3]
+    return ".".join(str(number) for number in numbers)
+
+
 # Function `tool_number()`:
 def tool_number(machine: dict[str, object], tool: str) -> int:
     """Return the T number of a tool loaded in a machine.
@@ -3346,13 +3431,18 @@ def cnc_machine(
 
     Raises:
     * `ValueError`:
-      If the shop has no such machine, the machine has no
-      `preferences`, a loaded tool other than a drill has no `rpm`,
+      If the shop has no such machine, the machine is not initialized
+      yet (`not_initialized()`) or has no `preferences`, a loaded tool other than a drill has no `rpm`,
       `feed` or `plunge`, or a drill has no speed and feed for the
       material.
     """
-    # Find the machine and its preferences.
+    # Find the machine, initialized, and its preferences.
     machine: dict[str, object] = _machine(shop, name)
+    missing: list[str] = not_initialized(machine, "machine")
+    if missing:
+        raise ValueError(
+            f'"{name}" is not initialized yet: {", ".join(missing)}'
+        )
     if "preferences" not in machine:
         raise ValueError(f'"{name}" has no preferences')
     preferences: dict[str, object] = cast(
@@ -3924,7 +4014,9 @@ def _fields_table(fields: tuple[TableField, ...]) -> str:
     """
     rows: list[list[str]] = [["Key", "Value", "Required", "Meaning"]]
     for schema in fields:
-        required: str = "yes" if schema.required else "no"
+        required: str = (
+            "yes" if schema.required else "to run" if schema.needed else "no"
+        )
         rows.append(
             [f"`{schema.key}`", schema.shown(), required, schema.meaning]
         )

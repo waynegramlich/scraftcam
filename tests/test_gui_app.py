@@ -174,6 +174,18 @@ class NewShopTest(unittest.TestCase):
             self.assertEqual(heard[-1], "scraftcam: Home ((none))")
             self.assertTrue(model.latest().text.startswith("Created "))
             self.assertIn("`git init`", model.latest().text)
+
+            # The shipped LinuxCNC template, copied in; both open with
+            # editing enabled (#140, #141).
+            template: Path = directory / "controllers" / "linuxcnc.toml"
+            self.assertTrue(template.is_file())
+            self.assertIn(str(template.resolve()), model.created)
+            self.assertIn(str(shop), model.created)
+            self.assertIsNotNone(model.shop_root)
+            assert model.shop_root is not None
+            self.assertFalse(
+                [n.error for n in model.shop_root.children if n.error]
+            )
             with self.assertRaises(ValueError):
                 model.new_shop(directory, "Again", "in", [])
 

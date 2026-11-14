@@ -20,6 +20,7 @@ With no shop, a new one can be made from a few answers (#97, #98,
 `new_shop_text()` writes with the shop writer (`shop_writer.py`).
 """
 
+import re
 import shutil
 import tomllib
 from collections.abc import Callable
@@ -55,6 +56,20 @@ MACHINE_KINDS: tuple[tuple[str, str, bool], ...] = (
 )
 
 MANUAL_PREFIX: str = "manual_"
+
+# The controller templates `scraftcam` ships, which a new shop gets a
+# copy of in its `controllers/` (#141).
+TEMPLATES: Path = Path(__file__).parent.parent / "templates" / "controllers"
+CONTROLLERS: str = "controllers"
+
+# The kinds of machine [New Machine] makes (#141), and each one's axes;
+# the rest is left out, "not initialized yet" (#145).
+NEW_MACHINE_KINDS: tuple[str, ...] = ("mill", "router")
+NEW_AXES: dict[str, tuple[str, ...]] = {
+    "mill": ("X", "Y", "Z"),
+    "router": ("X", "Y", "Z"),
+}
+MACHINES: str = "machines"
 
 # The directory a new shop is offered in, under the current one.
 NEW_SHOP_DIRECTORY: str = "shop"
@@ -236,7 +251,9 @@ def new_shop_text(name: str, units: str, machines: list[str]) -> str:
 def create_shop(
     directory: Path, name: str, units: str, machines: list[str]
 ) -> Path:
-    """Make a new shop: its directory and its `shop.toml`.
+    """Make a new shop: its directory, its `shop.toml`, and a copy of
+    each controller template `scraftcam` ships, in `controllers/`
+    (#141).
 
     Arguments:
     * `directory` (`Path`): The shop's directory (made if needed).
@@ -258,7 +275,98 @@ def create_shop(
         raise ValueError(f"{shop} already exists")
     directory.mkdir(parents=True, exist_ok=True)
     shop.write_text(text, encoding="utf-8")
+    controllers: Path = directory / CONTROLLERS
+    controllers.mkdir(exist_ok=True)
+    template: Path
+    for template in sorted(TEMPLATES.glob("*.toml")):
+        if not (controllers / template.name).exists():
+            shutil.copyfile(template, controllers / template.name)
     return shop.resolve()
+
+
+# Function `controller_templates()`:
+def controller_templates(shop: Path) -> dict[str, Path]:
+    """Return a shop's controller templates (#141).
+
+    Arguments:
+    * `shop` (`Path`): Its `shop.toml`.
+
+    Returns:
+    * (`dict[str, Path]`): Each template's file, by its name; a file
+      that does not read, or is not a controller, is left out.
+    """
+    templates: dict[str, Path] = {}
+    path: Path
+    for path in sorted((shop.parent / CONTROLLERS).glob("*.toml")):
+        try:
+            with path.open("rb") as file:
+                item: dict[str, object] = tomllib.load(file)
+        except (OSError, tomllib.TOMLDecodeError):
+            continue
+        if item.get("kind") == "controller" and "name" in item:
+            templates[str(item["name"])] = path
+    return templates
+
+
+# Function `file_name()`:
+def file_name(name: str) -> str:
+    """Return the file an item of a name is kept in.
+
+    Arguments:
+    * `name` (`str`): E.g. "Shop lathe".
+
+    Returns:
+    * (`str`): E.g. `shop_lathe.toml`.
+    """
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") + ".toml"
+
+
+# Function `new_machine_text()`:
+def new_machine_text(name: str, kind: str, template: dict[str, object]) -> str:
+    """Write a new machine's file, with its own copy of a controller.
+
+    Only what is known: its kind, its axes' letters, and a copy of the
+    controller template, naming it (`template`, #141); the rest is left
+    out, "not initialized yet" (#145).
+
+    Arguments:
+    * `name` (`str`): The machine's name (not empty).
+    * `kind` (`str`): One of `NEW_MACHINE_KINDS`.
+    * `template` (`dict[str, object]`): The controller template, as
+      read.
+
+    Returns:
+    * (`str`): The file's text.
+
+    Raises:
+    * `ValueError`: If the name is empty or the kind unknown.
+    """
+    # The answers.
+    if not name.strip():
+        raise ValueError("the machine needs a name")
+    if kind not in NEW_MACHINE_KINDS:
+        raise ValueError(
+            f"a new machine is one of {', '.join(NEW_MACHINE_KINDS)}"
+        )
+
+    # The machine's own controller: the template's, less its header.
+    controller: dict[str, object] = {
+        key: value
+        for key, value in template.items()
+        if key not in ("kind", "language", "version", "template")
+    }
+    controller["template"] = template.get("name", "")
+    return item_text(
+        {
+            "name": " ".join(name.split()),
+            "kind": "machine",
+            "language": "English",
+            "version": FORMAT_VERSION,
+            "machine": kind,
+            "axes": [{"letter": letter} for letter in NEW_AXES[kind]],
+            "controller": controller,
+        }
+    )
 
 
 # Class `App`:
@@ -275,7 +383,10 @@ class App:  # pylint: disable=too-many-instance-attributes
     * `design` (`Path | None`): The design, if any.
     * `listeners` (`list[Callable[[], None]]`): The functions called
       on each change.
+    * `created` (`set[str]`): The paths of the items made this
+      session, which open with editing enabled (#140).
     * `messages` (`list[Message]`): Every message, oldest first.
+    * `program` (`str`): The NC program run (`--program`), or "".
     * `running` (`set[str]`): The names of the machines running.
     * `shop_title` (`str`): The shop's name, or `NONE_NAME`.
     * `editor_hinted` (`bool`): True once the hint about `VISUAL` and
@@ -294,11 +405,13 @@ class App:  # pylint: disable=too-many-instance-attributes
     design: Path | None = field(init=True)
 
     # Remaining attributes (alphabetized):
+    created: set[str] = field(init=False, default_factory=set)
     editor_hinted: bool = field(init=False, default=False)
     listeners: list[Callable[[], None]] = field(
         init=False, default_factory=list
     )
     messages: list[Message] = field(init=False, default_factory=list)
+    program: str = field(init=False, default="")
     running: set[str] = field(init=False, default_factory=set)
     shop_title: str = field(init=False, default=NONE_NAME)
 
@@ -383,8 +496,47 @@ class App:  # pylint: disable=too-many-instance-attributes
         * `OSError`: If it can not be written.
         """
         shop: Path = create_shop(directory, name, units, machines)
+        self.created.add(str(shop))
+        self.created.update(
+            str(path) for path in (shop.parent / CONTROLLERS).glob("*.toml")
+        )
         self.use_shop(shop, f"Created {shop}.")
         return shop
+
+    def new_machine(self, name: str, kind: str, template: str) -> Path:
+        """Make a new machine from a controller template, and show it.
+
+        Arguments:
+        * `name` (`str`): The machine's name.
+        * `kind` (`str`): One of `NEW_MACHINE_KINDS`.
+        * `template` (`str`): The controller template's name.
+
+        Returns:
+        * (`Path`): The new machine's file.
+
+        Raises:
+        * `ValueError`: With no shop, no such template, an answer not
+          allowed, or a machine there already.
+        * `OSError`: If it can not be written.
+        """
+        if self.shop is None:
+            raise ValueError("there is no shop")
+        templates: dict[str, Path] = controller_templates(self.shop)
+        if template not in templates:
+            raise ValueError(f'no controller template "{template}"')
+        with templates[template].open("rb") as file:
+            copied: dict[str, object] = tomllib.load(file)
+        text: str = new_machine_text(name, kind, copied)
+        directory: Path = self.shop.parent / MACHINES
+        path: Path = directory / file_name(name)
+        if path.exists():
+            raise ValueError(f"{path} already exists")
+        directory.mkdir(exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        self.created.add(str(path.resolve()))
+        self.reload_tree()
+        self.say(f"Created {path}.")
+        return path.resolve()
 
     def listen(self, function: Callable[[], None]) -> None:
         """Call `function` after every change from now on.

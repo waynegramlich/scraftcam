@@ -41,18 +41,21 @@ from . import port, theme
 from .app import (
     MACHINE_KINDS,
     MANUAL_PREFIX,
+    NEW_MACHINE_KINDS,
     NEW_SHOP_DIRECTORY,
     UNIT_LABELS,
     UNITS,
     App,
     Message,
+    controller_templates,
 )
 from .editor import HINT, editor_command
 from .fields import shop_units
+from .machines import MachineControl, is_machines_directory, machine_item
 from .port import Method, PortError, text_param
 from .theme import colors
 from .tree import Node, edit_path
-from .views import MachineControl, Panel, TreeView, TreeWatcher, splitter
+from .views import Panel, TreeView, TreeWatcher, splitter
 
 # `PySide6` lives in `~/.scraftcam/packages/`, so it is put on
 # `sys.path` (and fetched, the first time) before it is imported.
@@ -82,6 +85,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
@@ -228,10 +232,7 @@ def run(
     if machine is not None:
         control: MachineControl | None = machine()
         if control is not None:
-            first.panels[0].show_machine(control)
-            control.on_minimal(
-                functools.partial(first.set_minimal, first.panels[0])
-            )
+            first.connect_machine(control)
     stopper: Stopper = Stopper()
 
     # No shop: offer to make one (#97), when someone can answer.
@@ -253,6 +254,34 @@ def run(
     model.forget(watcher.follow)
     del stopper
     return status
+
+
+# The guide in the first panel at start, after the shop and the NC
+# program (#139).
+GUIDE: tuple[str, ...] = (
+    "",
+    "1. [Tree] shows or hides the tree of your shop and design.",
+    "",
+    (
+        "2. Several machines may share one CNC controller (e.g. LinuxCNC)."
+        "  A file in controllers/ is a template: a new machine starts with"
+        " a copy of it, which can then be changed for that machine alone."
+    ),
+    "",
+    "3. [Stop All] is always shown, and stops every CNC machine at once.",
+    "",
+    "4. Click an item in the tree to see it here.",
+)
+
+
+# Function `machine_controls()`:
+def machine_controls() -> list[MachineControl]:
+    """Return every machine connected, in every window (#134).
+
+    Returns:
+    * (`list[MachineControl]`): Their controls, window by window.
+    """
+    return [machine for top in WINDOWS for machine in top.machines]
 
 
 # Class `Stopper`:
@@ -289,11 +318,10 @@ class Stopper(QObject):
         self.asked = True
         top: Window
         for top in WINDOWS:
-            panel: Panel
-            for panel in top.panels:
-                for machine in panel.machines:
-                    if machine.busy():
-                        machine.stop()
+            machine: MachineControl
+            for machine in top.machines:
+                if machine.busy():
+                    machine.stop()
 
     def look(self) -> None:
         """Close every window, once asked and nothing is busy."""
@@ -317,9 +345,16 @@ class Window(QWidget):
     * `message_label` (`QLabel`): The latest message.
     * `action_rows` (`QWidget`): The action rows.
     * `edit_label` (`QLabel`): The selected item, before [Edit].
+    * `editing_box` (`QCheckBox`): [Enable Editing], for the current
+      panel (#140).
+    * `new_machine_row` (`QWidget`): The action row with [New
+      Machine], for `machines/` (#141).
     * `edit_row` (`QWidget`): The action row with [Edit].
     * `new_shop_row` (`QWidget`): The action row with [New Shop].
     * `panels` (`list[Panel]`): The panels, left to right.
+    * `machines` (`list[MachineControl]`): The machines connected to
+      this window, each shown in a panel only once it is clicked
+      (#135).
     * `shop_label` (`QLabel`): The shop's name.
     * `splitter` (`QSplitter`): The tree, then the panels.
     * `tree` (`TreeView`): The shop's and the design's files.
@@ -365,18 +400,16 @@ class Window(QWidget):
         close.setFixedWidth(close.sizeHint().height())
 
         # The action rows, under the top line: [New Shop], while there
-        # is no shop.
+        # is no shop; [New Machine], for `machines/`; the selected
+        # item's [Enable Editing] and [Edit].
         self.action_rows: QWidget = QWidget()
         rows: QVBoxLayout = QVBoxLayout(self.action_rows)
         rows.setContentsMargins(0, 0, 0, 0)
         self.new_shop_row: QWidget = self.action_row(
             rows, QLabel("No shop yet:"), "New Shop", self.new_shop
         )
-
-        # The selected item's row: [Edit], for a file to edit by hand.
-        self.edit_label: QLabel = QLabel()
-        self.edit_row: QWidget = self.action_row(
-            rows, self.edit_label, "Edit", self.edit
+        self.new_machine_row, self.edit_row, self.edit_label = (
+            self.make_item_rows(rows)
         )
 
         # The tree on the left, then the panels; the first is current.
@@ -387,6 +420,7 @@ class Window(QWidget):
         self.tree.itemCollapsed.connect(self.tree_opened)
         self.splitter.addWidget(self.tree)
         self.panels: list[Panel] = []
+        self.machines: list[MachineControl] = []
         self.current: int = 0
         self.minimal: bool = False
         self.full_geometry: QByteArray = QByteArray()
@@ -404,10 +438,42 @@ class Window(QWidget):
         self.blink: bool = False
         self.machine_timer: QTimer = self.watch_machines()
 
-        # Redraw whenever the model changes, starting now.
+        # Redraw whenever the model changes, starting now, with the
+        # guide (#139).
         model.listen(self.redraw)
         self.redraw()
+        self.panels[0].show_guide(self.guide_text())
         WINDOWS.append(self)
+
+    def make_item_rows(
+        self, rows: QVBoxLayout
+    ) -> tuple[QWidget, QWidget, QLabel]:
+        """Add the action rows for the selected item (#124, #140, #141).
+
+        [New Machine] for `machines/`; [Enable Editing] and [Edit] for
+        an item that can be edited (`editing_box` is made here too).
+
+        Arguments:
+        * `rows` (`QVBoxLayout`): The action rows.
+
+        Returns:
+        * (`tuple[QWidget, QWidget, QLabel]`): The [New Machine] row,
+          the [Edit] row, and the item's label in it.
+        """
+        new_machine: QWidget = self.action_row(
+            rows, QLabel("machines/:"), "New Machine", self.new_machine
+        )
+        label: QLabel = QLabel()
+        row: QWidget = self.action_row(rows, label, "Edit", self.edit)
+        self.editing_box: QCheckBox = QCheckBox("Enable Editing")
+        self.editing_box.setToolTip(
+            "Let this item be changed, in the panel or with [Edit]"
+        )
+        self.editing_box.toggled.connect(self.toggle_editing)
+        line: QLayout | None = row.layout()
+        assert isinstance(line, QHBoxLayout)
+        line.insertWidget(0, self.editing_box)
+        return new_machine, row, label
 
     def add_button(
         self, line: QHBoxLayout, label: str, action: Callable[[], object]
@@ -488,7 +554,11 @@ class Window(QWidget):
                         str(panel.node.path)
                     )
                     if node is not None:
-                        panel.show_node(node, shop_units(model.shop))
+                        panel.show_node(
+                            node,
+                            shop_units(model.shop),
+                            created=str(node.path) in model.created,
+                        )
         self.show_actions()
 
     def toggle_tree(self) -> None:
@@ -520,6 +590,9 @@ class Window(QWidget):
     def add_panel(self) -> None:
         """Add an empty panel on the right ([+ Panel]); it is current."""
         panel: Panel = Panel(len(self.panels) + 1)
+        panel.controls = machine_controls
+        panel.open_machine = self.open_machine
+        panel.say = functools.partial(self.model.say, problem=True)
         panel.clicked.connect(functools.partial(self.make_current, panel))
         self.panels.append(panel)
         self.splitter.addWidget(panel)
@@ -545,8 +618,69 @@ class Window(QWidget):
         """
         node: Node | None = self.tree.node_of(item)
         if node is not None:
-            self.free_panel().show_node(node, shop_units(self.model.shop))
+            name: str = self.connected_name(node)
+            if name:
+                self.open_machine(name)
+            else:
+                self.free_panel().show_node(
+                    node,
+                    shop_units(self.model.shop),
+                    created=str(node.path) in self.model.created,
+                )
         self.show_actions()
+
+    def connected_name(self, node: Node) -> str:
+        """Return the name of the connected machine an item is, if any.
+
+        Arguments:
+        * `node` (`Node`): A tree item.
+
+        Returns:
+        * (`str`): The machine's name, when the item is a machine's
+          file in `machines/` and that machine is connected; or "".
+        """
+        parent: Node | None = self.tree.nodes.get(str(node.path.parent))
+        if parent is None or not is_machines_directory(parent):
+            return ""
+        name: str = machine_item(node).name
+        connected: bool = any(
+            machine.name == name for machine in machine_controls()
+        )
+        return name if connected else ""
+
+    def guide_text(self) -> str:
+        """Return the guide shown at start (#139).
+
+        Returns:
+        * (`str`): The shop, the NC program, and what to do first.
+        """
+        lines: list[str] = [f"Shop: {self.model.shop_title}"]
+        if self.model.program:
+            lines.append(f"NC program: {Path(self.model.program).name}")
+        lines.extend(GUIDE)
+        return "\n".join(lines)
+
+    def connect_machine(self, machine: MachineControl) -> None:
+        """Hold a machine's controls, shown once it is clicked (#135).
+
+        Arguments:
+        * `machine` (`MachineControl`): The controls.
+        """
+        self.machines.append(machine)
+        machine.on_minimal(functools.partial(self.machine_minimal, machine))
+
+    def machine_minimal(self, machine: MachineControl, minimal: bool) -> None:
+        """Shrink to a machine's panel, or show it all (#94).
+
+        Arguments:
+        * `machine` (`MachineControl`): The machine going minimal.
+        * `minimal` (`bool`): True to shrink, False to show it all.
+        """
+        panel: Panel
+        for panel in self.panels:
+            if machine in panel.machines:
+                self.set_minimal(panel, minimal)
+                return
 
     def free_panel(self) -> Panel:
         """Return the panel a click shows an item in, and make it current.
@@ -566,6 +700,47 @@ class Window(QWidget):
                 return panel
         self.add_panel()
         return self.panels[self.current]
+
+    def open_machine(self, name: str) -> None:
+        """Show a machine's own panel (#134, #135).
+
+        A machine already shown: its panel becomes the current one, in
+        whichever window holds it.  One connected but not shown yet:
+        shown in the panel a click uses.  One not connected is only
+        said to be so.
+
+        Arguments:
+        * `name` (`str`): The machine's name.
+        """
+        top: Window
+        machine: MachineControl
+        for top in WINDOWS:
+            panel: Panel
+            for panel in top.panels:
+                if any(machine.name == name for machine in panel.machines):
+                    top.make_current(panel)
+                    top.to_front(self)
+                    return
+        for top in WINDOWS:
+            for machine in top.machines:
+                if machine.name == name:
+                    top.free_panel().show_machine(machine)
+                    top.to_front(self)
+                    return
+        self.model.say(
+            f"The {name} is not connected (LinuxCNC is the only "
+            "controller so far)"
+        )
+
+    def to_front(self, clicked: "Window") -> None:
+        """Bring this window to the front, unless it was clicked in.
+
+        Arguments:
+        * `clicked` (`Window`): The window clicked in.
+        """
+        if self is not clicked:
+            self.raise_()
+            self.activateWindow()
 
     def set_minimal(self, panel: Panel, minimal: bool) -> None:
         """Shrink to a machine's panel alone, on top; or show it all.
@@ -612,12 +787,11 @@ class Window(QWidget):
         * (`str`): The first machine's reason, or the model's (a
           running machine), or "" when it may close.
         """
-        panel: Panel
-        for panel in self.panels:
-            for machine in panel.machines:
-                reason: str = machine.busy()
-                if reason:
-                    return reason
+        machine: MachineControl
+        for machine in self.machines:
+            reason: str = machine.busy()
+            if reason:
+                return reason
         return self.model.close_refusal(self.controls)
 
     def show_actions(self) -> None:
@@ -628,8 +802,37 @@ class Window(QWidget):
         editable: bool = node is not None and edit_path(node) is not None
         self.edit_row.setVisible(editable)
         self.buttons["Edit"].setVisible(editable)
+        editing: bool = bool(self.panels) and self.panels[self.current].editing
+        self.editing_box.blockSignals(True)
+        self.editing_box.setChecked(editing)
+        self.editing_box.blockSignals(False)
+        self.buttons["Edit"].setEnabled(editing)
         if node is not None:
             self.edit_label.setText(f"{node.label()}:")
+
+        # [New Machine], for `machines/`: grey, saying why, with no
+        # controller template (#141).
+        machines: bool = node is not None and is_machines_directory(node)
+        self.new_machine_row.setVisible(machines)
+        self.buttons["New Machine"].setVisible(machines)
+        templates: bool = self.model.shop is not None and bool(
+            controller_templates(self.model.shop)
+        )
+        self.buttons["New Machine"].setEnabled(templates)
+        self.buttons["New Machine"].setToolTip(
+            "Make a machine, with its own copy of a controller template"
+            if templates
+            else "First put a controller template in controllers/"
+        )
+
+    def toggle_editing(self, editing: bool) -> None:
+        """Let the current panel's item be changed, or not (#140).
+
+        Arguments:
+        * `editing` (`bool`): True when [Enable Editing] is checked.
+        """
+        self.panels[self.current].set_editing(editing)
+        self.show_actions()
 
     def edit(self) -> None:
         """Open the current panel's file in an editor ([Edit], #124)."""
@@ -666,10 +869,9 @@ class Window(QWidget):
         """Stop every machine ([Stop All]), each of its panels' too."""
         top: Window
         for top in WINDOWS:
-            panel: Panel
-            for panel in top.panels:
-                for machine in panel.machines:
-                    machine.stop()
+            machine: MachineControl
+            for machine in top.machines:
+                machine.stop()
         self.model.stop_all()
 
     def running(self) -> bool:
@@ -680,10 +882,7 @@ class Window(QWidget):
           (`MachineControl.busy()`), or the model has one running.
         """
         return bool(self.model.running) or any(
-            machine.busy()
-            for top in WINDOWS
-            for panel in top.panels
-            for machine in panel.machines
+            machine.busy() for machine in machine_controls()
         )
 
     def watch_machines(self) -> QTimer:
@@ -727,6 +926,25 @@ class Window(QWidget):
         """Ask about the new shop, and make it ([New Shop])."""
         dialog: NewShopDialog = NewShopDialog(self, self.model)
         dialog.open()
+
+    def new_machine(self) -> None:
+        """Ask about the new machine, and make it ([New Machine], #141)."""
+        dialog: NewMachineDialog = NewMachineDialog(self, self.model)
+        dialog.open()
+
+    def show_created(self, path: Path) -> None:
+        """Show an item just made, editing enabled (#140).
+
+        Arguments:
+        * `path` (`Path`): Its file.
+        """
+        self.redraw()
+        node: Node | None = self.tree.nodes.get(str(path))
+        if node is not None:
+            self.free_panel().show_node(
+                node, shop_units(self.model.shop), created=True
+            )
+            self.show_actions()
 
     def closeEvent(  # pylint: disable=invalid-name
         self, event: QCloseEvent
@@ -1133,3 +1351,89 @@ class NewShopDialog(QDialog):
             self.model.say(str(error), problem=True)
             return
         self.accept()
+
+
+# Class `NewMachineDialog`:
+class NewMachineDialog(QDialog):
+    """The questions for a new machine (#141).
+
+    Its name, its kind, and the controller template it gets its own
+    copy of.  [Create] stays grey until there is a name.
+
+    Attributes:
+    * `model` (`App`): What every window shows.
+    * `name` (`QLineEdit`): The machine's name.
+    * `kind` (`QComboBox`): Its kind (`NEW_MACHINE_KINDS`).
+    * `template` (`QComboBox`): The controller template.
+    * `make_button` (`QPushButton`): [Create].
+    * `buttons` (`QDialogButtonBox`): [Cancel].
+    """
+
+    def __init__(self, parent: "Window", model: App) -> None:
+        """Make the dialog; `open()` shows it.
+
+        Arguments:
+        * `parent` (`Window`): The window it belongs to.
+        * `model` (`App`): What every window shows.
+        """
+        super().__init__(parent)
+        self.model: App = model
+        self.setWindowTitle("New Machine")
+        form: QFormLayout = QFormLayout(self)
+
+        # The name, with [Create] beside it, grey until there is one.
+        self.name: QLineEdit = QLineEdit()
+        self.name.setPlaceholderText("e.g. Shop lathe")
+        self.name.textChanged.connect(self.check)
+        self.make_button: QPushButton = QPushButton("Create")
+        self.make_button.setDefault(True)
+        self.make_button.clicked.connect(self.make_machine)
+        named: QHBoxLayout = QHBoxLayout()
+        named.addWidget(self.name, 1)
+        named.addWidget(self.make_button)
+        form.addRow("Name:", named)
+
+        # The kind, and the template.
+        self.kind: QComboBox = QComboBox()
+        kind: str
+        for kind in NEW_MACHINE_KINDS:
+            self.kind.addItem(kind, kind)
+        form.addRow("Kind:", self.kind)
+        self.template: QComboBox = QComboBox()
+        if model.shop is not None:
+            name: str
+            for name in controller_templates(model.shop):
+                self.template.addItem(name, name)
+        form.addRow("Controller template:", self.template)
+
+        # [Cancel].
+        self.buttons: QDialogButtonBox = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttons.rejected.connect(self.reject)
+        form.addRow(self.buttons)
+        self.check()
+
+    def check(self) -> None:
+        """Grey [Create], saying why, until there is a name."""
+        named: bool = bool(self.name.text().strip())
+        self.make_button.setEnabled(named)
+        self.make_button.setToolTip(
+            "" if named else "Give the machine a name."
+        )
+
+    def make_machine(self) -> None:
+        """Make the machine ([Create]); on a problem, say so and stay."""
+        try:
+            path: Path = self.model.new_machine(
+                self.name.text(),
+                str(self.kind.currentData()),
+                str(self.template.currentData()),
+            )
+        except (ValueError, OSError) as error:
+            self.model.say(str(error), problem=True)
+            return
+        self.accept()
+        parent: QObject | None = self.parent()
+        if isinstance(parent, Window):
+            parent.show_created(path)

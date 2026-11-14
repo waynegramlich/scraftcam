@@ -44,7 +44,7 @@ if __package__ in (None, ""):
 # pylint: disable=wrong-import-position
 from scraftcam.gui import window
 from scraftcam.gui.app import App, find_shop
-from scraftcam.gui.views import Due, MachineControl
+from scraftcam.gui.machines import Due, MachineControl
 from scraftcam.lcnc.lcnc_client import PORT as LINUXCNC_PORT
 from scraftcam.shops import SHOP_FILE
 
@@ -114,6 +114,7 @@ def main(arguments: list[str]) -> int:
     model: App = App(shop_file(options.shop), design)
     if options.shop and model.shop is None:
         model.say(f"No {SHOP_FILE} at {options.shop}.", problem=True)
+    model.program = options.program or ""
 
     # Qt, then the first window, until the last one closes.
     return window.run(

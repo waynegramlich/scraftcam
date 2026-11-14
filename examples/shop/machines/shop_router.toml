@@ -7,7 +7,6 @@ notes = """\
   An example of a 5 by 10 foot CNC router, sharing the mill's \
   controller file.  Its spindle takes ER20 collets itself."""
 machine = "router"
-controller = "LinuxCNC"
 
 [[axes]]
 letter = "X"
@@ -63,3 +62,13 @@ stepover = "40 %"
 ramp_angle = "3 deg"
 finish_allowance = "0.05 in"
 notes = "How the router is run (guesses: it cuts through into a spoil board)."
+
+[controller]
+name = "LinuxCNC"
+template = "LinuxCNC"
+post_processor = "linuxcnc"
+tool_change = '''
+(MSG, Insert T{number:02d}: {description})
+M0
+T{number:02d} M6 G43 H{number:02d}
+'''

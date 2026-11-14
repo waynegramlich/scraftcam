@@ -117,6 +117,11 @@ class PanelFieldsTest(unittest.TestCase):
             panel.show_node(Node(path.name, FILE, path, ""), "mm")
             self.assertEqual(panel.shown["radius"].text(), "1.5875 mm")
 
+            # Read only until editing is enabled (#140).
+            self.assertTrue(panel.entries["radius"].isReadOnly())
+            panel.set_editing(True)
+            self.assertFalse(panel.entries["radius"].isReadOnly())
+
             # A bad value: light red, not written.
             before: str = path.read_text(encoding="utf-8")
             panel.typed("radius", "lots")

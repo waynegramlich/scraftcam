@@ -38,6 +38,7 @@ PLAIN: tuple[str, ...] = (
     "boolean",
     "date",
     "version",
+    "triple",
 )
 
 # The header keys shown but not edited: changing them changes what

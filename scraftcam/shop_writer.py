@@ -1,16 +1,18 @@
-"""Write shop files: TOML, in the key order `shops.KINDS` gives.
+"""Write shop files: TOML, the header first, then the rest alphabetically.
 
 `tomllib` reads shop files; this writes them (`T.osiade~5.1.9` #18),
-for the GUI and for the one time converter.  The keys come in the
-order the field descriptions give (#4), so a file written again
-changes only where a value did, and diffs in the user's version
-control stay small.  `#` comments are not kept (#18); a kind's
+for the GUI.  The header keys (`name`, `kind`, `language`, `version`,
+`notes`) come first, so a file says what it is at its top; then the
+other keys alphabetically, then the tables alphabetically (#146).  A
+file written again changes only where a value did, so diffs in the
+user's version control stay small.  `#` comments are not kept (#18); a kind's
 `notes` key holds what they would have said (#133).
 
 A file starts with its schema line (`shop_schema.schema_line()`),
 then the header keys, then the kind's own keys: plain values first,
 then each table (`[KEY]`) and list of tables (`[[KEY]]`), as TOML
-needs them.  A string with a line break is written as a multi-line
+needs them; a table in a file (a machine's `[controller]`) is written
+the same way.  A string with a line break is written as a multi-line
 literal string (`'''...'''`); a long one without, wrapped with line
 ending backslashes, which TOML reads as one line; a long list, one
 item per line (`WIDTH`).
@@ -121,24 +123,33 @@ def pair_lines(key: str, value: object) -> list[str]:
 def ordered(
     table: dict[str, object], kind: TableKind | None, *, header: bool
 ) -> list[tuple[str, object, TableField | None]]:
-    """Return a table's keys in the order the kind gives them.
+    """Return a table's keys: the header ones first, then alphabetically.
+
+    The header keys there (`name`, `kind`, `language`, `version`,
+    `notes`), in that order, then the rest alphabetically (#146); a
+    whole file's header, or a table's own `name` and `notes` (a
+    machine's `[controller]` copy).
 
     Arguments:
     * `table` (`dict[str, object]`): The table.
     * `kind` (`TableKind | None`): Its kind, if known.
-    * `header` (`bool`): True to put the header keys first.
+    * `header` (`bool`): True for a whole file (its header keys are
+      known then, even with no kind).
 
     Returns:
     * (`list[tuple[str, object, TableField | None]]`): Each key, its
-      value, and its description (None for a key the kind lacks,
-      which comes last, alphabetically).
+      value, and its description (None for a key the kind lacks).
     """
-    fields: tuple[TableField, ...] = HEADER if header else ()
+    fields: tuple[TableField, ...] = HEADER
     if kind is not None:
         fields += kind.fields
     known: dict[str, TableField] = {schema.key: schema for schema in fields}
-    order: list[str] = [key for key in known if key in table]
-    order += sorted(key for key in table if key not in known)
+    first: list[str] = [
+        schema.key
+        for schema in HEADER
+        if schema.key in table and (header or kind is None or kind.named)
+    ]
+    order: list[str] = first + sorted(key for key in table if key not in first)
     return [(key, table[key], known.get(key)) for key in order]
 
 

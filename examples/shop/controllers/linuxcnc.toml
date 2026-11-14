@@ -7,6 +7,8 @@ notes = """\
   The baseline controller. The operator is told which tool to put in, \
   and the program pauses (`M0`) until Start is pressed again."""
 post_processor = "linuxcnc"
+vendor = "LinuxCNC"
+product = "LinuxCNC"
 tool_change = '''
 (MSG, Insert T{number:02d}: {description})
 M0

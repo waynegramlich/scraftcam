@@ -2,7 +2,7 @@
 
 Trimmed 2026-11-13: only decisions still in force and where things
 stand.  The full history is in `hg` and `git`.  Issue numbers are
-sticky (code comments cite them); new ones continue after #138.
+sticky (code comments cite them); new ones continue after #146.
 
 ## Decisions in Force
 
@@ -109,7 +109,82 @@ sticky (code comments cite them); new ones continue after #138.
     resume, stop, jog, MDI, next task); LinuxCNC only now; later
     GRBL/FluidNC, Moonraker, OPC UA; MTConnect is read only, so
     view only, and [Stop All] reports it cannot stop it (#138).
-  * Next: start with #134, the `machines/` directory view.
+  * Second cut (2026-11-14, after the user found the first "kind of
+    broken"; awaiting a GUI run): the shop's root item is a splash
+    (scraftcam, the shop, the NC program; `App.program`), and the
+    first panel starts on it; `machines/` is a list: three lines per
+    CNC machine (name button with kind, controller, state; details;
+    bar), one per other machine, then the tools to fetch
+    (`gui/machines.py`).  A window holds its machines
+    (`Window.machines`, `connect_machine()`) and shows one only when
+    it is clicked, in the list or the tree (`open_machine()`,
+    `connected_name()`); [Stop All], busy, the stopper use
+    `Window.machines`.  A machine file with no `controller` counts as
+    not CNC, but the schema still requires one (#137 to do).  Tests:
+    `tests.test_gui_machines`.
+* Controllers and machines (#139-#142, 2026-11-14):
+  * A machine file needs `controller` (kept required).  No blank
+    start: the first panel shows a short guide ([Tree]; controller
+    templates; [Stop All]; click an item) until something else is
+    shown; the shop's root shows `shop.toml`'s fields (#139).
+  * `Enable Editing: [ ]` per panel, in the action row: checked only
+    for an item just created; otherwise read only, and [Edit] (the
+    editor) greyed while unchecked.  No accidental edits (#140).
+  * `controllers/` holds controller templates; scraftcam ships a
+    LinuxCNC one, copied in by [New Shop].  [New Machine] is greyed
+    until a template exists; a new machine picks one and gets its own
+    `[controller]` copy plus `template = "NAME"`; the shop code reads
+    the machine's copy.  [New Shop] no longer makes machines (#141).
+  * A template change is followed up by whoever makes it, at once,
+    in the template's panel: the machines from it, each changed
+    field's value; old value -> [Update] (one or all), own value ->
+    shown for the editor to update or keep.  Never pushed onto the
+    operator: no marks on machines.  Old values: known in the panel,
+    or kept from the last read for [Edit]-ed files; edits with the
+    GUI closed are left to version control (#142).
+  * Coded 2026-11-14, awaiting the user's GUI run: #139 (`GUIDE`,
+    `Panel.show_guide()`); #140 (`Panel.editing`, `set_editing()`,
+    `Window.editing_box`, `App.created`); #141 (a name in place of a
+    table is refused in `shops._Reader.table()`; `controller` kind's
+    `template`; `scraftcam/templates/controllers/linuxcnc.toml`,
+    copied by `create_shop()`; `App.new_machine()`,
+    `NewMachineDialog`, starting axes/spindle `NEW_AXES`/
+    `NEW_SPINDLES`; example machines converted; `Shops.md` and the
+    JSON schemas regenerated); #142 (`gui/templates.py`:
+    `follow_ups()`, `update_machine()`, `FollowUpView`; `Panel.write()`
+    and an outside change of a shown template).  Not touched:
+    `scripts/convert_shop.py` (old one-off, still writes a controller
+    by name).  Tests: `test_gui_templates`, `test_gui_machines`, and
+    the shop-reading suites (not the slow model-building ones).
+* Versions, not initialized, key order (#143-#146, 2026-11-14):
+  * `scripts/convert_shop.py` deleted (#143).
+  * A controller (template and copy): `vendor`, `product`,
+    `vendor_version` (the vendor's text, as written),
+    `vendor_triple` (our analysis of it, `[MAJOR, MINOR, PATCH]`,
+    filled in when `vendor_version` is entered, editable, `[0, 0, 0]`
+    unknown), `support_ended` (a date or "unknown").  No template
+    revision for now (#142 follows a change up at once) (#144).
+  * A key left out means "Not initialized yet": not an error.  Fields
+    needed only to run (axis `travel`, `max_feed`; the spindle) are
+    no longer required; the panel shows a row for each missing one,
+    "Not initialized yet", quiet; the machines list says so; running
+    a program stops, naming them.  Still errors: the header,
+    `machine`, `controller`, unknown keys.  A new machine gets only
+    its kind, axis letters and controller copy (#145).
+  * Our writer's key order: the header first (`name`, `kind`,
+    `language`, `version`, `notes`), then the other keys
+    alphabetically, then the tables alphabetically (#146).
+  * Tests: checkers and the small test files only, until the user has
+    run the demo.
+  * Coded 2026-11-14, awaiting the user's demo run: `TableField.needed`
+    (axis `travel`, `max_feed`; `spindle`, its `interface`,
+    `max_rpm`), `shops.not_initialized()` (also in `cnc_machine()`),
+    the `triple` form, `shops.vendor_triple()`, the controller's
+    vendor fields (the LinuxCNC templates have `vendor`, `product`);
+    the panel's quiet "Not initialized yet:" line
+    (`Panel.show_missing()`, nested fields are not rows), the
+    machines list's state; `shop_writer.ordered()`.  Example files
+    are hand written, not rewritten in the new order.
 * To come: the inside of a machine tab (the user's next topic; #105:
   "did not look right", details from the user); [NC Files] as a job:
   a directory of `.nc` files, one tool each, run in name order,

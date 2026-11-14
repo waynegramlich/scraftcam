@@ -19,12 +19,15 @@ file carries in its `version` key.
 In the tables, a row whose first cell is empty continues the row
 above it, so that no line is too wide to read in a text editor.
 
+A key "required to run" may be left out: it is then not initialized
+yet, which is not a problem until a program is run on the machine.
+
 ## The Shop's Directory
 
 ```
 shop/
   shop.toml                the shop (`shop`)
-  controllers/linuxcnc.toml   a controller (`controller`)
+  controllers/linuxcnc.toml   a controller template (`controller`)
   machines/shop_mill.toml     a machine, with its tool table (`machine`)
   tool_materials/carbide.toml what tools are made of (`tool_material`)
   tools/1_4_in_end_mill.toml  a tool (`end_mill`, `drill`, ...)
@@ -38,9 +41,11 @@ shop/
 * Each file is one item, of a kind its directory holds; a file of
   another kind there is refused.
 * No two items of a kind may share a name (no two tools at all).
-* A machine names its controller by name (`controller = "LinuxCNC"`),
-  and holds its tool table (`[tool_table.tools]`), which names tools
-  by name.  Any other table is written in place.
+* A file in `controllers/` is a template: a new machine gets its own
+  copy, a `[controller]` table with `template` naming where it came
+  from, which may then be changed for that machine alone.  A machine
+  holds its tool table (`[tool_table.tools]`), which names tools by
+  name.  Every other table is written in place.
 * The reader fills in the shop's `machines`, `tools`, `tooling` and
   `materials` from the directories.
 * The example shop is `examples/shop/`.
@@ -245,10 +250,11 @@ is not a file of its own.
 | `axes`        | list of `axis`         | yes      | One per axis.           |
 | `table`       | `machine_table`        | no       | The table that the work |
 |               |                        |          | is held on.             |
-| `spindle`     | `spindle`              | yes      | The spindle.            |
-| `controller`  | `controller`           | yes      | The controller, by its  |
-|               |                        |          | name (a file in         |
-|               |                        |          | `controllers/`).        |
+| `spindle`     | `spindle`              | to run   | The spindle.            |
+| `controller`  | `controller`           | yes      | Its own controller,     |
+|               |                        |          | copied from a template  |
+|               |                        |          | in `controllers/`       |
+|               |                        |          | (#141).                 |
 | `tool_table`  | `tool_table`           | no       | The tools loaded.       |
 | `preferences` | `preferences`          | no       | How it is run.          |
 | `carousel`    | `carousel`             | no       | Its tool changer's      |
@@ -261,7 +267,12 @@ kind = "machine"
 language = "English"
 version = "0.0.1"
 machine = "mill"
-controller = "LinuxCNC"
+
+[controller]
+name = "LinuxCNC"
+template = "LinuxCNC"
+post_processor = "linuxcnc"
+tool_change = "T{number:02d} M6"
 
 [tool_table.tools]
 1 = "1/4 in 2 flute carbide end mill"
@@ -307,8 +318,8 @@ One linear axis of a machine (rotary axes later).
 | ------------------ | -------------------- | -------- | -------------------- |
 | `letter`           | one of `X`, `Y`, `Z` | yes      | Its letter in        |
 |                    |                      |          | G-code.              |
-| `travel`           | length               | yes      | How far it moves.    |
-| `max_feed`         | feed                 | yes      | Its fastest feed.    |
+| `travel`           | length               | to run   | How far it moves.    |
+| `max_feed`         | feed                 | to run   | Its fastest feed.    |
 | `max_acceleration` | acceleration         | no       | Its greatest         |
 |                    |                      |          | acceleration.        |
 | `limit_switches`   | boolean              | no       | True if it has end   |
@@ -361,7 +372,7 @@ The spindle of a machine.
 
 | Key          | Value                   | Required | Meaning                 |
 | ------------ | ----------------------- | -------- | ----------------------- |
-| `interface`  | one of `R8`, `BT30`,    | yes      | What its tool holders   |
+| `interface`  | one of `R8`, `BT30`,    | to run   | What its tool holders   |
 |              | `BT40`, `BT50`,         |          | fit.                    |
 |              | `CAT30`, `CAT40`,       |          |                         |
 |              | `CAT50`, `NMTB30`,      |          |                         |
@@ -371,7 +382,7 @@ The spindle of a machine.
 |              | or another ending in    |          |                         |
 |              | `!`                     |          |                         |
 | `min_rpm`    | speed                   | no       | Its slowest speed.      |
-| `max_rpm`    | speed                   | yes      | Its fastest speed.      |
+| `max_rpm`    | speed                   | to run   | Its fastest speed.      |
 | `reversible` | boolean                 | no       | True if it runs         |
 |              |                         |          | backwards.              |
 | `flood`      | boolean                 | no       | True if it has flood    |
@@ -408,6 +419,25 @@ own.
 |                  |                   |          | it reads.                 |
 | `tool_change`    | string            | no       | The lines that change the |
 |                  |                   |          | tool.                     |
+| `template`       | string            | no       | In a machine's copy: the  |
+|                  |                   |          | template in               |
+|                  |                   |          | `controllers/` it was     |
+|                  |                   |          | copied from (#141).       |
+| `vendor`         | string            | no       | Who makes it (#144).      |
+| `product`        | string            | no       | The vendor's name for it. |
+| `vendor_version` | string            | no       | Its version, as the       |
+|                  |                   |          | vendor writes it (e.g.    |
+|                  |                   |          | "R3.043.066").            |
+| `vendor_triple`  | triple            | no       | Our reading of            |
+|                  |                   |          | `vendor_version`,         |
+|                  |                   |          | MAJOR.MINOR.PATCH (e.g.   |
+|                  |                   |          | "3.43.66"; "0.0.0" when   |
+|                  |                   |          | unknown), filled in when  |
+|                  |                   |          | `vendor_version` is       |
+|                  |                   |          | entered.                  |
+| `support_ended`  | date              | no       | When the vendor stopped   |
+|                  |                   |          | updating it (left out:    |
+|                  |                   |          | unknown).                 |
 
 ```toml
 name = "LinuxCNC"

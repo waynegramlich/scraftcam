@@ -5,7 +5,6 @@ language = "English"
 version = "0.0.1"
 notes = "An example of a small knee mill converted to CNC."
 machine = "mill"
-controller = "LinuxCNC"
 
 [[axes]]
 letter = "X"
@@ -86,3 +85,13 @@ spoke_length = "2.5 in"
 notes = """\
   A small carousel: fewer slots than the demonstration's tools, so it \
   stops once to swap a tool."""
+
+[controller]
+name = "LinuxCNC"
+template = "LinuxCNC"
+post_processor = "linuxcnc"
+tool_change = '''
+(MSG, Insert T{number:02d}: {description})
+M0
+T{number:02d} M6 G43 H{number:02d}
+'''

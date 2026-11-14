@@ -179,7 +179,15 @@ class ServerTest(unittest.TestCase):
                 units="in",
                 machines=[],
             )
-            self.assertEqual(self.ask("tree")["result"], [["Lab (shop)"]])
+            self.assertEqual(
+                self.ask("tree")["result"],
+                [
+                    [
+                        "Lab (shop)",
+                        ["controllers (directory)", ["LinuxCNC (file)"]],
+                    ]
+                ],
+            )
             shown: object = self.ask(
                 "select", path=str(directory / "shop.toml")
             )["result"]

@@ -11,8 +11,9 @@ from unittest import mock
 
 from scraftcam import run
 from scraftcam.gui.app import App
+from scraftcam.gui.machines import Due, MachineControl
 from scraftcam.gui.theme import colors
-from scraftcam.gui.views import Due, MachineControl, Panel, TreeWatcher
+from scraftcam.gui.views import Panel, TreeWatcher
 from scraftcam.gui.window import NewShopDialog, Window
 from tests import qt_app
 
@@ -109,11 +110,12 @@ class WindowTest(unittest.TestCase):
             told.append,
             functools.partial(Due, "T05", 0.5, 2.0, False),
         )
-        top.panels[0].show_machine(control)
-        control.on_minimal(functools.partial(top.set_minimal, top.panels[0]))
+        top.connect_machine(control)
+        top.open_machine("Mill")
         self.assertIs(top.free_panel(), top.panels[1])
         top.panels[0].show_dues(True)
-        meter = top.panels[0].headers[0].meter
+        assert top.panels[0].header is not None
+        meter = top.panels[0].header.meter
         self.assertEqual(meter.format(), "▲ 0:30")
         self.assertEqual(meter.value(), 750)
         self.assertEqual(top.busy(), "The mill is running")
@@ -226,6 +228,9 @@ class WindowTest(unittest.TestCase):
             window.select_item(item)
             self.assertFalse(window.edit_row.isHidden())
             self.assertEqual(window.edit_label.text(), "plate (design):")
+            self.assertFalse(window.buttons["Edit"].isEnabled())
+            window.editing_box.setChecked(True)
+            self.assertTrue(window.buttons["Edit"].isEnabled())
             with (
                 mock.patch.dict(os.environ, {"VISUAL": "kate"}),
                 mock.patch("subprocess.Popen") as popen,

@@ -51,6 +51,7 @@ NUMBER: str = r"[-+]?(?:(?:\d+-)?\d+/\d+|(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)"
 SIMPLE: dict[str, dict[str, object]] = {
     "string": {"type": "string"},
     "version": {"type": "string", "pattern": r"^\d+\.\d+\.\d+$"},
+    "triple": {"type": "string", "pattern": r"^\d+\.\d+\.\d+$"},
     "integer": {"type": "integer"},
     "positive_integer": {"type": "integer", "minimum": 1},
     "boolean": {"type": "boolean"},

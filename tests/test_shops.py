@@ -214,7 +214,7 @@ class TestReader(CopiedShop):
     def test_value_problems(self) -> None:
         """Every problem is found, each at its line."""
         self.change(self.MILL, '"5000 rpm"', "5000")
-        self.change(self.MILL, 'travel = "9 in"', 'travel = "9 ipm"')
+        self.change(TestReader.MILL, 'travel = "9 in"', 'travel = "9 ipm"')
         self.change(self.MILL, "brake = true", "brakes = true")
         self.change(self.MILL, "t_slots = 3", 't_slots = "3"')
         self.change(self.MILL, '"mill"', '"lathe"')
@@ -285,7 +285,10 @@ class TestReader(CopiedShop):
 
         # The same number twice, and none at all.
         for name, old, new in changes:
-            self.change(name, new, old)
+            # Back again: the new text for the old (deliberate).
+            self.change(  # pylint: disable=arguments-out-of-order
+                name, new, old
+            )
         self.change(self.DRILL, "unique_id = 5\n", "unique_id = 1\n")
         self.change(self.BALL_MILL, "unique_id = 3\n", "")
         text = "\n".join(self.problems())
@@ -481,15 +484,7 @@ class TestReader(CopiedShop):
         self.assertTrue(problems[1].startswith(f"{self.MILL}:5: version"))
 
     def test_names(self) -> None:
-        """Controllers by name; no `@`; files where they belong."""
-        self.change(
-            self.MILL, 'controller = "LinuxCNC"', 'controller = "Nope"'
-        )
-        self.change(
-            self.ROUTER,
-            'controller = "LinuxCNC"',
-            'controller = "@linuxcnc.toml"',
-        )
+        """Names unique in a kind; files where they belong."""
         shutil.copy(
             self.directory / self.LINUXCNC, self.directory / "tools/x.toml"
         )
@@ -503,14 +498,25 @@ class TestReader(CopiedShop):
             [
                 ["controllers/linuxcnc.toml:1", "name"],
                 ["tools/x.toml:1", "kind"],
-                [self.at(self.MILL, '"Nope"'), "controller"],
-                [self.at(self.ROUTER, '"@linuxcnc'), "controller"],
             ],
         )
         self.assertIn("also the name of another `controller`", problems[0])
         self.assertIn("does not belong in tools/", problems[1])
-        self.assertIn('no `controller` named "Nope"', problems[2])
-        self.assertIn('no longer named with "@"', problems[3])
+
+    def test_controller_by_name(self) -> None:
+        """A machine's controller by name: refused, it needs a copy."""
+        # pylint: disable-next=protected-access
+        reader = shops._Reader(self.directory)
+        # pylint: disable-next=protected-access
+        source = shops._Source(self.MILL, {})
+        self.assertEqual(
+            reader.table(
+                "LinuxCNC", shops.KINDS["controller"], ("controller",), source
+            ),
+            {},
+        )
+        self.assertEqual(len(reader.problems), 1)
+        self.assertIn("give the `controller` in place", reader.problems[0])
 
     def test_unknown_kind(self) -> None:
         """A top file whose `kind` is not known."""
@@ -601,6 +607,7 @@ class TestToolCutting(unittest.TestCase):
         }
 
     def cutting(self, name: str, material: str) -> tuple[float, ...]:
+        """Return a tool's cutting data in a material, from the shop."""
         return shops.tool_cutting(
             self.shop, self.mill, self.tools[name], material
         )
@@ -681,9 +688,48 @@ class TestAxisLimits(TestToolCutting):
     def test_widest(self) -> None:
         """A corner rounding mill is as wide as its tip and radii."""
         self.assertAlmostEqual(
-            shops._widest({"tip_diameter": "0.0469 in", "radius": "1/16 in"}),
+            shops._widest(  # pylint: disable=protected-access
+                {"tip_diameter": "0.0469 in", "radius": "1/16 in"}
+            ),
             0.0469 + 0.125,
         )
+
+
+class TestNotInitialized(CopiedShop):
+    """Tests of fields left out: not initialized yet (#145), and #144."""
+
+    def test_left_out(self) -> None:
+        """Read without a problem; listed; a program can not be run."""
+        self.change(TestReader.MILL, 'travel = "18 in"\n', "")
+        self.change(TestReader.MILL, 'max_rpm = "5000 rpm"\n', "")
+        shop: dict[str, object] = shops.read(self.directory / "shop.toml")
+        # pylint: disable-next=protected-access
+        mill: dict[str, object] = shops._machine(shop, "Shop mill")
+        self.assertEqual(
+            shops.not_initialized(mill, "machine"),
+            ["axes[X].travel", "spindle.max_rpm"],
+        )
+        with self.assertRaises(ValueError) as caught:
+            shops.cnc_machine(shop, "Shop mill", "aluminum_6061")
+        self.assertIn("not initialized yet", str(caught.exception))
+        self.assertEqual(
+            shops.not_initialized({"machine": "mill", "axes": []}, "machine"),
+            ["spindle"],
+        )
+
+    def test_vendor_triple(self) -> None:
+        """Our reading of a vendor's version; the form checks it."""
+        self.assertEqual(shops.vendor_triple("R3.043.066"), "3.43.66")
+        self.assertEqual(shops.vendor_triple("2.9"), "2.9.0")
+        self.assertEqual(shops.vendor_triple("v2.9.4-12 (Debian)"), "2.9.4")
+        self.assertEqual(shops.vendor_triple("unknown"), "0.0.0")
+        triple: shops.TableField = next(
+            f
+            for f in shops.KINDS["controller"].fields
+            if f.key == "vendor_triple"
+        )
+        self.assertEqual(shops.scalar_problem("2.9.4", triple), "")
+        self.assertIn("MAJOR.MINOR.PATCH", shops.scalar_problem("2.9", triple))
 
 
 class TestMarkdown(unittest.TestCase):
@@ -759,7 +805,6 @@ class TestMarkdown(unittest.TestCase):
             with self.subTest(kind=kind.kind):
                 # pylint: disable-next=protected-access
                 reader = shops._Reader(EXAMPLES)
-                reader.named["controller"] = {"LinuxCNC": {}}
                 # pylint: disable-next=protected-access
                 source = shops._Source(kind.kind, {})
                 reader.table(tomllib.loads(kind.example), kind, (), source)
