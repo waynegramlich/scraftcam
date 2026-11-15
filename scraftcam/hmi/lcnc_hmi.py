@@ -172,6 +172,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QButtonGroup,
     QCheckBox,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -360,6 +361,23 @@ def row(
         line.addWidget(widget)
     line.addStretch(1)
     layout.addLayout(line)
+
+
+# Function `narrow()`:
+def narrow(*buttons: QPushButton) -> None:
+    """Make buttons only as wide as their text (`T.osiade~5.1.9` #176).
+
+    Qt's buttons are at least 80 pixels wide, however short their
+    text; only for buttons whose text never changes.
+
+    Arguments:
+    * `buttons` (`QPushButton`): The buttons.
+    """
+    button: QPushButton
+    for button in buttons:
+        button.setMaximumWidth(
+            button.fontMetrics().horizontalAdvance(f"  {button.text()}  ")
+        )
 
 
 # The next tool's text, this many times the usual size (#170).
@@ -623,6 +641,7 @@ class HMI(QWidget):
         self.origin_button.clicked.connect(self.on_set_origin)
         self.home_button: QPushButton = QPushButton("Home")
         self.home_button.clicked.connect(self.on_home)
+        narrow(self.next_step_button, self.origin_button, self.home_button)
         row(
             configure,
             self.next_step_button,
@@ -663,6 +682,7 @@ class HMI(QWidget):
             self.axis_entries[axis] = entry
             self.axis_buttons[axis] = button
             self.jog_buttons += jogs
+            narrow(*jogs, button)
             row(configure, *jogs, entry, button, spaces={2: 12})
 
         # Setup: the jog step, one chosen at a time, on a row of its
@@ -681,6 +701,7 @@ class HMI(QWidget):
             self.steps.addButton(choice)
             steps.append(choice)
         self.jog_buttons += steps
+        narrow(*steps)
         row(configure, *steps, spaces={})
         configure.addStretch(1)
 
@@ -713,6 +734,7 @@ class HMI(QWidget):
             tool_button: QPushButton = QPushButton(label)
             tool_button.clicked.connect(functools.partial(self.on_tool, step))
             self.tool_buttons.append(tool_button)
+        narrow(*self.tool_buttons)
         row(tools, *self.tool_buttons, spaces={})
 
         # Tools: how to load the carousel for the program open.
@@ -727,12 +749,12 @@ class HMI(QWidget):
 
         # Job: the job's files (to come, #74, #77); Open for now.
         files: QVBoxLayout = QVBoxLayout(self.tabs["Job"])
-        files.addWidget(
-            QLabel(
-                "A job's .nc files, one tool each, in run order, will be "
-                "listed here.  For now, Open opens one program."
-            )
+        job_text: QLabel = QLabel(
+            "A job's .nc files, one tool each, in run order, will be "
+            "listed here.  For now, Open opens one program."
         )
+        job_text.setWordWrap(True)
+        files.addWidget(job_text)
         open_button: QPushButton = QPushButton("Open")
         open_button.clicked.connect(self.on_open)
         files.addWidget(open_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -763,17 +785,20 @@ class HMI(QWidget):
         execute.addLayout(slider_line)
 
         # Execute: what SolidCraft shows (`T.osiade~5.1.9` #70, #73,
-        # #159).
+        # #159), two to a row (#176).
         self.toggles: dict[str, QCheckBox] = {}
         shown: bool
-        view_line: QHBoxLayout = QHBoxLayout()
-        for label, _, shown in TOGGLES:
+        view_grid: QGridLayout = QGridLayout()
+        toggle_number: int
+        for toggle_number, (label, _, shown) in enumerate(TOGGLES):
             self.toggles[label] = QCheckBox(label)
             self.toggles[label].setChecked(shown)
             self.toggles[label].clicked.connect(self.on_toggle)
-            view_line.addWidget(self.toggles[label])
-        view_line.addStretch(1)
-        execute.addLayout(view_line)
+            view_grid.addWidget(
+                self.toggles[label], toggle_number // 2, toggle_number % 2
+            )
+        view_grid.setColumnStretch(2, 1)
+        execute.addLayout(view_grid)
         execute.addStretch(1)
 
         # Under the tabs: Quit (hidden in the GUI, #56).

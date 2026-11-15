@@ -115,6 +115,7 @@ def main(arguments: list[str]) -> int:
     if options.shop and model.shop is None:
         model.say(f"No {SHOP_FILE} at {options.shop}.", problem=True)
     model.program = options.program or ""
+    model.keep_layout = not options.headless
 
     # Qt, then the first window, until the last one closes.
     return window.run(

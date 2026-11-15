@@ -1,8 +1,9 @@
 # LLM Agent Context Log
 
-Trimmed 2026-11-13: only decisions still in force and where things
-stand.  The full history is in `hg` and `git`.  Issue numbers are
-sticky (code comments cite them); new ones continue after #146.
+Trimmed 2026-11-13 and 2026-11-15: only decisions still in force and
+where things stand.  The full history is in `hg` and `git`.  Issue
+numbers are sticky (code comments cite them); new ones continue after
+#210.
 
 ## Decisions in Force
 
@@ -18,11 +19,12 @@ sticky (code comments cite them); new ones continue after #146.
   720 x 480 at start (#109).  Never crash a machine: nothing closes
   (window, GUI, `SIGTERM`/`SIGINT`) until every machine is stopped
   with its spindle off (#56, #67).
-* Top line (#82): [Stop All] first, always shown: greyed while no
-  machine runs, red, bold and heavily boxed while any does (#100);
-  [Tree], shop and design names, latest message (red for problems,
-  #95), [+ Panel], narrow [x] (#114).  Action rows under it (#73);
-  no right click; no icons, a kind in parentheses.
+* Top line (#82), on every window: [Stop All] first, always shown:
+  greyed while no machine runs, red, bold and heavily boxed while any
+  does (#100); [Tree], latest message (red for problems, #95),
+  [+ Panel], [New Window], [Exit] (see "Windows and Panels").  Action
+  rows under it (#73); no right click; no icons, a kind in
+  parentheses.
 * No shop: "No shop yet: [New Shop]", the dialog at start (#97-#118).
   Never `git init`; suggest `git` or `hg` (#99, #107).
 * Tree (#119-#128): two roots (shop, design); directories first;
@@ -31,13 +33,13 @@ sticky (code comments cite them); new ones continue after #146.
   size (#21); every item has a tooltip saying what it is (#80); bad
   files red "(error)"; watched (no [Refresh]); fitted to its labels,
   refitted on open/close (#22, #43).
-* Panels (#122): a click shows the item in the current panel, never
-  in a machine's (#58).  A shop item: a row per field, `key (L)` with
-  its sketch letter (#19), all of its kind's sketches to the right,
-  top view first (#42), the rest as TOML below.  The lines between
-  them fit themselves to what is there on each new item (#43); every
-  line has a grip and highlights on hover (#25, #44).  [Edit] opens
-  `$VISUAL`/`$EDITOR`/the desktop's editor (#77, #124).
+* Panels (#122): a click shows the item in a panel by the pin rule
+  (#201).  A shop item: a row per field, `key (L)` with its sketch
+  letter (#19), all of its kind's sketches to the right, top view
+  first (#42).  The lines between them fit themselves to what is
+  there on each new item (#43); every line has a grip and highlights
+  on hover (#25, #44).  [Edit TOML File] opens `$VISUAL`/`$EDITOR`/
+  the desktop's editor (#77, #124).
 * Light and dark follow the desktop (`gui/theme.py`), no hard-coded
   colors, sketches recolored (#24).
 * Command port (#96, #110): JSON lines on 127.0.0.1: `status`,
@@ -66,34 +68,23 @@ sticky (code comments cite them); new ones continue after #146.
 * Values (#15): checked as typed, never written bad; no [Save].
 * Catalogs (#87, #88): tables and text under version control.
 * Deferred: #90-#92, installer and PyPI (#54, #56, #57, #89), panel
-  menu (#71), per-user layout file (#78.1).
+  menu (#71).
 * `scraftcam/gui/README.md` (#10) comes at the very end of this task,
   after the LinuxCNC GUI and the catalog work are merged in.
 
 ## The Machine Panel (step 5), decided so far
 
-* A panel holds a tab per machine (#101); each tab header is the
-  machine's name over a bar that fills from black as the operator's
-  next tool task comes (a carousel swap, or with no tool changer
-  every change), full when due, black again after (#102, #106); its
-  text the time left, "▲" within a minute, "■ NOW" blinking while
-  waiting: not color alone (color blind operators).
-* Inside a machine (the HMI, `lcnc_hmi.py`, to be redone completely):
-  at the top, one run button named Start / Pause / Resume / Restart
-  (#96), [Skip Tool] (#97), [Stop], [Minimal]/[Full] (#94); the
-  position with S rpm and F in/min (#86, #98); the tool plan, now and
-  the next few with times (#85, #87, #91); the View check boxes
-  (#73, #92); the message only when there is one (#88).  Tabs
-  [Configure] (origin, jogs, Set X/Y/Z, G-code windows, MDI,
-  -Tool/+Tool, carousel plan), [NC Files] (placeholder), [Execute]
-  (the slider behind [Expert] with a confirming question, #79;
-  progress; next tool).  The speeds-and-feeds table is gone (#72).
-* Minimal form: Start goes minimal, a run's end goes full; the window
-  shows only [Stop All], message, [x] and the machine panel, and asks
-  to stay on top (Wayland may ignore it; GNOME's own Always on Top
-  works) (#90-#95).
-* Machines view vs machine view (#134-#138, 2026-11-14; replaces
-  #101's tabs, the bar of #102 kept):
+* A machine's header: its name over a bar that fills from black as
+  the operator's next tool task comes (a carousel swap, or with no
+  tool changer every change), full when due, black again after
+  (#102, #106); its text the time left, "▲" within a minute, "■ NOW"
+  blinking while waiting: not color alone (color blind operators).
+* Inside a machine: one run button named Start / Pause / Resume /
+  Restart (#96), [Skip Tool] (#97), [Stop]; S rpm and F in/min (#86,
+  #98); the slider behind [Expert] with a confirming question (#79);
+  no speeds-and-feeds table (#72).  The layout today: "The Machine
+  Panel (in force 2026-11-15)" below.
+* Machines view vs machine view (#134-#138, 2026-11-14):
   * `machines/` directory view: a row per CNC machine (name, kind,
     state, job progress, next-task bar, a field or two per kind);
     non-CNC machines one line each; a short list of the next tools
@@ -109,8 +100,7 @@ sticky (code comments cite them); new ones continue after #146.
     resume, stop, jog, MDI, next task); LinuxCNC only now; later
     GRBL/FluidNC, Moonraker, OPC UA; MTConnect is read only, so
     view only, and [Stop All] reports it cannot stop it (#138).
-  * Second cut (2026-11-14, after the user found the first "kind of
-    broken"; awaiting a GUI run): the shop's root item is a splash
+  * Second cut (2026-11-14): the shop's root item is a splash
     (scraftcam, the shop, the NC program; `App.program`), and the
     first panel starts on it; `machines/` is a list: three lines per
     CNC machine (name button with kind, controller, state; details;
@@ -185,11 +175,10 @@ sticky (code comments cite them); new ones continue after #146.
     (`Panel.show_missing()`, nested fields are not rows), the
     machines list's state; `shop_writer.ordered()`.  Example files
     are hand written, not rewritten in the new order.
-* To come: the inside of a machine tab (the user's next topic; #105:
-  "did not look right", details from the user); [NC Files] as a job:
+* To come: the Job tab as a job:
   a directory of `.nc` files, one tool each, run in name order,
-  loaded from the tree (#74, #77, #78); [Tool Table] work inside
-  [Configure]: a tool's length (spindle nose to tip) by setter, dial
+  loaded from the tree (#74, #77, #78); a Tool Table tab: a tool's
+  length (spindle nose to tip) by setter, dial
   indicator cube (2 in) or paper and micrometer, all `G10 L10 P<n>
   Z<height>` (#80, #81); our data keeps the offsets and shows them
   for other controllers (#83).  `lcnc_hmi.py` goes once all of it is
@@ -211,12 +200,13 @@ when the user likes it (#85, #112).
 * `scraftcam/gui/`: `app.py` (model), `fields.py` (field rows,
   `sketches()`), `views.py` (`TreeView`, `Panel`, `MachineControl`,
   `Due`, `MachineTab`, `GripSplitter`), `window.py` (`Window`,
-  `Stopper`, `CommandServer`, `NewShopDialog`), `theme.py`, `tree.py`
+  `Stopper`, `CommandServer`, `NewShopDialog`), `layout.py` (the kept
+  layout), `theme.py`, `tree.py`
   (`about_item()`, `about_directory()`), `editor.py`, `port.py`.
 * `scraftcam/run.py`: `machine_maker()` makes the HMI for a panel
   (imports `scraftcam.hmi` only with `--program`).
 * `scraftcam/hmi/lcnc_hmi.py`: `make_hmi()`, `HMI.busy()`, `quit()`,
-  `set_minimal()`, `intervention()`; `hmi_machine.py`:
+  `intervention()`, `narrow()`; `hmi_machine.py`:
   `HMIStatus.spindle/rpm/feed`, `tool_plan()`, `next_intervention()`,
   `Intervention`.
 * `scraftcam/shops.py`: `KINDS`, `dimension_letters()`,
@@ -233,216 +223,113 @@ when the user likes it (#85, #112).
 * Related tasks made: `T.cpfj~5.7` (carousel planning for a job),
   `T.rslsao~5.8` (several LinuxCNC simulators at once), both Pending.
 
-## Shop and Controller Panels (#147-#151, 2026-11-14)
+## Shop and Controller Panels (#147-#153, 2026-11-14)
 
-Decided with the user after a `show_demo.py` run; coding started.
-Tests: only small changes until the user approves the design.
-* #147: every directory in the tree is "(directory)", "(folder)" on
-  Windows, the shop's root included.
-* #148: (1) bug: `tree.edit_path()` gave shop `.toml` items no file,
-  so neither [Enable Editing] nor [Edit] showed; every shop item gets
-  its `.toml` (the root `shop.toml`).  (2) `units` is a choice:
-  "imperial (in)" / "metric (mm)", stored `in`/`mm`.  (3) [Edit] is
-  [Edit TOML File]; the TOML text is dropped from every panel.
-* #149: each field row has a ▶/▼ toggling how to fill it in (help
-  text in `KINDS`); `kind` shown, never editable.
-* #150: a directory's panel shows an explanation of what it holds
-  (not a list; the tree's ▶/▼ shows that).  `controllers/` text as
-  drafted; `machines/` keeps its list (#134).
-* #151: (1) `post_processor` stays: left out or "linuxcnc" is
-  built in; otherwise a command with `{input}` and `{output}` that
-  rewrites scraftcam's LinuxCNC G-code; an error stops the job.  (2)
-  `template` not listed in a controller file; in a machine's copy
-  read only, "Copied from: NAME (`controllers/FILE`)".  (3)
-  `tool_change` help as drafted (`{number}`, `{number:02d}`,
-  `{description}`, the MSG/M0/M6/G43 example).
-* Coded 2026-11-14 (checkers clean, small GUI/shop tests pass; no
-  new tests until the user approves the design): #147
-  (`Node.label()`), #148.1 (`edit_path()`), #148.2 (closed choices are
-  drop-downs: `Panel._choice_entry()`, `CHOICE_LABELS`), #148.3
-  (`EDIT`; TOML text hidden; `Panel.fit()` lays out first), #149
-  (`TableField.how`, `fields.field_help()`, `toggle_help()`; only
-  `tool_change` and `post_processor` have `how` yet), #150
-  (`tree.EXPLANATIONS`; all but `controllers` are drafts), #151.1
-  (`post_processor` a checked string, `post_processor_problem()`,
-  `gcode.post_process()`: not yet called anywhere, as only LinuxCNC
-  runs), #151.2 (`templates.copied_from()`, `Panel.copied`).
-  `Shops.md` and schemas regenerated.  Open: tables inside an item
-  (controller, axes, spindle) are no longer shown at all; proposed ▶
-  headings with indented rows.
-* #152-#155 (2026-11-14, after the user's demo run): the guide's
-  wording is the user's (`GUIDE`); #152 "Shop: / Design:" gone from
-  the top line (the title bar has them); #153 [Enable Editing] and
-  [Edit TOML File] are in each panel, under its title
-  (`Panel.edit_row`, `editing_box`, `edit_button`, `edit_file`;
-  `Window.edit(panel)`); #154 machine panels stay sticky while
-  running; before a start the user's answer ("keep them sticky") to
-  be confirmed; the click elsewhere goes to a squeezed new panel
-  (`free_panel()`), to be made visible; the huge machine panel later.
-* #154 coded 2026-11-14 (awaiting the user's demo run): the
-  `machines/` list shows active machines first (`is_active()`: busy,
-  or a program loaded; paused or waiting counts), each an
-  `ActiveBlock` (state, details, job bar from `Report`, next-task bar,
-  tool plan); then "Not active" a line each in tree order
-  (`idle_line()`); tools to fetch only for active machines; the list
-  is laid out again when the active set changes.  `MachineControl`
-  has `report` (default `no_report`); `run.py`'s `report()` reads the
-  HMI's `lines`, `sums`, `at`, `progress_line()`, `plan`.  A machine's
-  panel is sticky only while it is active (`free_panel()`,
-  `Panel.drop_machine()`).
-* #156-#157 decided 2026-11-14 (#1-#16 of that round): [Close Panel]
-  on each panel but a last one; an active machine's asks to stop it
-  first; [Detach] -> own small window, [Reattach]; tree clicks never
-  go to a detached panel; closing one follows [Close Panel]; [Exit
-  Program] replaces the top line's [x], asking to stop all running
-  machines first; the window manager's close does the same; minimal
-  form shows neither panel button.  Coded so far: [Close Panel]
-  (`Window.close_panel()`, `show_close_buttons()`,
-  `Panel.close_button`), [Exit Program] (`EXIT`, still today's
-  refusal while running).  Not yet: [Detach]/[Reattach], the
-  stop-all question on exit, hiding [Close Panel] in the minimal form.
-* #157 coded 2026-11-14: [Detach]/[Reattach] (`Window.detach_panel()`,
-  `DetachedWindow`, `Window.detached`, `holder()`, `all_panels()`);
-  its title bar close is [Close Panel].  Not yet: closing the main
-  window closing its detached ones; the exit question; minimal form.
-* 2026-11-14: [Exit Program] (`Window.exit_program()`) and the title
-  bar's close (a spontaneous `closeEvent`) ask "X is running.  Stop
-  them all and exit?" (`ask_to_stop()`); closing the main window
-  deletes its detached windows; the minimal form hides [Detach] and
-  [Close Panel].  Left: a panel or window closing by itself once its
-  machine has stopped.
-* 2026-11-14: a panel told to close while its machine stops closes
-  once it has (`Window.closing`, `follow_machines()`); [Exit Program]
-  likewise (`Window.exiting`).
+* #147: every directory is "(directory)", "(folder)" on Windows, the
+  shop's root included (`Node.label()`).
+* #148: every shop item gets its `.toml` (`edit_path()`); `units` is
+  a drop-down "imperial (in)" / "metric (mm)" (`_choice_entry()`,
+  `CHOICE_LABELS`); [Edit TOML File] (`EDIT`); no TOML text in panels.
+* #149: a ▶/▼ per field row with how to fill it in (`TableField.how`,
+  `field_help()`; only `tool_change`, `post_processor` have it yet).
+* #150: a directory's panel explains what it holds
+  (`tree.EXPLANATIONS`; all but `controllers/` are Claude's drafts);
+  `machines/` keeps its list.
+* #151: `post_processor`: left out or "linuxcnc" built in, else a
+  command with `{input}`/`{output}` (`gcode.post_process()`, not yet
+  called); a machine's controller copy shows "Copied from: NAME"
+  (`templates.copied_from()`).
+* #152, #153: no "Shop:/Design:" on the top line; [Enable Editing]
+  and [Edit TOML File] under each panel's title (`Panel.edit_row`).
+* Help texts, explanations, `rpm` "overrides for every material" and
+  `tooling_pitch` "a multiple of `pitch`" are drafts, not checked
+  against the code.
 
-## Where Things Stand (2026-11-14, end of session)
+## Windows and Panels (in force 2026-11-15; the user: "it just works")
 
-#147-#157 are decided and coded (see the entries above); the user
-has not yet run the demo on #152-#157.  Help texts and the
-directory explanations other than `controllers/` are Claude's
-drafts for the user to revise; `rpm` "overrides for every material"
-and `tooling_pitch` "a multiple of `pitch`" are not checked against
-the code.  Next:
-1. The user's demo run of #147-#157 and feedback.
-2. Tables inside an item (a machine's controller, axes, spindle,
-   preferences, carousel) are not shown since the TOML text went;
-   proposed: a ▶ heading per table, collapsed, with indented rows
-   (not agreed yet).  Their fields' help waits on it.
-3. Tests for [Close Panel], [Detach]/[Reattach], the exit question,
-   the drop-downs and field help, once the user approves the design.
-4. `gcode.post_process()` is not called yet (only LinuxCNC runs).
-5. The huge machine panel (#105) is still to be redone.
+* Any number of windows (PanelRow in the code: `Window`, all in
+  `WINDOWS`), all sharing one `App`.  Each has the top line [Stop
+  All] [Tree] message [+ Panel] [New Window] [Exit], its own tree,
+  and one or more panels side by side.
+* #200: [New Window] opens one with an empty panel ("Click an item in
+  the tree.", `Panel.hide_guide()`) and its tree; the first window
+  starts with the guide.
+* Each panel's title line: its title (the tree's label, wrapped; a
+  machine's too, #183), then, packed right (#182): [<] [>] (#174,
+  greyed at the ends), [ ] Pin (#201), [Close] (#156, hidden on a
+  window's last panel; an active machine's asks to stop it first,
+  and closes once stopped).
+* #201: a tree click goes to the current panel unless pinned; else
+  the first unpinned; else a new one on the right (`free_panel()`).
+  A running machine's panel is pinned, the box checked and greyed,
+  until it stops (`Panel.pinned`, `is_pinned()`, `show_pin()`).
+* #202: a file or directory may show in several panels and windows.
+  #203: a machine in one panel only; clicking it elsewhere brings
+  that window to the front (`open_machine()`).
+* #177-#180: [+ Panel] widens the window by the panels' average,
+  [Close] narrows it; the other panels keep their widths; not when
+  maximized or full screen; never past the screen or below the
+  minimum (`fit_width()`, `resize_to_wanted()`, `wanted`, `FIT_MS`).
+* #184: closing a window asks "Stop and close this window?" for its
+  running machines (`ask_to_leave()`, `leaving`); its machine
+  controls go to the oldest window left; [Exit] (and the last
+  window's close) asks to stop everything, then closes every window
+  (`close_rows()`).  `busy()` of a window with others left counts
+  only its panels' machines.
+* #186, #187: the layout is kept per shop in
+  `~/.scraftcam/layouts/HASH16.json` (`gui/layout.py`,
+  `LAYOUT_VERSION` 2; other versions skipped): each window's size,
+  tree (shown, width, open branches), panels (width, `pinned`, `path`
+  or `machine`).  Written on change, every `STOP_MS`, by the first
+  window (`Window.snapshot()`, `save_layout()`); restored before the
+  event loop (`restore_layout()`, `Window.restore()`,
+  `restore_panels()`: read only, machines shown never started,
+  anything gone skipped).  Only when `App.keep_layout` (`run.py`
+  unless `--headless`; tests never save).  No window positions
+  (Wayland).
+* Narrow: buttons fitted to their text (`views.narrow()`,
+  `lcnc_hmi.narrow()`; Qt's are at least 80 px): top line [Bring]/
+  [Exit] style short names with long tooltips (#196, #197; [Stop
+  All] kept, with `STOP_ROOM` for its running look, #199; [+ Panel]
+  kept, #198).  A window is at least 297 px, a panel 235.
+* #191: the command port addresses `WINDOWS[0]` unless a `window`
+  index is given.
+* Tried and dropped (do not bring back): [Detach]/[Reattach] into
+  `DetachedWindow`s (#157, #173); [Attach] back to a window of origin
+  (#185, #189); [Bring Panel] pulling a chosen lone panel (#192-#195);
+  machine sections in panels of their own (#159-#162); the minimal
+  form (#90-#95, #168).
+
+## The Machine Panel (in force 2026-11-15)
+
+* Header (name, next-task bar), strip (run button, [Skip Tool],
+  [Stop]), the next tool large (#170, `next_tool_text()`, "■ NOW"),
+  the progress line, the position in three lines, the message; then
+  tabs Setup, Tools, G-code, Job, Execute (the user liked them).
+* At most 5 widgets to a row; a row per axis (`[-X] [+X] [entry]
+  [Set X]`); G-code windows `GCODE_WIDTH` (32) characters, `elided()`.
+* #176: tabs about half as wide (573 -> 255 px): fitted buttons, the
+  Job text wraps, View check boxes two to a row; G-code is the widest.
+* #169: `machines/` is the power operator's home; #172 [Stop] per
+  strip, [Stop All] on every top line.
+
+## Where Things Stand (2026-11-15, end of session)
+
+Open items (numbers sticky):
+1. #207: tests for today's work, from Claude's offscreen scripts:
+   `tests.test_gui_layout` (path, write on change, version, bad
+   file), and in `test_gui_window`: the pin rule, [New Window],
+   [<]/[>], widths, a save/restore round trip; with #166's backlog
+   (exit question, drop-downs, field help, `elided()`, next tool).
+2. #208: clean-up left from the detach era: `show_rows_buttons()`,
+   `all_panels()` (same as `panels`), `leaving`.
+3. #209: maybe [Reset Layout] on the guide, or `--fresh`.
+4. #163: tables inside a shop item (axes, spindle, ...) not shown;
+   proposed ▶ headings.
+5. #164: a Tool Table tab (#80, #81, #83).
+6. #165: the Job tab as a directory of `.nc` files (#74, #77, #78).
+7. `gcode.post_process()` not called yet; renaming the Execute tab
+   much later.
 Tests run this session: `test_gui_window`, `test_gui_machines`,
-`test_gui_fields`, `test_gui_tree`, `test_gui_templates`,
-`test_shops`, `test_shop_schema`, `test_gcode`; all pass.
-
-## Machine Sub-Panels (#158-#162, 2026-11-14)
-
-The machine panel is too big (#105); it is split into ordinary
-panels.  Agreed by the user: #158 and #159; #160-#162 proposed, not
-yet decided.  Work in 3 minute increments, a summary after each; no
-big test suites.
-* #158: a small core panel per machine: name, kind, state; run
-  button, [Skip Tool], [Stop]; position with S and F; next-task bar;
-  the message.  The core is also the minimal form.
-* #159: sub-panels opened on demand: Setup (Next Step, Set Origin,
-  Home, Set X/Y/Z, jogs), Tool Table (#80, #81; later), Tools (tool
-  plan, -Tool/+Tool, carousel), G-code (executed, coming, MDI), Job
-  (NC Files, #74), Execute (Expert slider, progress, next tool, View
-  check boxes).
-* Plan: `HMI.__init__()` (`lcnc_hmi.py:480-767`) builds a core plus
-  `HMI.sections` (name -> `QWidget`), from today's `TABS`
-  (`hmi_machine.py:132`).  Standalone, the sections go in the
-  notebook as tabs (`tab()`, `select_tab()`, the port's `tab` and
-  `tests/test_lcnc_hmi.py:568-590` keep working); in the GUI,
-  `MachineControl` gets the sections and the window opens each in a
-  panel of its own.
-* Increment 1: read the code, plan above.  Nothing coded yet.
-* Increment 2: the HMI's tabs are the #159 sections, `TABS` =
-  Setup, Tools, G-code, Job, Execute (`hmi_machine.py`); the tool
-  plan moved to Tools, the View boxes to Execute; the core above
-  them is the strip, position, message.  Standalone they are still
-  tabs.  Checkers clean; `test_lcnc_hmi`, `test_carousel` pass.
-  Next: `MachineControl.sections`, the core's section buttons, and
-  `Window` opening a section in a panel of its own.
-* Increment 3: the GUI shows the sections in panels of their own.
-  `MachineControl.sections`; `HMI.take_sections()` (run.py passes
-  them; the notebook is then empty and hidden, `tab()` gives "");
-  `Panel.section_row` (a button per section under the machine's
-  header), `show_section()`, `section`, `open_section`,
-  `_show_header()`; `drop_machine()` drops a section too;
-  `Window.open_section()` (an open one made current, else a new
-  panel).  Section panels are not sticky (#162 undecided).  Checkers
-  clean; `test_gui_machines`, `test_gui_window`, `test_lcnc_hmi`
-  pass; an offscreen smoke script (not a test) checked opening,
-  reopening and dropping.  Not yet: a GUI run by the user; tests.
-* Decided (the user, 2026-11-14, after a `show_demo.py` run): the
-  section panels "are not going to work".  Each panel is laid out
-  for what it manages; a machine panel's tasks are tabs (a
-  `QTabWidget`) under its core.  This replaces #159's panels of
-  their own; #160 and #162 are moot.  Increment 3's code was taken
-  out again (the five files put back as of hg 804), so the GUI shows
-  the HMI with its own tabs: Setup, Tools, G-code, Job, Execute.
-* The user liked the tabs in a `show_demo.py` run (2026-11-14):
-  the core over the tabs is small enough, and the tabs' order and
-  grouping are right.  Renaming the Execute tab or the MDI [Execute]
-  button comes much later.  `test_lcnc_hmi`'s `test_tabs` now checks
-  each task's controls are on its tab and the core is above them.
-* Narrow machine panel (the user, 2026-11-14: "just too big"; at
-  most 5 low level widgets to a row), coded, awaiting the user's
-  `show_demo.py` run: the position is three lines (X Y Z; T S F;
-  line, machine, material); Setup has a row per axis (`[-X] [+X]
-  [entry] [Set X]`) and the five jog steps on a row of their own;
-  the G-code windows are `GCODE_WIDTH` (32) characters, no
-  horizontal scroll bar, longer lines cut short with `...`
-  (`elided()`).  The user may not like the per-axis rows.  Tests:
-  only the existing ones (pass); more after the user's run.
-
-## Operator Views (#168-#172, 2026-11-14, agreed by the user)
-
-The minimal form surprised the user (the tree went at Start); the
-`machines/` list covers it: power operators live there, and what an
-operator wants is "what is the next tool?" and "when do I need it?".
-* #168: no minimal form at all (replaces #90-#95; #167 moot).  Done:
-  gone are `HMI.set_minimal()`, `toggle_minimal()`, `size_button`,
-  `minimal`, `on_minimal`; `Window.set_minimal()`,
-  `machine_minimal()`, `minimal`, `full_geometry`;
-  `MachineControl.on_minimal`; "stay on top".  Tests adjusted;
-  checkers clean; the five HMI/GUI test files pass.
-* #169: `machines/` is the power operator's home; next-tool work goes
-  there first.
-* #170: a machine's panel opens with the answer, large, under its
-  header: "Next: T05 1/4in end mill, in 3:20" ("■ NOW" waiting).
-* #171: a little more for one machine: the tool after next, the
-  job's time left.
-* #172: [Stop] in each strip, [Stop All] on the top line: unchanged.
-* #170, #171 coded (awaiting the user's run): `HMI.next_tool` moved
-  from Execute to the core, under the strip, bold at `NEXT_SCALE`
-  (1.6) times, "■ NOW: " first while `intervention()` waits; the
-  progress line (file, line, time left) under it.  Its text is
-  `next_tool_text()`: the next tool change, not only the manual ones
-  (`next_intervention()`, the header's bar).  The tool after next
-  (#171) is still only in the Tools tab's plan.
-
-## Where Things Stand (2026-11-14, second session's end)
-
-The user liked #168-#171 in a `show_demo.py` run ("quite good";
-tweaks to come over time).  The machine panel is now: header (name,
-next-task bar), strip (run button, [Skip Tool], [Stop]), the next
-tool large, the progress line, the position in three lines, the
-message, then tabs Setup, Tools, G-code, Job, Execute.  The earlier
-"Where Things Stand" list is renumbered here, open items only:
-1. #163: tables inside a shop item (controller, axes, spindle,
-   preferences, carousel) are not shown; proposed ▶ headings.
-2. #164: a Tool Table tab (#80, #81, #83).
-3. #165: the Job tab as a directory of `.nc` files (#74, #77, #78).
-4. #166: tests for [Close Panel], [Detach]/[Reattach], the exit
-   question, drop-downs, field help; and for the narrow rows,
-   `elided()`, the next tool line, now the user has run them.
-5. The big next-tool line names the next tool change; the header's
-   bar the next one by hand; differ only with a carousel.
-6. Renaming the Execute tab or the MDI [Execute]: much later.
-7. `gcode.post_process()` is not called yet (only LinuxCNC runs).
-Tests run this session: `test_lcnc_hmi`, `test_carousel`,
-`test_hmi_origin_axes`, `test_gui_machines`, `test_gui_window`;
+`test_gui_port` (two stale expectations fixed), `test_lcnc_hmi`;
 all pass.  Not run: the whole suite; the LinuxCNC end-to-end suite.

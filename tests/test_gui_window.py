@@ -79,7 +79,7 @@ class WindowTest(unittest.TestCase):
         top.show()
         model.start_machine("shop mill")
 
-        # [Exit Program] asks to stop it first (#13); "No" stays.
+        # [Exit] asks to stop it first (#13); "No" stays.
         # (`PySide6` is on `sys.path` only once `tests` is imported.)
         from PySide6.QtWidgets import (  # pylint: disable=import-outside-toplevel
             QMessageBox,

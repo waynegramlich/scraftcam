@@ -51,6 +51,7 @@ from .app import (
 )
 from .editor import HINT, editor_command
 from .fields import shop_units
+from .layout import read_layout, save_layout
 from .machines import (
     MachineControl,
     is_active,
@@ -60,7 +61,14 @@ from .machines import (
 from .port import Method, PortError, text_param
 from .theme import colors
 from .tree import Node, edit_path
-from .views import Panel, TreeView, TreeWatcher, entry_text, splitter
+from .views import (
+    Panel,
+    TreeView,
+    TreeWatcher,
+    entry_text,
+    narrow,
+    splitter,
+)
 
 # `PySide6` lives in `~/.scraftcam/packages/`, so it is put on
 # `sys.path` (and fetched, the first time) before it is imported.
@@ -71,14 +79,20 @@ from PySide6.QtCore import (  # noqa: E402
     QEvent,
     QMessageLogContext,
     QObject,
-    QSize,
     Qt,
     QTimer,
     QtMsgType,
     QUrl,
     qInstallMessageHandler,
 )
-from PySide6.QtGui import QCloseEvent, QDesktopServices  # noqa: E402
+from PySide6.QtGui import (  # noqa: E402
+    QCloseEvent,
+    QDesktopServices,
+    QFont,
+    QFontMetrics,
+    QResizeEvent,
+    QScreen,
+)
 from PySide6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
@@ -103,7 +117,11 @@ from PySide6.QtWidgets import (  # noqa: E402
 # pylint: enable=wrong-import-position,wrong-import-order
 
 # The top line's button that closes the program (#114, #156).
-EXIT: str = "Exit Program"
+EXIT: str = "Exit"
+
+# [Stop All]'s room beyond its text, in pixels: twice its running
+# look's padding (10) and border (3), and a little more.
+STOP_ROOM: int = 2 * 10 + 2 * 3 + 6
 
 # A new window's size (#109): small, so SolidCraft fits beside it.
 WIDTH: int = 720
@@ -121,6 +139,9 @@ DIRECTORY_WIDTH: int = 360
 # its labels (#22); the user can drag it wider.
 TREE_MOST: float = 0.5
 
+# How long `fit_width()` waits for the window's new width (ms).
+FIT_MS: int = 1000
+
 # How long `quit` waits, so its answer is sent before the GUI closes.
 QUIT_DELAY_MS: int = 200
 
@@ -130,6 +151,9 @@ STOP_MS: int = 250
 
 # Every open window, oldest first (the command port's `window`).
 WINDOWS: list["Window"] = []
+
+# [New Window] (#200).
+NEW_WINDOW: str = "New Window"
 
 
 # Function `use_headless()`:
@@ -240,6 +264,7 @@ def run(
         control: MachineControl | None = machine()
         if control is not None:
             first.connect_machine(control)
+    restore_layout(first)
     stopper: Stopper = Stopper()
 
     # No shop: offer to make one (#97), when someone can answer.
@@ -284,43 +309,40 @@ GUIDE: tuple[str, ...] = (
 )
 
 
-# Class `DetachedWindow`:
-class DetachedWindow(QWidget):
-    """A window holding one detached panel (#157).
+# Function `show_rows_buttons()`:
+def show_rows_buttons() -> None:
+    """Bring every row's panel buttons up to date."""
+    top: Window
+    for top in WINDOWS:
+        top.show_panel_buttons()
 
-    Closing it (its title bar's close) is [Close Panel]: an active
-    machine is asked to stop first.
 
-    Attributes:
-    * `panel` (`Panel`): The panel.
-    * `on_close` (`Callable[[], None]`): What closing it calls.
+# Function `close_rows()`:
+def close_rows() -> None:
+    """Close every row ([Exit], #184), the newest first."""
+    top: Window
+    for top in reversed(list(WINDOWS)):
+        top.close()
+
+
+# Function `restore_layout()`:
+def restore_layout(first: "Window") -> None:
+    """Bring back the layout kept for the shop, if any (#186, #187).
+
+    Arguments:
+    * `first` (`Window`): The first row, made at start; the others
+      are made here.
     """
-
-    def __init__(self, panel: Panel, on_close: Callable[[], None]) -> None:
-        """Make the window, holding the panel.
-
-        Arguments:
-        * `panel` (`Panel`): The panel.
-        * `on_close` (`Callable[[], None]`): What closing it calls.
-        """
-        super().__init__()
-        self.panel: Panel = panel
-        self.on_close: Callable[[], None] = on_close
-        layout: QVBoxLayout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(panel)
-
-    def closeEvent(  # pylint: disable=invalid-name
-        self, event: QCloseEvent
-    ) -> None:
-        """Close the panel as [Close Panel] does, not the window itself.
-
-        Arguments:
-        * `event` (`QCloseEvent`): The close; ignored, as
-          `on_close()` takes the window away once the panel may go.
-        """
-        event.ignore()
-        self.on_close()
+    model: App = first.model
+    if not model.keep_layout or model.shop is None:
+        return
+    rows: list[dict[str, object]] = read_layout(model.shop)
+    index: int
+    row: dict[str, object]
+    for index, row in enumerate(rows):
+        top: Window = first if index == 0 else Window(model)
+        top.restore(row)
+        top.show()
 
 
 # Function `machine_controls()`:
@@ -396,18 +418,20 @@ class Window(QWidget):
       Machine], for `machines/` (#141).
     * `new_shop_row` (`QWidget`): The action row with [New Shop].
     * `panels` (`list[Panel]`): The panels, left to right.
-    * `detached` (`list[DetachedWindow]`): The panels detached into
-      windows of their own (#157); tree clicks never go to them.
     * `closing` (`list[Panel]`): Panels told to close whose machine
       is still stopping; each closes once it has stopped (#156).
-    * `exiting` (`bool`): True once [Exit Program] has stopped the
-      machines; the window closes once every one has stopped.
+    * `exiting` (`bool`): True once [Exit] has stopped the
+      machines; every row closes once every one has stopped.
+    * `leaving` (`bool`): True once this row is to close by itself
+      (its panel brought away, or its machines told to stop, #184).
     * `machines` (`list[MachineControl]`): The machines connected to
       this window, each shown in a panel only once it is clicked
       (#135).
     * `splitter` (`QSplitter`): The tree, then the panels.
     * `tree` (`TreeView`): The shop's and the design's files.
     * `current` (`int`): The current panel's index (#122).
+    * `wanted` (`list[int]`): The splitter's sizes `fit_width()`
+      wants once the window has its new width, or empty.
     * `machine_timer` (`QTimer`): Keeps [Stop All] and the machine
       tabs' bars up to date.
     * `blink` (`bool`): Which half of a blink it is (a waiting
@@ -415,7 +439,7 @@ class Window(QWidget):
     """
 
     def __init__(self, model: App, controls: set[str] | None = None) -> None:
-        """Make a window, with one empty panel, and show what it shows.
+        """Make a window (a PanelRow, #184), and show what it shows.
 
         Arguments:
         * `model` (`App`): What every window shows.
@@ -438,7 +462,9 @@ class Window(QWidget):
         )
         top.addWidget(self.message_label, 1)
         self.add_button(top, "+ Panel", self.add_panel)
+        self.add_button(top, NEW_WINDOW, self.new_window)
         self.add_button(top, EXIT, self.exit_program)
+        self.explain_top_line()
 
         # The action rows, under the top line: [New Shop], while there
         # is no shop; [New Machine], for `machines/`.  [Enable
@@ -461,11 +487,12 @@ class Window(QWidget):
         self.tree.itemCollapsed.connect(self.tree_opened)
         self.splitter.addWidget(self.tree)
         self.panels: list[Panel] = []
-        self.detached: list[DetachedWindow] = []
         self.closing: list[Panel] = []
         self.exiting: bool = False
+        self.leaving: bool = False
         self.machines: list[MachineControl] = []
         self.current: int = 0
+        self.wanted: list[int] = []
         self.add_panel()
         tree_width: int = int(WIDTH * TREE_MOST)
         self.splitter.setSizes([tree_width, WIDTH - tree_width])
@@ -481,16 +508,35 @@ class Window(QWidget):
         self.machine_timer: QTimer = self.watch_machines()
 
         # Redraw whenever the model changes, starting now, with the
-        # guide (#139).
+        # guide (#139); [New Window] takes it away (#200).
         model.listen(self.redraw)
         self.redraw()
         self.panels[0].show_guide(self.guide_text())
         WINDOWS.append(self)
+        show_rows_buttons()
+
+    def explain_top_line(self) -> None:
+        """Give the top line's short buttons tooltips and room (#197).
+
+        [Stop All] gets room for its bold, boxed look while a machine
+        runs (#199): `show_stop_all()`'s padding and border.
+        """
+        self.buttons["+ Panel"].setToolTip("Add a new panel on the right")
+        self.buttons[NEW_WINDOW].setToolTip(
+            "Open another window, its panel filled from its tree"
+        )
+        self.buttons[EXIT].setToolTip("Stop and close every window")
+        stop: QPushButton = self.buttons["Stop All"]
+        bold: QFont = QFont(stop.font())
+        bold.setBold(True)
+        stop.setMaximumWidth(
+            QFontMetrics(bold).horizontalAdvance("Stop All") + STOP_ROOM
+        )
 
     def add_button(
         self, line: QHBoxLayout, label: str, action: Callable[[], object]
     ) -> None:
-        """Add a button to the top line.
+        """Add a button to the top line, as wide as its text (#196).
 
         Arguments:
         * `line` (`QHBoxLayout`): The top line.
@@ -500,6 +546,7 @@ class Window(QWidget):
         button: QPushButton = QPushButton(label)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         button.clicked.connect(action)
+        narrow(button)
         line.addWidget(button)
         self.buttons[label] = button
 
@@ -598,25 +645,156 @@ class Window(QWidget):
         )
 
     def add_panel(self) -> None:
-        """Add an empty panel on the right ([+ Panel]); it is current."""
+        """Add an empty panel on the right ([+ Panel]); it is current.
+
+        The window widens by the new panel, as wide as the others are
+        on average (#180); the first panel only fills the window.
+        """
+        # The widths wanted: the others as they are, then the new one.
+        sizes: list[int] = self.splitter.sizes()
+        widths: list[int] = sizes[1:]
+        if widths:
+            sizes.append(sum(widths) // len(widths))
+
+        # The panel.
         panel: Panel = Panel(len(self.panels) + 1)
+        self.adopt(panel)
+        if widths:
+            self.fit_width(sizes)
+        self.make_current(panel)
+        show_rows_buttons()
+
+    def adopt(self, panel: Panel) -> None:
+        """Make a panel this row's, on its right (#184).
+
+        Arguments:
+        * `panel` (`Panel`): The panel, new or from another row.
+        """
         panel.controls = machine_controls
         panel.open_machine = self.open_machine
         panel.say = functools.partial(self.model.say, problem=True)
         panel.edit_file = functools.partial(self.edit, panel)
         panel.close_panel = functools.partial(self.close_panel, panel)
-        panel.detach_panel = functools.partial(self.detach_panel, panel)
+        panel.move_panel = functools.partial(self.move_panel, panel)
         panel.clicked.connect(functools.partial(self.make_current, panel))
         self.panels.append(panel)
         self.splitter.addWidget(panel)
-        self.make_current(panel)
-        self.show_close_buttons()
 
-    def show_close_buttons(self) -> None:
-        """Show [Close Panel] on every panel but a last one (#156)."""
+    def new_window(self) -> None:
+        """Open another window ([New Window], #200).
+
+        It has one empty panel and its tree, to be filled from it.
+        """
+        top: Window = Window(self.model)
+        top.panels[0].hide_guide()
+        top.show()
+
+    def fit_width(self, sizes: list[int]) -> None:
+        """Make the window as wide as the tree and panels want (#177-#180).
+
+        So adding or closing a panel keeps the
+        other panels' widths, and the total width on the screen.  A
+        maximized or full screen window keeps its size, and the panels
+        share it; the window never grows past the screen, nor shrinks
+        below what it needs.
+
+        Arguments:
+        * `sizes` (`list[int]`): The splitter's sizes wanted: the
+          tree's (0 when hidden), then each panel's.
+        """
+        # The splitter's sizes now, shared in today's width; again once
+        # the window has its new width (`resizeEvent()`).  The width is
+        # found once Qt has laid out the panels again (its minimum).
+        self.splitter.setSizes(sizes)
+        if self.isMaximized() or self.isFullScreen():
+            return
+        self.wanted = sizes
+        QTimer.singleShot(0, self.resize_to_wanted)
+
+    def resize_to_wanted(self) -> None:
+        """Resize the window for the sizes `fit_width()` wanted."""
+        sizes: list[int] = self.wanted
+        if not sizes:
+            return
+        shown: int = sum(1 for size in sizes if size > 0)
+        handles: int = self.splitter.handleWidth() * max(0, shown - 1)
+        frame: int = self.width() - self.splitter.width()
+        width: int = sum(sizes) + handles + frame
+        screen: QScreen | None = self.screen()
+        if screen is not None:
+            width = min(width, screen.availableGeometry().width())
+        width = max(width, self.minimumSizeHint().width())
+        self.resize(width, self.height())
+
+        # The compositor may refuse; forget the sizes wanted soon.
+        QTimer.singleShot(FIT_MS, self.forget_wanted)
+
+    def forget_wanted(self) -> None:
+        """Forget the sizes `fit_width()` wanted, once they are set."""
+        self.wanted = []
+
+    def resizeEvent(  # pylint: disable=invalid-name
+        self, event: QResizeEvent
+    ) -> None:
+        """Give the panels the widths `fit_width()` wanted (#177-#180).
+
+        Arguments:
+        * `event` (`QResizeEvent`): The resize.
+        """
+        super().resizeEvent(event)
+        if self.wanted:
+            QTimer.singleShot(0, self.set_wanted)
+
+    def set_wanted(self) -> None:
+        """Set the splitter's sizes to those wanted, once."""
+        if self.wanted:
+            self.splitter.setSizes(self.wanted)
+            self.wanted = []
+
+    def show_panel_buttons(self) -> None:
+        """Show each panel's buttons as its place allows.
+
+        [Close] on every panel but a last one (#156); [<] greyed on
+        the leftmost, [>] on the rightmost (#174).
+        """
+        many: bool = len(self.panels) > 1
+        last: int = len(self.panels) - 1
+        index: int
         panel: Panel
-        for panel in self.panels:
-            panel.close_button.setVisible(len(self.panels) > 1)
+        for index, panel in enumerate(self.panels):
+            panel.close_button.setVisible(many)
+            panel.left_button.setEnabled(index > 0)
+            panel.right_button.setEnabled(index < last)
+
+    def move_panel(self, panel: Panel, step: int) -> None:
+        """Move a panel one place left or right (#174).
+
+        Its width goes with it, and it stays current if it was.
+
+        Arguments:
+        * `panel` (`Panel`): The panel.
+        * `step` (`int`): -1 (left) or 1 (right).
+        """
+        # Only a panel of this window, never past either end.
+        if panel not in self.panels:
+            return
+        index: int = self.panels.index(panel)
+        other: int = index + step
+        if not 0 <= other < len(self.panels):
+            return
+
+        # The splitter holds the tree first, so panel `i` is at `i + 1`.
+        current: Panel = self.panels[self.current]
+        sizes: list[int] = self.splitter.sizes()
+        sizes[index + 1], sizes[other + 1] = sizes[other + 1], sizes[index + 1]
+        self.panels[index], self.panels[other] = (
+            self.panels[other],
+            self.panels[index],
+        )
+        self.splitter.insertWidget(other + 1, panel)
+        self.splitter.setSizes(sizes)
+        self.make_current(current)
+        show_rows_buttons()
 
     def close_panel(self, panel: Panel) -> None:
         """Close a panel ([Close Panel], #156).
@@ -628,8 +806,7 @@ class Window(QWidget):
         Arguments:
         * `panel` (`Panel`): The panel.
         """
-        holder: DetachedWindow | None = self.holder(panel)
-        if holder is None and len(self.panels) < 2:
+        if len(self.panels) < 2:
             return
         stopping: bool = panel in self.closing
         if panel.machines and is_active(panel.machines[0]) and not stopping:
@@ -654,77 +831,25 @@ class Window(QWidget):
         if panel in self.closing:
             self.closing.remove(panel)
         panel.drop_machine()
-        if holder is not None:
-            self.detached.remove(holder)
-            holder.deleteLater()
+        if panel not in self.panels:
             return
+        sizes: list[int] = self.splitter.sizes()
+        del sizes[self.panels.index(panel) + 1]
         self.panels.remove(panel)
         panel.hide()
         panel.setParent(None)
         panel.deleteLater()
+        self.fit_width(sizes)
         self.make_current(self.panels[min(self.current, len(self.panels) - 1)])
-        self.show_close_buttons()
-
-    def holder(self, panel: Panel) -> "DetachedWindow | None":
-        """Return the window a detached panel is in (#157).
-
-        Arguments:
-        * `panel` (`Panel`): The panel.
-
-        Returns:
-        * (`DetachedWindow | None`): Its window, or None if it is in
-          this one.
-        """
-        return next(
-            (held for held in self.detached if held.panel is panel), None
-        )
+        show_rows_buttons()
 
     def all_panels(self) -> list[Panel]:
-        """Return the panels, detached ones last (#157).
+        """Return this row's panels (#184).
 
         Returns:
-        * (`list[Panel]`): Every panel of this window.
+        * (`list[Panel]`): Its panels, left to right.
         """
-        return self.panels + [held.panel for held in self.detached]
-
-    def detach_panel(self, panel: Panel) -> None:
-        """Detach a panel into a window of its own, or reattach it (#157).
-
-        A detached panel keeps what it shows; [Reattach] puts it back as
-        the rightmost panel.
-
-        Arguments:
-        * `panel` (`Panel`): The panel.
-        """
-        # Back in: the rightmost panel.
-        holder: DetachedWindow | None = self.holder(panel)
-        if holder is not None:
-            self.detached.remove(holder)
-            self.panels.append(panel)
-            self.splitter.addWidget(panel)
-            panel.detach_button.setText("Detach")
-            holder.deleteLater()
-            self.make_current(panel)
-            self.show_close_buttons()
-            return
-
-        # Out: a panel is left behind for the tree's clicks.
-        if len(self.panels) < 2:
-            self.add_panel()
-        self.panels.remove(panel)
-        size: QSize = panel.size()
-        holder = DetachedWindow(
-            panel, functools.partial(self.close_panel, panel)
-        )
-        holder.setWindowTitle(f"scraftcam: {panel.title.text()}")
-        holder.resize(size)
-        holder.show()
-        self.detached.append(holder)
-        panel.detach_button.setText("Reattach")
-        panel.close_button.show()
-        panel.set_current(False)
-        self.make_current(self.panels[min(self.current, len(self.panels) - 1)])
-        self.show_close_buttons()
+        return list(self.panels)
 
     def make_current(self, panel: Panel) -> None:
         """Make a panel the current one: the next item shows there.
@@ -799,19 +924,19 @@ class Window(QWidget):
     def free_panel(self) -> Panel:
         """Return the panel a click shows an item in, and make it current.
 
-        The current one, unless it controls an active machine (#58,
-        #154); then the first that does not, or a new one.  A panel
-        whose machine is not active gives it up.
+        The current one, unless it is pinned (#201; an active
+        machine's is, #58, #154); then the first that is not, or a new
+        one on the right.  A panel showing a machine gives it up.
 
         Returns:
         * (`Panel`): The panel.
         """
         panel: Panel = self.panels[self.current]
-        if not panel.machines or not is_active(panel.machines[0]):
+        if not panel.is_pinned():
             panel.drop_machine()
             return panel
         for panel in self.panels:
-            if not panel.machines or not is_active(panel.machines[0]):
+            if not panel.is_pinned():
                 self.make_current(panel)
                 panel.drop_machine()
                 return panel
@@ -841,7 +966,9 @@ class Window(QWidget):
         for top in WINDOWS:
             for machine in top.machines:
                 if machine.name == name:
-                    top.free_panel().show_machine(machine)
+                    top.free_panel().show_machine(
+                        machine, top.machine_label(name)
+                    )
                     top.to_front(self)
                     return
         self.model.say(
@@ -849,11 +976,34 @@ class Window(QWidget):
             "controller so far)"
         )
 
-    def to_front(self, clicked: "Window") -> None:
+    def machine_label(self, name: str) -> str:
+        """Return a machine's file's label in the tree (#183).
+
+        Arguments:
+        * `name` (`str`): The machine's name.
+
+        Returns:
+        * (`str`): Its label, e.g. "Shop mill (file)", or "" when no
+          file in `machines/` names it.
+        """
+        node: Node
+        for node in self.tree.nodes.values():
+            parent: Node | None = self.tree.nodes.get(str(node.path.parent))
+            if (
+                parent is not None
+                and is_machines_directory(parent)
+                and not node.children
+                and machine_item(node).name == name
+            ):
+                return node.label()
+        return ""
+
+    def to_front(self, clicked: "Window | None") -> None:
         """Bring this window to the front, unless it was clicked in.
 
         Arguments:
-        * `clicked` (`Window`): The window clicked in.
+        * `clicked` (`Window | None`): The window clicked in, or
+          `None` (always to the front).
         """
         if self is not clicked:
             self.raise_()
@@ -862,16 +1012,26 @@ class Window(QWidget):
     def busy(self) -> str:
         """Say why this window may not close, if it may not (#56, #67).
 
+        A row with other rows left answers only for the machines in
+        its panels (#184); the last one for all.
+
         Returns:
         * (`str`): The first machine's reason, or the model's (a
           running machine), or "" when it may close.
         """
+        # Its panels' machines; the last row answers for every one.
+        others: bool = any(top is not self for top in WINDOWS)
+        machines: list[MachineControl] = [
+            machine for panel in self.panels for machine in panel.machines
+        ]
+        if not others:
+            machines += self.machines
         machine: MachineControl
-        for machine in self.machines:
+        for machine in machines:
             reason: str = machine.busy()
             if reason:
                 return reason
-        return self.model.close_refusal(self.controls)
+        return "" if others else self.model.close_refusal(self.controls)
 
     def show_actions(self) -> None:
         """Show the action rows of the current panel's item (#73)."""
@@ -968,14 +1128,135 @@ class Window(QWidget):
         panel: Panel
         for panel in self.all_panels():
             panel.show_dues(self.blink)
+            panel.show_pin()
 
         # What was told to close once its machines stopped (#156).
         for panel in list(self.closing):
             if not any(machine.busy() for machine in panel.machines):
                 self.close_panel(panel)
-        if self.exiting and not self.busy():
+        if self.exiting and not self.running():
             self.exiting = False
+            close_rows()
+        if self.leaving and not self.busy():
             self.close()
+
+        # The layout, kept on every change (#187), by the first row.
+        if (
+            self.model.keep_layout
+            and self.model.shop is not None
+            and WINDOWS
+            and WINDOWS[0] is self
+        ):
+            save_layout(self.model.shop, [top.snapshot() for top in WINDOWS])
+
+    def restore(self, row: dict[str, object]) -> None:
+        """Lay this row out as a layout kept it (#186).
+
+        Its panels show what they showed, read only; a machine is only
+        shown, never started; anything gone is skipped quietly
+        (#187).
+
+        Arguments:
+        * `row` (`dict[str, object]`): The row's snapshot.
+        """
+        # The panels, then the tree, then the sizes.
+        widths: list[int] = self.restore_panels(row.get("panels"))
+        opened: object = row.get("opened")
+        if isinstance(opened, list):
+            self.tree.open_items([str(path) for path in opened])
+        tree: bool = row.get("tree") is not False
+        self.tree.setVisible(tree)
+        tree_width: object = row.get("tree_width")
+        width: object = row.get("width")
+        height: object = row.get("height")
+
+        # The widths kept win over those [+ Panel] wanted, now and once
+        # the window has its size (`resizeEvent()`).
+        if isinstance(tree_width, int) and len(widths) == len(self.panels):
+            self.wanted = [tree_width if tree else 0] + widths
+            self.splitter.setSizes(self.wanted)
+        if isinstance(width, int) and isinstance(height, int):
+            self.resize(width, height)
+
+    def restore_panels(self, panels: object) -> list[int]:
+        """Show the panels a layout kept, left to right (#186).
+
+        Arguments:
+        * `panels` (`object`): The kept panels (a list of `dict`s).
+
+        Returns:
+        * (`list[int]`): The widths of the panels restored.
+        """
+        widths: list[int] = []
+        if not isinstance(panels, list):
+            return widths
+        kept: object
+        for kept in panels:
+            if not isinstance(kept, dict):
+                continue
+
+            # What it showed, if it is still there.
+            node: Node | None = self.tree.nodes.get(str(kept.get("path")))
+            name: object = kept.get("machine")
+            machine: MachineControl | None = next(
+                (
+                    control
+                    for control in machine_controls()
+                    if control.name == name
+                ),
+                None,
+            )
+            if (node is None and "path" in kept) or (
+                machine is None and "machine" in kept
+            ):
+                continue
+
+            # A panel for it: the first one there, then new ones.
+            if widths:
+                self.add_panel()
+            panel: Panel = self.panels[-1]
+            if machine is not None:
+                panel.show_machine(machine, self.machine_label(machine.name))
+            elif node is not None:
+                panel.show_node(node, shop_units(self.model.shop))
+            panel.pinned = kept.get("pinned") is True
+            panel.show_pin()
+            width: object = kept.get("width")
+            widths.append(width if isinstance(width, int) else panel.width())
+        self.make_current(self.panels[0])
+        return widths
+
+    def snapshot(self) -> dict[str, object]:
+        """Return what the layout keeps of this row (#186).
+
+        Returns:
+        * (`dict[str, object]`): Its size; its tree (shown, width,
+          open paths); its panels, left to right, each with its width,
+          `pinned` (#201) and what it shows: `path` (an item),
+          `machine` (a name), or neither (the guide or nothing).
+        """
+        sizes: list[int] = self.splitter.sizes()
+        panels: list[dict[str, object]] = []
+        index: int
+        panel: Panel
+        for index, panel in enumerate(self.panels):
+            shown: dict[str, object] = {
+                "width": sizes[index + 1],
+                "pinned": panel.pinned,
+            }
+            if panel.machines:
+                shown["machine"] = panel.machines[0].name
+            elif panel.node is not None:
+                shown["path"] = str(panel.node.path)
+            panels.append(shown)
+        return {
+            "width": self.width(),
+            "height": self.height(),
+            "tree": not self.tree.isHidden(),
+            "tree_width": sizes[0],
+            "opened": self.tree.opened(),
+            "panels": panels,
+        }
 
     def show_stop_all(self) -> None:
         """Make [Stop All] stand out while any machine runs (#100).
@@ -1029,34 +1310,75 @@ class Window(QWidget):
         * `event` (`QCloseEvent`): Accepted, or ignored with the
           reason on the top line.
         """
-        # The title bar's close asks, as [Exit Program] does (#15).
+        # The title bar's close asks: the last row as [Exit]
+        # does (#15), another for its own panels' machines (#184).
         refusal: str = self.busy()
-        if refusal and event.spontaneous() and self.ask_to_stop():
-            refusal = self.busy()
+        if refusal and event.spontaneous() and not self.leaving:
+            asked: bool = (
+                self.ask_to_leave()
+                if any(top is not self for top in WINDOWS)
+                else self.ask_to_stop()
+            )
+            if asked:
+                refusal = self.busy()
         if refusal:
-            self.model.say(refusal, problem=True)
+            if not self.leaving:
+                self.model.say(refusal, problem=True)
             event.ignore()
             return
 
-        # Closed, and its detached panels with it (#157).
+        # Closed; its machines go to the oldest row left (#184).
         self.model.forget(self.redraw)
         if self in WINDOWS:
             WINDOWS.remove(self)
-        holder: DetachedWindow
-        for holder in self.detached:
-            holder.deleteLater()
-        self.detached = []
+        if WINDOWS:
+            WINDOWS[0].machines += self.machines
+            WINDOWS[0].controls |= self.controls
+            self.machines = []
+            self.controls = set()
+        show_rows_buttons()
         event.accept()
 
     def exit_program(self) -> None:
-        """Close the window ([Exit Program], #156), asking to stop first.
+        """Close the window ([Exit], #156), asking to stop first.
 
         With machines running: "Stop them all and exit?"; once they
         have stopped with their spindles off, it closes.
         """
-        if self.busy() and not self.ask_to_stop():
+        if self.running() and not self.ask_to_stop():
             return
-        self.close()
+        if not self.exiting:
+            close_rows()
+
+    def ask_to_leave(self) -> bool:
+        """Ask to stop this row's running machines before closing it.
+
+        Returns:
+        * (`bool`): True if the user said to stop them (they were told
+          to stop, and the row closes once they have, #184).
+        """
+        names: list[str] = [
+            machine.name
+            for panel in self.panels
+            for machine in panel.machines
+            if machine.busy()
+        ]
+        running: str = " and ".join(names) or "A machine"
+        verb: str = "are" if len(names) > 1 else "is"
+        answer: QMessageBox.StandardButton = QMessageBox.question(
+            self,
+            "Close Window",
+            f"{running} {verb} running.  Stop and close this window?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return False
+        panel: Panel
+        for panel in self.panels:
+            machine: MachineControl
+            for machine in panel.machines:
+                machine.stop()
+        self.leaving = True
+        return True
 
     def ask_to_stop(self) -> bool:
         """Ask to stop every running machine before exiting (#13).
@@ -1078,7 +1400,7 @@ class Window(QWidget):
         if answer != QMessageBox.StandardButton.Yes:
             return False
         self.stop_all()
-        if self.busy():
+        if self.running():
             self.exiting = True
             self.model.say(
                 "Stopping every machine: scraftcam exits once they have "

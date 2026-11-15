@@ -391,6 +391,9 @@ class App:  # pylint: disable=too-many-instance-attributes
     * `shop_title` (`str`): The shop's name, or `NONE_NAME`.
     * `editor_hinted` (`bool`): True once the hint about `VISUAL` and
       `EDITOR` has been given (once a session, #124).
+    * `keep_layout` (`bool`): True to save the windows' layout in
+      `~/.scraftcam/layouts/` (#186, #187); a GUI run's, never a
+      test's or the headless show's.
     * `design_root` (`Node | None`): The design's tree, if any.
     * `shop_root` (`Node | None`): The shop's tree, if any.
     * `tree_version` (`int`): Counts the times the trees were read,
@@ -407,6 +410,7 @@ class App:  # pylint: disable=too-many-instance-attributes
     # Remaining attributes (alphabetized):
     created: set[str] = field(init=False, default_factory=set)
     editor_hinted: bool = field(init=False, default=False)
+    keep_layout: bool = field(init=False, default=False)
     listeners: list[Callable[[], None]] = field(
         init=False, default_factory=list
     )

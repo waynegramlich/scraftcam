@@ -111,3 +111,13 @@ progress, position in three lines) over tabs Setup, Tools, G-code,
 Job, Execute, at most 5 widgets to a row; the minimal form is gone,
 as the `machines/` list is the power operator's home.  The user
 liked it in a demo run.  Next: see `T.osiade~5.1.9`'s `Context.md`.
+
+## 2026-11-15: `T.osiade~5.1.9` windows and panels
+
+Any number of windows, each with its tree, [+ Panel], [New Window],
+[Stop All] and [Exit]; panels with [<] [>] [ ] Pin [Close]; a tree
+click skips pinned panels; the layout (windows, panels, pins) is
+kept per shop in `~/.scraftcam/layouts/` and comes back at start.
+The machine panel's tabs and every top line are narrower.  The user:
+"it just works".  Detach/attach designs were tried and dropped.
+Next: tests for it (#207), see `T.osiade~5.1.9`'s `Context.md`.

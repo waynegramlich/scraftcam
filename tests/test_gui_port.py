@@ -114,7 +114,8 @@ class ServerTest(unittest.TestCase):
                         "Stop All",
                         "Tree",
                         "+ Panel",
-                        "x",
+                        "New Window",
+                        "Exit",
                         "New Shop",
                     ],
                     "tree": True,
@@ -183,7 +184,7 @@ class ServerTest(unittest.TestCase):
                 self.ask("tree")["result"],
                 [
                     [
-                        "Lab (shop)",
+                        "Lab (directory)",
                         ["controllers (directory)", ["LinuxCNC (file)"]],
                     ]
                 ],
@@ -192,7 +193,7 @@ class ServerTest(unittest.TestCase):
                 "select", path=str(directory / "shop.toml")
             )["result"]
             assert isinstance(shown, dict)
-            self.assertEqual(shown["label"], "Lab (shop)")
+            self.assertEqual(shown["label"], "Lab (directory)")
             fields: object = shown["fields"]
             assert isinstance(fields, dict)
             self.assertEqual(fields["name"], "Lab")

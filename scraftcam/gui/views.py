@@ -39,6 +39,7 @@ from .machines import (
     MachineControl,
     MachinesView,
     MachineTab,
+    is_active,
     is_machines_directory,
 )
 from .templates import (
@@ -98,6 +99,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
+    QTreeWidgetItemIterator,
     QVBoxLayout,
     QWidget,
 )
@@ -239,6 +241,15 @@ def no_edit() -> None:
     """Do nothing: a panel's `edit_file` until the window's."""
 
 
+# Function `no_move()`:
+def no_move(_step: int) -> None:
+    """Do nothing: a panel's `move_panel` until the window's.
+
+    Arguments:
+    * `_step` (`int`): -1 (left) or 1 (right); unused.
+    """
+
+
 # Function `no_controls()`:
 def no_controls() -> list[MachineControl]:
     """Return no machines: a panel's `controls` until the window's.
@@ -252,6 +263,50 @@ def no_controls() -> list[MachineControl]:
 # Function `no_machine()`:
 def no_machine(_name: str) -> None:
     """Do nothing: a panel's `open_machine` and `say` until the window's."""
+
+
+# Function `narrow()`:
+def narrow(button: QPushButton, longest: str = "") -> None:
+    """Make a button only as wide as its text (#181).
+
+    Qt's buttons are at least 80 pixels wide, however short their
+    text.
+
+    Arguments:
+    * `button` (`QPushButton`): The button.
+    * `longest` (`str`): The longest text it will show, if not its
+      text now.
+    """
+    text: str = longest or button.text()
+    button.setMaximumWidth(
+        button.fontMetrics().horizontalAdvance(f"  {text}  ")
+    )
+
+
+# Function `field_area()`:
+def field_area() -> QScrollArea:
+    """Return a panel's area for its field rows, hidden until used.
+
+    Returns:
+    * (`QScrollArea`): The area.
+    """
+    area: QScrollArea = QScrollArea()
+    area.setWidgetResizable(True)
+    area.hide()
+    return area
+
+
+# Function `sketch_box()`:
+def sketch_box() -> QWidget:
+    """Return a panel's box for its sketches, hidden until used.
+
+    Returns:
+    * (`QWidget`): The box, with an empty vertical layout.
+    """
+    box: QWidget = QWidget()
+    QVBoxLayout(box).setContentsMargins(0, 0, 0, 0)
+    box.hide()
+    return box
 
 
 # Function `guide_label()`:
@@ -349,14 +404,20 @@ class Panel(QFrame):
       [Enable Editing] is unchecked.
     * `edit_file` (`Callable[[], None]`): What [Edit TOML File] calls
       (set by the window).
-    * `close_button` (`QPushButton`): [Close Panel], at the right end
+    * `close_button` (`QPushButton`): [Close] (#181), at the right end
       of the title line (#156), hidden on a window's last panel.
-    * `close_panel` (`Callable[[], None]`): What [Close Panel] calls
+    * `close_panel` (`Callable[[], None]`): What [Close] calls
       (set by the window).
-    * `detach_button` (`QPushButton`): [Detach], or [Reattach] while
-      the panel is in a window of its own (#157).
-    * `detach_panel` (`Callable[[], None]`): What it calls (set by the
-      window).
+    * `pin_box` (`QCheckBox`): [ ] Pin (#201): checked, tree clicks
+      go to another panel; checked and greyed while its machine is
+      active.
+    * `pinned` (`bool`): True when the user pinned it ([ ] Pin).
+    * `left_button` (`QPushButton`): [<], moving it left (#174,
+      #181), greyed on the leftmost panel.
+    * `right_button` (`QPushButton`): [>], moving it right (#174,
+      #181), greyed on the rightmost panel.
+    * `move_panel` (`Callable[[int], None]`): What they call, with -1
+      (left) or 1 (right) (set by the window).
     * `clicked` (`Signal`): Sent when the panel is clicked.
     * `entries` (`dict[str, Entry]`): Each
       field's entry, by key.
@@ -396,7 +457,7 @@ class Panel(QFrame):
         self.say: Callable[[str], None] = no_machine
         self.edit_file: Callable[[], None] = no_edit
         self.close_panel: Callable[[], None] = no_edit
-        self.detach_panel: Callable[[], None] = no_edit
+        self.move_panel: Callable[[int], None] = no_move
         self.guide: QLabel = guide_label()
         self.missing: QLabel = missing_label()
         self.copied: QLabel = missing_label()
@@ -408,18 +469,17 @@ class Panel(QFrame):
         self.written: str = ""
         self.title: QLabel = QLabel(f"Panel {number}: click an item.")
         self.title.setStyleSheet(f"color: {colors().quiet}")
-        self.fields: QScrollArea = QScrollArea()
-        self.fields.setWidgetResizable(True)
-        self.fields.hide()
-        self.sketch: QWidget = QWidget()
+        self.fields: QScrollArea = field_area()
+        self.sketch: QWidget = sketch_box()
         self.views: list[QSvgWidget] = []
-        QVBoxLayout(self.sketch).setContentsMargins(0, 0, 0, 0)
-        self.sketch.hide()
         self.text: QPlainTextEdit = text_view()
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        self.close_button: QPushButton = QPushButton("Close Panel")
-        self.detach_button: QPushButton = QPushButton("Detach")
+        self.close_button: QPushButton = QPushButton("Close")
+        self.pin_box: QCheckBox = QCheckBox("Pin")
+        self.pinned: bool = False
+        self.left_button: QPushButton = QPushButton("<")
+        self.right_button: QPushButton = QPushButton(">")
         layout.addLayout(self._make_title_line())
         self.editing_box: QCheckBox = QCheckBox("Enable Editing")
         self.edit_button: QPushButton = QPushButton(EDIT)
@@ -476,7 +536,7 @@ class Panel(QFrame):
         del event
         self.clicked.emit()
 
-    def show_machine(self, machine: MachineControl) -> None:
+    def show_machine(self, machine: MachineControl, label: str = "") -> None:
         """Show a machine's controls, in place of any item.
 
         A tree click never replaces them (#58); a panel holds one
@@ -484,13 +544,16 @@ class Panel(QFrame):
 
         Arguments:
         * `machine` (`MachineControl`): The controls.
+        * `label` (`str`): The title: its file's label in the tree, as
+          any item's (#183), or "" for its name.
         """
         assert not self.machines, "a panel holds one machine"
         self.drop_summary()
         self.guide.hide()
         self.machines.append(machine)
         self.node = None
-        self.title.hide()
+        self.title.setText(label or machine.name)
+        self.title.setStyleSheet("")
         self.split.hide()
         self._show_edit_row()
         self.header = MachineTab(machine.name)
@@ -518,7 +581,6 @@ class Panel(QFrame):
             layout.removeWidget(self.header)
             self.header.deleteLater()
             self.header = None
-        self.title.show()
 
     def show_dues(self, blink: bool) -> None:
         """Bring the machine's bar, or the summary, up to date (#102).
@@ -546,7 +608,10 @@ class Panel(QFrame):
         self._show_edit_row()
 
     def _make_title_line(self) -> QHBoxLayout:
-        """Make the title line: the title, then [Close Panel] (#156).
+        """Make the title line: the title, then the panel's buttons.
+
+        [Move Left], [Move Right] (#174), [Detach] (#157) and [Close
+        Panel] (#156).
 
         Returns:
         * (`QHBoxLayout`): The line.
@@ -554,11 +619,31 @@ class Panel(QFrame):
         self.close_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.close_button.clicked.connect(self._press_close)
         self.close_button.hide()
-        self.detach_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.detach_button.clicked.connect(self._press_detach)
+        self.pin_box.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.pin_box.toggled.connect(self._press_pin)
+        self.left_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.left_button.clicked.connect(self._press_left)
+        self.right_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.right_button.clicked.connect(self._press_right)
+        self.left_button.setToolTip("Move this panel left")
+        self.right_button.setToolTip("Move this panel right")
+        self.pin_box.setToolTip(
+            "Keep what this panel shows: tree clicks go to another panel"
+        )
+        self.close_button.setToolTip("Close this panel")
+        narrow(self.left_button)
+        narrow(self.right_button)
+        narrow(self.close_button)
+        self.title.setWordWrap(True)
         line: QHBoxLayout = QHBoxLayout()
         line.addWidget(self.title, 1)
-        line.addWidget(self.detach_button)
+
+        # The buttons packed to the right, also while the title is
+        # hidden (a machine's header shows instead).
+        line.addStretch(0)
+        line.addWidget(self.left_button)
+        line.addWidget(self.right_button)
+        line.addWidget(self.pin_box)
         line.addWidget(self.close_button)
         return line
 
@@ -604,9 +689,50 @@ class Panel(QFrame):
         """Close the panel ([Close Panel], #156)."""
         self.close_panel()
 
-    def _press_detach(self) -> None:
-        """Detach or reattach the panel (#157)."""
-        self.detach_panel()
+    def _press_pin(self, checked: bool) -> None:
+        """Pin the panel, or not ([ ] Pin, #201).
+
+        Arguments:
+        * `checked` (`bool`): The box's new state.
+        """
+        self.pinned = checked
+
+    def is_pinned(self) -> bool:
+        """Tell whether tree clicks go past this panel (#201).
+
+        Returns:
+        * (`bool`): True when the user pinned it, or its machine is
+          active (#154).
+        """
+        return self.pinned or self.machine_active()
+
+    def machine_active(self) -> bool:
+        """Tell whether this panel's machine is active (#154).
+
+        Returns:
+        * (`bool`): True while its machine runs, is paused or waits.
+        """
+        return bool(self.machines) and is_active(self.machines[0])
+
+    def show_pin(self) -> None:
+        """Show [ ] Pin: checked and greyed while the machine is active.
+
+        Once it stops, the box shows the user's own choice again
+        (#201).
+        """
+        active: bool = self.machine_active()
+        self.pin_box.blockSignals(True)
+        self.pin_box.setChecked(self.pinned or active)
+        self.pin_box.blockSignals(False)
+        self.pin_box.setEnabled(not active)
+
+    def _press_left(self) -> None:
+        """Move the panel one place left ([Move Left], #174)."""
+        self.move_panel(-1)
+
+    def _press_right(self) -> None:
+        """Move the panel one place right ([Move Right], #174)."""
+        self.move_panel(1)
 
     def _press_edit(self) -> None:
         """Open the item's file in an editor ([Edit TOML File])."""
@@ -625,6 +751,13 @@ class Panel(QFrame):
         self.guide.setText(text)
         self.guide.show()
         self._show_edit_row()
+
+    def hide_guide(self) -> None:
+        """Take the guide away, leaving an empty panel (#200)."""
+        self.guide.hide()
+        self.title.setText("Click an item in the tree.")
+        self.title.setStyleSheet(f"color: {colors().quiet}")
+        self.split.show()
 
     def drop_summary(self) -> None:
         """Take the `machines/` summary away, if it is shown."""
@@ -1176,6 +1309,32 @@ class TreeView(QTreeWidget):
             self.add(child, item, opened)
         item.setExpanded(key in opened)
         return item
+
+    def opened(self) -> list[str]:
+        """Return the paths of the items open (#186).
+
+        Returns:
+        * (`list[str]`): The paths, sorted.
+        """
+        opened: set[str] = set()
+        index: int
+        for index in range(self.topLevelItemCount()):
+            opened |= open_paths(self.topLevelItem(index))
+        return sorted(opened)
+
+    def open_items(self, paths: list[str]) -> None:
+        """Open the items with these paths, as a layout kept them (#186).
+
+        Arguments:
+        * `paths` (`list[str]`): The paths; those not in the tree are
+          skipped.
+        """
+        wanted: set[str] = set(paths)
+        items: QTreeWidgetItemIterator = QTreeWidgetItemIterator(self)
+        while items.value() is not None:
+            item: QTreeWidgetItem = items.value()
+            item.setExpanded(item.data(0, PATH_ROLE) in wanted)
+            items += 1
 
     def labels(self) -> list[object]:
         """Return what the tree shows (the command port's `tree`).
