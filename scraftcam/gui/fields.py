@@ -124,6 +124,43 @@ def value_of(text: str, schema: TableField) -> tuple[object, str]:
     return value, scalar_problem(value, schema)
 
 
+# What a field takes, by form, for its help (#149).
+FORM_HELP: dict[str, str] = {
+    "boolean": "`true` or `false`.",
+    "date": "A date, year first, e.g. `2026-11-14`.",
+    "integer": "A whole number.",
+    "positive_integer": "A whole number from 1 up.",
+    "triple": "Three numbers, `MAJOR.MINOR.PATCH`, e.g. `3.43.66`.",
+}
+
+
+# Function `field_help()`:
+def field_help(schema: TableField) -> str:
+    """Return how to fill in a field, for under its ▶ (#149).
+
+    Arguments:
+    * `schema` (`TableField`): The field.
+
+    Returns:
+    * (`str`): Markdown: what it is, how to fill it in, and the units
+      or choices it takes.
+    """
+    parts: list[str] = [schema.meaning]
+    if schema.how:
+        parts.append(schema.how)
+    if schema.form in UNITS:
+        units: str = ", ".join(f"`{unit}`" for unit in UNITS[schema.form])
+        parts.append(f'A number and a unit, e.g. `"1/4 in"`: {units}.')
+    elif schema.choices:
+        choices: str = ", ".join(f"`{choice}`" for choice in schema.choices)
+        parts.append(f"One of {choices}.")
+    elif schema.form in FORM_HELP:
+        parts.append(FORM_HELP[schema.form])
+    if not schema.required:
+        parts.append("May be left out.")
+    return "\n\n".join(parts)
+
+
 # Function `text_of()`:
 def text_of(value: object) -> str:
     """Return a plain value as a field shows it.
@@ -213,12 +250,15 @@ def rows(item: dict[str, object], units: str) -> list[Row]:
 
     Returns:
     * (`list[Row]`): A row per plain field, in `KINDS` order (those
-      not there included, empty), or `[]` if the kind is unknown.
+      not there included, empty), or `[]` if the kind is unknown.  A
+      controller template has no `template` row (#151).
     """
     result: list[Row] = []
     schema: TableField
     for schema in fields(item):
-        if schema.form not in PLAIN:
+        if schema.form not in PLAIN or (
+            schema.key == "template" and item.get("kind") == "controller"
+        ):
             continue
         value: object = item.get(schema.key)
         row: Row = Row(

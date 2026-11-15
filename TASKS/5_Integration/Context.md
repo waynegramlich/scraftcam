@@ -95,3 +95,11 @@ guide; [Enable Editing] per panel; controller templates in
 change followed up by its editor; vendor version fields; a key left
 out is "not initialized yet"; header-first key order.  All coded,
 awaiting the user's demo run (see `T.osiade~5.1.9`'s `Context.md`).
+
+## 2026-11-14: `T.osiade~5.1.9` #147-#157
+
+Shop and controller panels reworked after the user's demo run: edit
+row in each panel, drop-downs, ▶ help per field, directory
+explanations, `post_processor` as a command; the `machines/` list
+shows active machines first; [Close Panel], [Detach]/[Reattach],
+[Exit Program] with stop questions.  Awaiting the user's demo run.

@@ -44,7 +44,7 @@ if __package__ in (None, ""):
 # pylint: disable=wrong-import-position
 from scraftcam.gui import window
 from scraftcam.gui.app import App, find_shop
-from scraftcam.gui.machines import Due, MachineControl
+from scraftcam.gui.machines import Due, MachineControl, Report
 from scraftcam.lcnc.lcnc_client import PORT as LINUXCNC_PORT
 from scraftcam.shops import SHOP_FILE
 
@@ -177,6 +177,21 @@ def machine_maker(
                 return None
             return Due(found.what, found.left, found.span, found.waiting)
 
+        # Function `report()`:
+        def report() -> Report:
+            """Return the HMI's program, progress and next tools (#154)."""
+            if not hmi.lines:
+                return Report("", 0.0, "", "")
+            total: float = hmi.sums[-1]
+            done: float = hmi.sums[min(hmi.at, len(hmi.sums) - 1)]
+            progress: str = hmi.progress_line(hmi.at)
+            return Report(
+                Path(hmi.lines_file).name,
+                done / total if total > 0.0 else 0.0,
+                progress.split("  ", 1)[1] if "  " in progress else "",
+                hmi.plan.text(),
+            )
+
         # Function `listen()`:
         def listen(callback: Callable[[bool], None]) -> None:
             """Have the HMI call `callback` when it goes minimal or full."""
@@ -193,6 +208,7 @@ def machine_maker(
             hmi.on_stop,
             listen,
             due,
+            report,
         )
 
     return make

@@ -597,11 +597,8 @@
           "type": "string"
         },
         "post_processor": {
-          "description": "Which dialect of G-code it reads.  One of: linuxcnc.",
-          "type": "string",
-          "examples": [
-            "linuxcnc"
-          ]
+          "description": "A program that rewrites scraftcam's G-code for this controller.",
+          "type": "string"
         },
         "tool_change": {
           "description": "The lines that change the tool.",
@@ -633,9 +630,7 @@
           "format": "date"
         }
       },
-      "required": [
-        "post_processor"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "preferences": {

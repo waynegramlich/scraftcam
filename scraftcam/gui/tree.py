@@ -22,6 +22,7 @@ and `__pycache__` are skipped.
 """
 
 import ast
+import sys
 import textwrap
 import tomllib
 from dataclasses import dataclass, field
@@ -91,9 +92,14 @@ class Node:  # pylint: disable=too-many-instance-attributes
         """Return what the tree shows (#73).
 
         Returns:
-        * (`str`): "NAME (KIND)", or `shown`.
+        * (`str`): "NAME (KIND)", or `shown`; a directory, the
+          shop's root included, is "(directory)", or "(folder)" on
+          Windows (#147).
         """
-        return self.shown or f"{self.name} ({self.kind})"
+        kind: str = self.kind
+        if kind in (SHOP, DIRECTORY):
+            kind = "folder" if sys.platform == "win32" else "directory"
+        return self.shown or f"{self.name} ({kind})"
 
     def count(self) -> int:
         """Return how many items this is, with all under it.
@@ -286,6 +292,55 @@ def about_item(item: dict[str, object]) -> str:
     return _wrapped(lines)
 
 
+# What a shop directory's panel says it holds (`T.osiade~5.1.9`
+# #150); the tree's ▶ lists what is in it.  `controllers` is the
+# user's; the rest are Claude's drafts, for the user to revise.
+EXPLANATIONS: dict[str, str] = {
+    "controllers": (
+        "A controller is the software that runs a CNC machine: it "
+        "reads G-code and moves the axes (for example LinuxCNC, GRBL "
+        "or Mach4).  Several machines often run the same controller, "
+        "such as a mill and a router that both run LinuxCNC.\n\n"
+        "Each file here describes one controller once: the G-code it "
+        "reads and how it changes tools.  [New Machine] copies one of "
+        "these into each new machine, so every machine has everything "
+        "it needs and can be adjusted on its own.  If you change a "
+        "controller here, its panel lists the machines that use it "
+        "and offers to update them.\n\n"
+        "Describing a controller once, rather than in every machine, "
+        "saves typing and keeps the machines consistent as the shop "
+        "grows."
+    ),
+    "tools": (
+        "The cutting tools on hand: end mills, drills, chamfer mills "
+        "and the like, one file per tool.  Each says what kind of "
+        "tool it is, its sizes (the letters match its sketch), what "
+        "it is made of, and where it is kept.\n\n"
+        "scraftcam chooses tools for a job from this list, so a tool "
+        "that is not here is never used.  Speeds and feeds come from "
+        "`stock_materials/` and `tool_materials/`, unless a tool gives "
+        "its own."
+    ),
+    "tooling": (
+        "What holds the work on a machine: tooling (grid) plates "
+        "today, vises, parallels and clamps to come.  One file per "
+        "piece.  scraftcam uses their sizes to set the part up and to "
+        "keep the tool out of them."
+    ),
+    "stock_materials": (
+        "The materials parts are made from (for example 6061 "
+        "aluminum), with the cutting data for each: how fast a tool "
+        "may cut it.  scraftcam works out each tool's spindle speed "
+        "and feed from these."
+    ),
+    "tool_materials": (
+        "What the tools are made of (for example HSS or carbide), "
+        "and how much faster than HSS each may cut.  A tool names "
+        "its material; the speed it cuts at is scaled by it."
+    ),
+}
+
+
 # Function `about_directory()`:
 def about_directory(name: str) -> str:
     """Return what a shop directory holds, for its tooltip (#80).
@@ -346,8 +401,9 @@ def _wrapped(lines: list[str]) -> str:
 def edit_path(node: Node) -> Path | None:
     """Return the file [Edit] opens for an item, if any (#122).
 
-    Python files, a package's `__init__.py`, and any file that does
-    not read cleanly (it must be fixed by hand, #18).
+    Python files, a package's `__init__.py`, a shop item's `.toml`
+    (#148), and any file that does not read cleanly (it must be fixed
+    by hand, #18).
 
     Arguments:
     * `node` (`Node`): The item.
@@ -356,7 +412,7 @@ def edit_path(node: Node) -> Path | None:
     * (`Path | None`): The file, or None when there is none to edit.
     """
     if node.kind in (DESIGN, PYTHON) or (
-        node.kind == ERROR and node.path.is_file()
+        node.kind in (ERROR, SHOP, FILE) and node.path.is_file()
     ):
         return node.path
     init: Path = node.path / "__init__.py"

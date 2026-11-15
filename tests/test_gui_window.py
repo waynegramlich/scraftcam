@@ -14,7 +14,7 @@ from scraftcam.gui.app import App
 from scraftcam.gui.machines import Due, MachineControl
 from scraftcam.gui.theme import colors
 from scraftcam.gui.views import Panel, TreeWatcher
-from scraftcam.gui.window import NewShopDialog, Window
+from scraftcam.gui.window import EXIT, NewShopDialog, Window
 from tests import qt_app
 
 
@@ -47,7 +47,6 @@ class WindowTest(unittest.TestCase):
         first: Window = Window(model)
         second: Window = Window(model)
         self.assertEqual(first.windowTitle(), "scraftcam: (none) (plate)")
-        self.assertEqual(first.design_label.text(), "Design: plate")
         self.assertIn(colors().problem, first.message_label.styleSheet())
 
         # Both windows follow the model.
@@ -80,11 +79,22 @@ class WindowTest(unittest.TestCase):
         top: Window = Window(model, {"shop mill"})
         top.show()
         model.start_machine("shop mill")
-        top.buttons["x"].click()
+
+        # [Exit Program] asks to stop it first (#13); "No" stays.
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        from PySide6.QtWidgets import (  # pylint: disable=import-outside-toplevel
+            QMessageBox,
+        )
+
+        with mock.patch(
+            "PySide6.QtWidgets.QMessageBox.question",
+            return_value=QMessageBox.StandardButton.No,
+        ) as question:
+            top.buttons[EXIT].click()
+        self.assertIn("shop mill is running", question.call_args.args[2])
         self.assertTrue(top.isVisible())
-        self.assertEqual(model.latest().text, "Stop the shop mill first")
         model.stop_machine("shop mill")
-        top.buttons["x"].click()
+        top.buttons[EXIT].click()
         self.assertFalse(top.isVisible())
         self.assertNotIn(top.redraw, model.listeners)
 
@@ -148,7 +158,7 @@ class WindowTest(unittest.TestCase):
             dialog.units.setCurrentText("Metric (mm)")
             dialog.kinds["3d_printer"].setChecked(True)
             dialog.make_button.click()
-            self.assertEqual(top.shop_label.text(), "Shop: Garage")
+            self.assertIn("Garage", top.windowTitle())
             self.assertTrue(top.buttons["New Shop"].isHidden())
             self.assertTrue(top.new_shop_row.isHidden())
             text: str = (Path(temporary) / "shop" / "shop.toml").read_text()
@@ -179,7 +189,7 @@ class WindowTest(unittest.TestCase):
             self.assertEqual(
                 window.tree.labels(),
                 [
-                    ["Home (shop)", ["bad.toml (error)"]],
+                    ["Home (directory)", ["bad.toml (error)"]],
                     ["plate (design)"],
                 ],
             )
@@ -214,28 +224,27 @@ class WindowTest(unittest.TestCase):
             (top / "notes" / "a.py").write_text("")
             model: App = App(None, design)
             window: Window = Window(model)
-            self.assertTrue(window.edit_row.isHidden())
+            self.assertTrue(window.panels[0].edit_row.isHidden())
 
             # A directory: no [Edit].
             item = window.tree.item_at_path(top / "notes")
             assert item is not None
             window.select_item(item)
-            self.assertTrue(window.edit_row.isHidden())
+            self.assertTrue(window.panels[0].edit_row.isHidden())
 
             # The design: [Edit] runs `VISUAL`.
             item = window.tree.item_at_path(design)
             assert item is not None
             window.select_item(item)
-            self.assertFalse(window.edit_row.isHidden())
-            self.assertEqual(window.edit_label.text(), "plate (design):")
-            self.assertFalse(window.buttons["Edit"].isEnabled())
-            window.editing_box.setChecked(True)
-            self.assertTrue(window.buttons["Edit"].isEnabled())
+            self.assertFalse(window.panels[0].edit_row.isHidden())
+            self.assertFalse(window.panels[0].edit_button.isEnabled())
+            window.panels[0].editing_box.setChecked(True)
+            self.assertTrue(window.panels[0].edit_button.isEnabled())
             with (
                 mock.patch.dict(os.environ, {"VISUAL": "kate"}),
                 mock.patch("subprocess.Popen") as popen,
             ):
-                window.buttons["Edit"].click()
+                window.panels[0].edit_button.click()
             self.assertEqual(popen.call_args.args[0], ["kate", str(design)])
 
             # Neither set: the desktop's default, the hint only once.
@@ -246,10 +255,10 @@ class WindowTest(unittest.TestCase):
                     return_value=True,
                 ),
             ):
-                window.buttons["Edit"].click()
+                window.panels[0].edit_button.click()
                 self.assertIn("environment variable", model.latest().text)
                 model.say("later")
-                window.buttons["Edit"].click()
+                window.panels[0].edit_button.click()
                 self.assertEqual(model.latest().text, "later")
 
     def test_watcher(self) -> None:
@@ -265,13 +274,15 @@ class WindowTest(unittest.TestCase):
 
             # Added, then broken, then removed.
             (top / "mill.toml").write_text('name = "Mill"\n')
-            self.assertTrue(settle(window, ["Home (shop)", ["Mill (file)"]]))
+            self.assertTrue(
+                settle(window, ["Home (directory)", ["Mill (file)"]])
+            )
             (top / "mill.toml").write_text("name = \n")
             self.assertTrue(
-                settle(window, ["Home (shop)", ["mill.toml (error)"]])
+                settle(window, ["Home (directory)", ["mill.toml (error)"]])
             )
             (top / "mill.toml").unlink()
-            self.assertTrue(settle(window, ["Home (shop)"]))
+            self.assertTrue(settle(window, ["Home (directory)"]))
 
 
 class RunTest(unittest.TestCase):

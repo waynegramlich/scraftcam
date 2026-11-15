@@ -8,7 +8,7 @@ from pathlib import Path
 
 from scraftcam.gui import machines, tree
 from scraftcam.gui.app import App
-from scraftcam.gui.machines import Due, MachineControl
+from scraftcam.gui.machines import Due, MachineControl, Report, no_report
 from scraftcam.gui.views import Panel
 from scraftcam.gui.window import NewMachineDialog, Window
 from tests import qt_app
@@ -46,6 +46,8 @@ def control(
     * `busy` (`list[str] | None`): Why it is busy, while it holds
       that; not busy when empty or `None`.
 
+    With a `due`, it has a program loaded, so it is active (#154).
+
     Returns:
     * (`MachineControl`): The controls.
     """
@@ -56,6 +58,13 @@ def control(
         nothing,
         nothing,
         functools.partial(answer, due),
+        (
+            no_report
+            if due is None
+            else functools.partial(
+                Report, "demo.nc", 0.25, "line 1 of 4", "T05 next"
+            )
+        ),
     )
 
 
@@ -88,6 +97,24 @@ def answer(due: Due | None) -> Due | None:
     * (`Due | None`): It.
     """
     return due
+
+
+# Function `texts()`:
+def texts(view: machines.MachinesView) -> list[str]:
+    """Return the text of every label in the machines list.
+
+    Arguments:
+    * `view` (`machines.MachinesView`): The list.
+
+    Returns:
+    * (`list[str]`): Its labels' texts.
+    """
+    # Imported here: `PySide6` is on `sys.path` only once `tests` is.
+    from PySide6.QtWidgets import (  # pylint: disable=import-outside-toplevel
+        QLabel,
+    )
+
+    return [label.text() for label in view.findChildren(QLabel)]
 
 
 class MachineItemTest(unittest.TestCase):
@@ -177,14 +204,12 @@ class SummaryTest(unittest.TestCase):
         assert summary is not None
         self.assertTrue(panel.split.isHidden())
         self.assertTrue(panel.guide.isHidden())
-        self.assertEqual(
-            summary.states["Shop mill"].text(), "mill, LinuxCNC: running"
-        )
-        self.assertEqual(
-            summary.states["Shop router"].text(),
-            "router, LinuxCNC: not connected",
-        )
-        self.assertEqual(summary.bars["Shop mill"].format(), "▲ 0:30")
+        self.assertEqual(summary.active, ("Shop mill",))
+        block: machines.ActiveBlock = summary.blocks["Shop mill"]
+        self.assertEqual(block.state.text(), "mill, LinuxCNC: running")
+        self.assertEqual(block.job.format(), "demo.nc  line 1 of 4")
+        self.assertIn("router, LinuxCNC: not connected", texts(summary))
+        self.assertEqual(block.meter.format(), "▲ 0:30")
         self.assertEqual(summary.fetch.text(), "T05 for Shop mill, in 0:30")
 
         # Opening the mill shows it; again, its panel is made current;
@@ -254,9 +279,8 @@ class NewMachineTest(unittest.TestCase):
             )
             summary: machines.MachinesView | None = window.panels[0].summary
             assert summary is not None
-            self.assertEqual(
-                summary.states["Big mill"].text(),
-                "mill, LinuxCNC: not initialized yet",
+            self.assertIn(
+                "mill, LinuxCNC: not initialized yet", texts(summary)
             )
             assert model.shop_root is not None
             self.assertFalse(

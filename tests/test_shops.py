@@ -456,7 +456,10 @@ class TestReader(CopiedShop):
         self.assertIn("the top file must be a `shop`", problems[-1])
 
     def test_missing_and_kind(self) -> None:
-        """Missing keys, and a `kind` that does not fit."""
+        """Missing keys, and a `kind` that does not fit.
+
+        A controller with no `post_processor` is LinuxCNC (#151).
+        """
         self.change(self.LINUXCNC, 'post_processor = "linuxcnc"\n', "")
         self.change(self.MILL, 'version = "0.0.1"\n', "")
         self.change(
@@ -469,7 +472,6 @@ class TestReader(CopiedShop):
             [
                 self.at("shop.toml", KIND_MACHINE)
                 + ": location.kind: a `location` belongs here",
-                f"{self.LINUXCNC}:1: `post_processor` is missing",
                 f"{self.MILL}:1: `version` is missing",
             ],
         )

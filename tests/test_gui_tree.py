@@ -38,7 +38,7 @@ class ShopTreeTest(unittest.TestCase):
             self.assertEqual(
                 labels(root),
                 [
-                    "Home (shop)",
+                    "Home (directory)",
                     ["machines (directory)", ["Mill (file)"]],
                     ["a (file)"],
                     ["Bad.toml (error)"],

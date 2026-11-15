@@ -51,11 +51,16 @@ from .app import (
 )
 from .editor import HINT, editor_command
 from .fields import shop_units
-from .machines import MachineControl, is_machines_directory, machine_item
+from .machines import (
+    MachineControl,
+    is_active,
+    is_machines_directory,
+    machine_item,
+)
 from .port import Method, PortError, text_param
 from .theme import colors
 from .tree import Node, edit_path
-from .views import Panel, TreeView, TreeWatcher, splitter
+from .views import Panel, TreeView, TreeWatcher, entry_text, splitter
 
 # `PySide6` lives in `~/.scraftcam/packages/`, so it is put on
 # `sys.path` (and fetched, the first time) before it is imported.
@@ -67,6 +72,7 @@ from PySide6.QtCore import (  # noqa: E402
     QEvent,
     QMessageLogContext,
     QObject,
+    QSize,
     Qt,
     QTimer,
     QtMsgType,
@@ -85,9 +91,8 @@ from PySide6.QtWidgets import (  # noqa: E402
     QFormLayout,
     QHBoxLayout,
     QLabel,
-    QLayout,
     QLineEdit,
-    QPlainTextEdit,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QSplitter,
@@ -97,6 +102,9 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 # pylint: enable=wrong-import-position,wrong-import-order
+
+# The top line's button that closes the program (#114, #156).
+EXIT: str = "Exit Program"
 
 # A new window's size (#109): small, so SolidCraft fits beside it.
 WIDTH: int = 720
@@ -260,18 +268,60 @@ def run(
 # program (#139).
 GUIDE: tuple[str, ...] = (
     "",
-    "1. [Tree] shows or hides the tree of your shop and design.",
+    (
+        "1. [Tree] toggles the visibility of the tree hierarchy panel to"
+        " the left."
+    ),
     "",
     (
-        "2. Several machines may share one CNC controller (e.g. LinuxCNC)."
-        "  A file in controllers/ is a template: a new machine starts with"
-        " a copy of it, which can then be changed for that machine alone."
+        "2. A shop may have several machines from the same vendor that"
+        " are running the same controller software.  To simplify things,"
+        " the vendor CNC controller software can be configured once here."
     ),
     "",
     "3. [Stop All] is always shown, and stops every CNC machine at once.",
     "",
-    "4. Click an item in the tree to see it here.",
+    "4. Click a tree item to see it here.",
 )
+
+
+# Class `DetachedWindow`:
+class DetachedWindow(QWidget):
+    """A window holding one detached panel (#157).
+
+    Closing it (its title bar's close) is [Close Panel]: an active
+    machine is asked to stop first.
+
+    Attributes:
+    * `panel` (`Panel`): The panel.
+    * `on_close` (`Callable[[], None]`): What closing it calls.
+    """
+
+    def __init__(self, panel: Panel, on_close: Callable[[], None]) -> None:
+        """Make the window, holding the panel.
+
+        Arguments:
+        * `panel` (`Panel`): The panel.
+        * `on_close` (`Callable[[], None]`): What closing it calls.
+        """
+        super().__init__()
+        self.panel: Panel = panel
+        self.on_close: Callable[[], None] = on_close
+        layout: QVBoxLayout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(panel)
+
+    def closeEvent(  # pylint: disable=invalid-name
+        self, event: QCloseEvent
+    ) -> None:
+        """Close the panel as [Close Panel] does, not the window itself.
+
+        Arguments:
+        * `event` (`QCloseEvent`): The close; ignored, as
+          `on_close()` takes the window away once the panel may go.
+        """
+        event.ignore()
+        self.on_close()
 
 
 # Function `machine_controls()`:
@@ -341,21 +391,21 @@ class Window(QWidget):
     * `controls` (`set[str]`): The machines this window controls.
     * `buttons` (`dict[str, QPushButton]`): The top line's buttons,
       by label (for the command port's `press`).
-    * `design_label` (`QLabel`): The design's name.
     * `message_label` (`QLabel`): The latest message.
     * `action_rows` (`QWidget`): The action rows.
-    * `edit_label` (`QLabel`): The selected item, before [Edit].
-    * `editing_box` (`QCheckBox`): [Enable Editing], for the current
-      panel (#140).
     * `new_machine_row` (`QWidget`): The action row with [New
       Machine], for `machines/` (#141).
-    * `edit_row` (`QWidget`): The action row with [Edit].
     * `new_shop_row` (`QWidget`): The action row with [New Shop].
     * `panels` (`list[Panel]`): The panels, left to right.
+    * `detached` (`list[DetachedWindow]`): The panels detached into
+      windows of their own (#157); tree clicks never go to them.
+    * `closing` (`list[Panel]`): Panels told to close whose machine
+      is still stopping; each closes once it has stopped (#156).
+    * `exiting` (`bool`): True once [Exit Program] has stopped the
+      machines; the window closes once every one has stopped.
     * `machines` (`list[MachineControl]`): The machines connected to
       this window, each shown in a panel only once it is clicked
       (#135).
-    * `shop_label` (`QLabel`): The shop's name.
     * `splitter` (`QSplitter`): The tree, then the panels.
     * `tree` (`TreeView`): The shop's and the design's files.
     * `current` (`int`): The current panel's index (#122).
@@ -385,31 +435,25 @@ class Window(QWidget):
         top: QHBoxLayout = QHBoxLayout()
         self.add_button(top, "Stop All", self.stop_all)
         self.add_button(top, "Tree", self.toggle_tree)
-        self.shop_label: QLabel = QLabel()
-        self.design_label: QLabel = QLabel()
         self.message_label: QLabel = QLabel()
         self.message_label.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
-        top.addWidget(self.shop_label)
-        top.addWidget(self.design_label)
         top.addWidget(self.message_label, 1)
         self.add_button(top, "+ Panel", self.add_panel)
-        self.add_button(top, "x", self.close)
-        close: QPushButton = self.buttons["x"]
-        close.setFixedWidth(close.sizeHint().height())
+        self.add_button(top, EXIT, self.exit_program)
 
         # The action rows, under the top line: [New Shop], while there
-        # is no shop; [New Machine], for `machines/`; the selected
-        # item's [Enable Editing] and [Edit].
+        # is no shop; [New Machine], for `machines/`.  [Enable
+        # Editing] and [Edit TOML File] are in each panel (#153).
         self.action_rows: QWidget = QWidget()
         rows: QVBoxLayout = QVBoxLayout(self.action_rows)
         rows.setContentsMargins(0, 0, 0, 0)
         self.new_shop_row: QWidget = self.action_row(
             rows, QLabel("No shop yet:"), "New Shop", self.new_shop
         )
-        self.new_machine_row, self.edit_row, self.edit_label = (
-            self.make_item_rows(rows)
+        self.new_machine_row: QWidget = self.action_row(
+            rows, QLabel("machines/:"), "New Machine", self.new_machine
         )
 
         # The tree on the left, then the panels; the first is current.
@@ -420,6 +464,9 @@ class Window(QWidget):
         self.tree.itemCollapsed.connect(self.tree_opened)
         self.splitter.addWidget(self.tree)
         self.panels: list[Panel] = []
+        self.detached: list[DetachedWindow] = []
+        self.closing: list[Panel] = []
+        self.exiting: bool = False
         self.machines: list[MachineControl] = []
         self.current: int = 0
         self.minimal: bool = False
@@ -444,36 +491,6 @@ class Window(QWidget):
         self.redraw()
         self.panels[0].show_guide(self.guide_text())
         WINDOWS.append(self)
-
-    def make_item_rows(
-        self, rows: QVBoxLayout
-    ) -> tuple[QWidget, QWidget, QLabel]:
-        """Add the action rows for the selected item (#124, #140, #141).
-
-        [New Machine] for `machines/`; [Enable Editing] and [Edit] for
-        an item that can be edited (`editing_box` is made here too).
-
-        Arguments:
-        * `rows` (`QVBoxLayout`): The action rows.
-
-        Returns:
-        * (`tuple[QWidget, QWidget, QLabel]`): The [New Machine] row,
-          the [Edit] row, and the item's label in it.
-        """
-        new_machine: QWidget = self.action_row(
-            rows, QLabel("machines/:"), "New Machine", self.new_machine
-        )
-        label: QLabel = QLabel()
-        row: QWidget = self.action_row(rows, label, "Edit", self.edit)
-        self.editing_box: QCheckBox = QCheckBox("Enable Editing")
-        self.editing_box.setToolTip(
-            "Let this item be changed, in the panel or with [Edit]"
-        )
-        self.editing_box.toggled.connect(self.toggle_editing)
-        line: QLayout | None = row.layout()
-        assert isinstance(line, QHBoxLayout)
-        line.insertWidget(0, self.editing_box)
-        return new_machine, row, label
 
     def add_button(
         self, line: QHBoxLayout, label: str, action: Callable[[], object]
@@ -522,8 +539,6 @@ class Window(QWidget):
         """Show what the model holds now."""
         model: App = self.model
         self.setWindowTitle(model.title())
-        self.shop_label.setText(f"Shop: {model.shop_title}")
-        self.design_label.setText(f"Design: {model.design_title()}")
         latest: Message = model.latest()
         self.message_label.setText(latest.text)
         self.message_label.setToolTip(latest.text)
@@ -593,10 +608,128 @@ class Window(QWidget):
         panel.controls = machine_controls
         panel.open_machine = self.open_machine
         panel.say = functools.partial(self.model.say, problem=True)
+        panel.edit_file = functools.partial(self.edit, panel)
+        panel.close_panel = functools.partial(self.close_panel, panel)
+        panel.detach_panel = functools.partial(self.detach_panel, panel)
         panel.clicked.connect(functools.partial(self.make_current, panel))
         self.panels.append(panel)
         self.splitter.addWidget(panel)
         self.make_current(panel)
+        self.show_close_buttons()
+
+    def show_close_buttons(self) -> None:
+        """Show [Close Panel] on every panel but a last one (#156)."""
+        panel: Panel
+        for panel in self.panels:
+            panel.close_button.setVisible(len(self.panels) > 1)
+
+    def close_panel(self, panel: Panel) -> None:
+        """Close a panel ([Close Panel], #156).
+
+        An active machine's panel asks to stop it first, and closes
+        once it has stopped; any other closes at once.  A machine's
+        controls stay connected, to be opened again.
+
+        Arguments:
+        * `panel` (`Panel`): The panel.
+        """
+        holder: DetachedWindow | None = self.holder(panel)
+        if holder is None and len(self.panels) < 2:
+            return
+        stopping: bool = panel in self.closing
+        if panel.machines and is_active(panel.machines[0]) and not stopping:
+            machine: MachineControl = panel.machines[0]
+            answer: QMessageBox.StandardButton = QMessageBox.question(
+                self,
+                "Close Panel",
+                f"{machine.name} is running.  Stop it before closing its "
+                "panel?",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+            machine.stop()
+            if machine.busy():
+                self.model.say(
+                    f"Stopping {machine.name}: its panel closes once it "
+                    "has stopped."
+                )
+                if panel not in self.closing:
+                    self.closing.append(panel)
+                return
+        if panel in self.closing:
+            self.closing.remove(panel)
+        panel.drop_machine()
+        if holder is not None:
+            self.detached.remove(holder)
+            holder.deleteLater()
+            return
+        self.panels.remove(panel)
+        panel.hide()
+        panel.setParent(None)
+        panel.deleteLater()
+        self.make_current(self.panels[min(self.current, len(self.panels) - 1)])
+        self.show_close_buttons()
+
+    def holder(self, panel: Panel) -> "DetachedWindow | None":
+        """Return the window a detached panel is in (#157).
+
+        Arguments:
+        * `panel` (`Panel`): The panel.
+
+        Returns:
+        * (`DetachedWindow | None`): Its window, or None if it is in
+          this one.
+        """
+        return next(
+            (held for held in self.detached if held.panel is panel), None
+        )
+
+    def all_panels(self) -> list[Panel]:
+        """Return the panels, detached ones last (#157).
+
+        Returns:
+        * (`list[Panel]`): Every panel of this window.
+        """
+        return self.panels + [held.panel for held in self.detached]
+
+    def detach_panel(self, panel: Panel) -> None:
+        """Detach a panel into a window of its own, or reattach it (#157).
+
+        A detached panel keeps what it shows; [Reattach] puts it back as
+        the rightmost panel.
+
+        Arguments:
+        * `panel` (`Panel`): The panel.
+        """
+        # Back in: the rightmost panel.
+        holder: DetachedWindow | None = self.holder(panel)
+        if holder is not None:
+            self.detached.remove(holder)
+            self.panels.append(panel)
+            self.splitter.addWidget(panel)
+            panel.detach_button.setText("Detach")
+            holder.deleteLater()
+            self.make_current(panel)
+            self.show_close_buttons()
+            return
+
+        # Out: a panel is left behind for the tree's clicks.
+        if len(self.panels) < 2:
+            self.add_panel()
+        self.panels.remove(panel)
+        size: QSize = panel.size()
+        holder = DetachedWindow(
+            panel, functools.partial(self.close_panel, panel)
+        )
+        holder.setWindowTitle(f"scraftcam: {panel.title.text()}")
+        holder.resize(size)
+        holder.show()
+        self.detached.append(holder)
+        panel.detach_button.setText("Reattach")
+        panel.close_button.show()
+        panel.set_current(False)
+        self.make_current(self.panels[min(self.current, len(self.panels) - 1)])
+        self.show_close_buttons()
 
     def make_current(self, panel: Panel) -> None:
         """Make a panel the current one: the next item shows there.
@@ -685,18 +818,21 @@ class Window(QWidget):
     def free_panel(self) -> Panel:
         """Return the panel a click shows an item in, and make it current.
 
-        The current one, unless it controls a machine (#58); then the
-        first that does not, or a new one.
+        The current one, unless it controls an active machine (#58,
+        #154); then the first that does not, or a new one.  A panel
+        whose machine is not active gives it up.
 
         Returns:
         * (`Panel`): The panel.
         """
-        if not self.panels[self.current].machines:
-            return self.panels[self.current]
-        panel: Panel
+        panel: Panel = self.panels[self.current]
+        if not panel.machines or not is_active(panel.machines[0]):
+            panel.drop_machine()
+            return panel
         for panel in self.panels:
-            if not panel.machines:
+            if not panel.machines or not is_active(panel.machines[0]):
                 self.make_current(panel)
+                panel.drop_machine()
                 return panel
         self.add_panel()
         return self.panels[self.current]
@@ -716,7 +852,7 @@ class Window(QWidget):
         machine: MachineControl
         for top in WINDOWS:
             panel: Panel
-            for panel in top.panels:
+            for panel in top.all_panels():
                 if any(machine.name == name for machine in panel.machines):
                     top.make_current(panel)
                     top.to_front(self)
@@ -761,8 +897,6 @@ class Window(QWidget):
             self.full_geometry = self.saveGeometry()
         hidden: list[QWidget] = [
             self.tree,
-            self.shop_label,
-            self.design_label,
             self.action_rows,
             self.buttons["Tree"],
             self.buttons["+ Panel"],
@@ -771,6 +905,13 @@ class Window(QWidget):
         widget: QWidget
         for widget in hidden:
             widget.setVisible(not minimal)
+
+        # The panel's own buttons only in the full form (#16).
+        panel.detach_button.setVisible(not minimal)
+        if minimal:
+            panel.close_button.hide()
+        else:
+            self.show_close_buttons()
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, minimal)
         self.show()
         if minimal:
@@ -799,16 +940,6 @@ class Window(QWidget):
         node: Node | None = (
             self.panels[self.current].node if self.panels else None
         )
-        editable: bool = node is not None and edit_path(node) is not None
-        self.edit_row.setVisible(editable)
-        self.buttons["Edit"].setVisible(editable)
-        editing: bool = bool(self.panels) and self.panels[self.current].editing
-        self.editing_box.blockSignals(True)
-        self.editing_box.setChecked(editing)
-        self.editing_box.blockSignals(False)
-        self.buttons["Edit"].setEnabled(editing)
-        if node is not None:
-            self.edit_label.setText(f"{node.label()}:")
 
         # [New Machine], for `machines/`: grey, saying why, with no
         # controller template (#141).
@@ -825,19 +956,14 @@ class Window(QWidget):
             else "First put a controller template in controllers/"
         )
 
-    def toggle_editing(self, editing: bool) -> None:
-        """Let the current panel's item be changed, or not (#140).
+    def edit(self, panel: Panel) -> None:
+        """Open a panel's file in an editor ([Edit TOML File], #124).
 
         Arguments:
-        * `editing` (`bool`): True when [Enable Editing] is checked.
+        * `panel` (`Panel`): The panel whose button was pressed.
         """
-        self.panels[self.current].set_editing(editing)
-        self.show_actions()
-
-    def edit(self) -> None:
-        """Open the current panel's file in an editor ([Edit], #124)."""
         # The file.
-        node: Node | None = self.panels[self.current].node
+        node: Node | None = panel.node
         path: Path | None = None if node is None else edit_path(node)
         if path is None:
             return
@@ -902,8 +1028,16 @@ class Window(QWidget):
         self.blink = not self.blink
         self.show_stop_all()
         panel: Panel
-        for panel in self.panels:
+        for panel in self.all_panels():
             panel.show_dues(self.blink)
+
+        # What was told to close once its machines stopped (#156).
+        for panel in list(self.closing):
+            if not any(machine.busy() for machine in panel.machines):
+                self.close_panel(panel)
+        if self.exiting and not self.busy():
+            self.exiting = False
+            self.close()
 
     def show_stop_all(self) -> None:
         """Make [Stop All] stand out while any machine runs (#100).
@@ -957,15 +1091,62 @@ class Window(QWidget):
         * `event` (`QCloseEvent`): Accepted, or ignored with the
           reason on the top line.
         """
+        # The title bar's close asks, as [Exit Program] does (#15).
         refusal: str = self.busy()
+        if refusal and event.spontaneous() and self.ask_to_stop():
+            refusal = self.busy()
         if refusal:
             self.model.say(refusal, problem=True)
             event.ignore()
             return
+
+        # Closed, and its detached panels with it (#157).
         self.model.forget(self.redraw)
         if self in WINDOWS:
             WINDOWS.remove(self)
+        holder: DetachedWindow
+        for holder in self.detached:
+            holder.deleteLater()
+        self.detached = []
         event.accept()
+
+    def exit_program(self) -> None:
+        """Close the window ([Exit Program], #156), asking to stop first.
+
+        With machines running: "Stop them all and exit?"; once they
+        have stopped with their spindles off, it closes.
+        """
+        if self.busy() and not self.ask_to_stop():
+            return
+        self.close()
+
+    def ask_to_stop(self) -> bool:
+        """Ask to stop every running machine before exiting (#13).
+
+        Returns:
+        * (`bool`): True if the user said to stop them (and they were
+          told to stop).
+        """
+        names: list[str] = [
+            machine.name for machine in machine_controls() if machine.busy()
+        ] + sorted(self.model.running)
+        running: str = " and ".join(names) or "A machine"
+        verb: str = "are" if len(names) > 1 else "is"
+        answer: QMessageBox.StandardButton = QMessageBox.question(
+            self,
+            EXIT,
+            f"{running} {verb} running.  Stop them all and exit?",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return False
+        self.stop_all()
+        if self.busy():
+            self.exiting = True
+            self.model.say(
+                "Stopping every machine: scraftcam exits once they have "
+                "stopped."
+            )
+        return True
 
 
 # Class `CommandServer`:
@@ -1174,12 +1355,7 @@ class CommandServer(QTcpServer):
         top.select_item(item)
         panel: Panel = top.panels[top.current]
         fields: dict[str, str] = {
-            key: (
-                entry.toPlainText()
-                if isinstance(entry, QPlainTextEdit)
-                else entry.text()
-            )
-            for key, entry in panel.entries.items()
+            key: entry_text(entry) for key, entry in panel.entries.items()
         }
         return {
             "label": panel.title.text(),

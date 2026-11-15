@@ -413,31 +413,24 @@ comment, such as a `(MSG, ...)` line and `M0`, so the operator is told
 which tool to put in.  It has a `name` even when it is not a file of its
 own.
 
-| Key              | Value             | Required | Meaning                   |
-| ---------------- | ----------------- | -------- | ------------------------- |
-| `post_processor` | one of `linuxcnc` | yes      | Which dialect of G-code   |
-|                  |                   |          | it reads.                 |
-| `tool_change`    | string            | no       | The lines that change the |
-|                  |                   |          | tool.                     |
-| `template`       | string            | no       | In a machine's copy: the  |
-|                  |                   |          | template in               |
-|                  |                   |          | `controllers/` it was     |
-|                  |                   |          | copied from (#141).       |
-| `vendor`         | string            | no       | Who makes it (#144).      |
-| `product`        | string            | no       | The vendor's name for it. |
-| `vendor_version` | string            | no       | Its version, as the       |
-|                  |                   |          | vendor writes it (e.g.    |
-|                  |                   |          | "R3.043.066").            |
-| `vendor_triple`  | triple            | no       | Our reading of            |
-|                  |                   |          | `vendor_version`,         |
-|                  |                   |          | MAJOR.MINOR.PATCH (e.g.   |
-|                  |                   |          | "3.43.66"; "0.0.0" when   |
-|                  |                   |          | unknown), filled in when  |
-|                  |                   |          | `vendor_version` is       |
-|                  |                   |          | entered.                  |
-| `support_ended`  | date              | no       | When the vendor stopped   |
-|                  |                   |          | updating it (left out:    |
-|                  |                   |          | unknown).                 |
+| Key              | Value  | Required | Meaning                              |
+| ---------------- | ------ | -------- | ------------------------------------ |
+| `post_processor` | string | no       | A program that rewrites scraftcam's  |
+|                  |        |          | G-code for this controller.          |
+| `tool_change`    | string | no       | The lines that change the tool.      |
+| `template`       | string | no       | In a machine's copy: the template in |
+|                  |        |          | `controllers/` it was copied from    |
+|                  |        |          | (#141).                              |
+| `vendor`         | string | no       | Who makes it (#144).                 |
+| `product`        | string | no       | The vendor's name for it.            |
+| `vendor_version` | string | no       | Its version, as the vendor writes it |
+|                  |        |          | (e.g. "R3.043.066").                 |
+| `vendor_triple`  | triple | no       | Our reading of `vendor_version`,     |
+|                  |        |          | MAJOR.MINOR.PATCH (e.g. "3.43.66";   |
+|                  |        |          | "0.0.0" when unknown), filled in     |
+|                  |        |          | when `vendor_version` is entered.    |
+| `support_ended`  | date   | no       | When the vendor stopped updating it  |
+|                  |        |          | (left out: unknown).                 |
 
 ```toml
 name = "LinuxCNC"

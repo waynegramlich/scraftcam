@@ -164,6 +164,29 @@ def update_machine(follow_up: FollowUp) -> None:
     write_item(follow_up.path, item)
 
 
+# Function `copied_from()`:
+def copied_from(machine: Path, item: dict[str, object]) -> str:
+    """Say which template a machine's controller was copied from (#151).
+
+    Arguments:
+    * `machine` (`Path`): The machine's file, in `machines/`.
+    * `item` (`dict[str, object]`): The machine, as read.
+
+    Returns:
+    * (`str`): "Copied from: NAME (`controllers/FILE`)", without the
+      file when no template has that name, or "" when it names none.
+    """
+    copy: object = item.get("controller")
+    name: object = copy.get("template") if isinstance(copy, dict) else None
+    if not isinstance(name, str) or not name:
+        return ""
+    path: Path
+    for path in sorted((machine.parent.parent / "controllers").glob("*.toml")):
+        if read_item(path)[0].get("name") == name:
+            return f"Copied from: {name} (controllers/{path.name})"
+    return f"Copied from: {name}"
+
+
 # Function `shown()`:
 def shown(value: object) -> str:
     """Return a value as a line shows it: short, on one line.

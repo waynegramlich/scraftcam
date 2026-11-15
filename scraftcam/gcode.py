@@ -20,8 +20,12 @@ make a tree (`Ring`), which is cut from the smallest rings out.
 # pylint: disable=too-many-lines
 
 import math
+import shlex
+import subprocess
+import tempfile
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal, TypeAlias
 
 from .carousel import Plan, Swap, plan, swap_message
@@ -655,6 +659,55 @@ def _remapped(command: RS274, turns: int, dx: float, dy: float) -> RS274:
         else:
             result[letter] = value
     return result
+
+
+# Function `post_process()`:
+def post_process(text: str, command: str) -> str:
+    """Rewrite LinuxCNC G-code for another controller (#151).
+
+    `command` is a controller's `post_processor`: `"linuxcnc"` (or
+    `""`) leaves the text as it is; otherwise it is run with
+    `{input}` and `{output}` replaced by the names of two files, the
+    first holding `text`.
+
+    Arguments:
+    * `text` (`str`): The program, as `CNC.gcode()` writes it.
+    * `command` (`str`): The controller's `post_processor`.
+
+    Returns:
+    * (`str`): What the command wrote to `{output}`.
+
+    Raises:
+    * `ValueError`: If the command fails, with its messages.
+    """
+    # LinuxCNC needs none.
+    if command.strip().lower() in ("", "linuxcnc"):
+        return text
+
+    # The command, on two files of its own.
+    with tempfile.TemporaryDirectory(prefix="scraftcam_post_") as name:
+        directory: Path = Path(name)
+        source: Path = directory / "input.nc"
+        target: Path = directory / "output.nc"
+        source.write_text(text, encoding="utf-8")
+        words: list[str] = [
+            word.replace("{input}", str(source)).replace(
+                "{output}", str(target)
+            )
+            for word in shlex.split(command)
+        ]
+        try:
+            done: subprocess.CompletedProcess[str] = subprocess.run(
+                words, capture_output=True, text=True, check=False
+            )
+        except OSError as error:
+            raise ValueError(f"{command!r}: {error}") from error
+        if done.returncode != 0 or not target.is_file():
+            raise ValueError(
+                f"{command!r} failed ({done.returncode}): "
+                + (done.stderr or done.stdout).strip()
+            )
+        return target.read_text(encoding="utf-8")
 
 
 # Class `CNC`:

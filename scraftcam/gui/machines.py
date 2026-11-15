@@ -28,7 +28,9 @@ require("PySide6")
 from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QGridLayout,
+    QHBoxLayout,
     QLabel,
+    QLayout,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -44,6 +46,41 @@ BAR_WIDTH: int = 140
 SOON: float = 1.0
 SOON_COLOR: str = "#e0a000"
 FILL_COLOR: str = "#3d7fd6"
+
+
+# Class `Report`:
+@dataclass(frozen=True, slots=True)
+class Report:
+    """What an active machine's entry shows of its job (#154).
+
+    Attributes:
+    * `program` (`str`): The program loaded (its file's name), or ""
+      with none.
+    * `done` (`float`): How far along it is, from 0.0 to 1.0.
+    * `progress` (`str`): Where it is, e.g. "line 120 of 697  9:30
+      left", or "".
+    * `plan` (`str`): The tool cutting now and the next few, with
+      their times, or "".
+
+    Constructor:
+    * `Report(program, done, progress, plan)`
+    """
+
+    # Constructor arguments:
+    program: str = field(init=True)
+    done: float = field(init=True)
+    progress: str = field(init=True)
+    plan: str = field(init=True)
+
+
+# Function `no_report()`:
+def no_report() -> Report:
+    """Return a report of no program: a control's default `report`.
+
+    Returns:
+    * (`Report`): No program, nothing done.
+    """
+    return Report("", 0.0, "", "")
 
 
 # Class `MachineControl`:
@@ -65,9 +102,11 @@ class MachineControl:
       (False), so the window can shrink with them (#94).
     * `due` (`Callable[[], Due | None]`): When the operator is next
       needed (#102); `None` with no program.
+    * `report` (`Callable[[], Report]`): Its program, progress and next
+      tools (#154).
 
     Constructor:
-    * `MachineControl(name, widget, busy, stop, on_minimal, due)`
+    * `MachineControl(name, widget, busy, stop, on_minimal, due, report)`
     """
 
     # Constructor arguments:
@@ -77,6 +116,7 @@ class MachineControl:
     stop: Callable[[], None] = field(init=True)
     on_minimal: Callable[[Callable[[bool], None]], None] = field(init=True)
     due: Callable[[], "Due | None"] = field(init=True)
+    report: Callable[[], Report] = field(init=True, default=no_report)
 
 
 # Class `Due`:
@@ -207,9 +247,24 @@ def machine_item(node: Node) -> MachineItem:
     return MachineItem(name, kind, controller, details, "", missing)
 
 
+# Function `is_active()`:
+def is_active(control: MachineControl) -> bool:
+    """Tell whether a machine is active: a program loaded, or running.
+
+    Paused, or waiting for its operator, counts (#154).
+
+    Arguments:
+    * `control` (`MachineControl`): The machine.
+
+    Returns:
+    * (`bool`): True if it is active.
+    """
+    return bool(control.busy() or control.report().program)
+
+
 # Function `fetch_list()`:
 def fetch_list(controls: list[MachineControl]) -> list[str]:
-    """Return the next tools to fetch, across all machines (#134).
+    """Return the next tools to fetch, across active machines (#134).
 
     Arguments:
     * `controls` (`list[MachineControl]`): The machines connected.
@@ -221,6 +276,8 @@ def fetch_list(controls: list[MachineControl]) -> list[str]:
     wanted: list[tuple[float, str]] = []
     control: MachineControl
     for control in controls:
+        if not is_active(control):
+            continue
         due: Due | None = control.due()
         if due is None or due.what == "end":
             continue
@@ -322,21 +379,27 @@ class MachineTab(QWidget):
 
 # Class `MachinesView`:
 class MachinesView(QWidget):
-    """The `machines/` summary (#134), brought up to date by `refresh()`.
+    """The `machines/` summary (#134, #154), kept up by `refresh()`.
 
-    A machine each, in tree order, CNC machines first: a CNC machine
-    takes three lines (its name button, kind, controller and state;
-    its details; its next task's bar), any other one line.  Then the
-    next tools to fetch, across all machines.
+    The active machines first (a program loaded, or running), each
+    with its state, details, program and progress, its next task's
+    bar and its next tools; then the others, a line each, in tree
+    order; then the next tools to fetch, across the active machines.
+    A machine moves between the two as it starts and stops.
 
     Attributes:
-    * `bars` (`dict[str, DueBar]`): Each CNC machine's bar, by name.
+    * `active` (`tuple[str, ...]`): The active machines' names, as
+      last laid out.
+    * `blocks` (`dict[str, ActiveBlock]`): Each active machine's
+      entry, by name.
+    * `body` (`QWidget`): The machines' entries, laid out again when
+      `active` changes.
     * `controls` (`Callable[[], list[MachineControl]]`): The machines
       connected, in every window.
     * `fetch` (`QLabel`): The next tools to fetch.
     * `items` (`list[MachineItem]`): The machine files, in tree order.
-    * `states` (`dict[str, QLabel]`): Each CNC machine's first line
-      after its name, by name.
+    * `open_machine` (`Callable[[str], None]`): Shows a machine's own
+      panel, by name.
     """
 
     def __init__(
@@ -356,68 +419,65 @@ class MachinesView(QWidget):
         """
         super().__init__()
         self.controls: Callable[[], list[MachineControl]] = controls
+        self.open_machine: Callable[[str], None] = open_machine
         self.items: list[MachineItem] = [
             machine_item(child)
             for child in node.children
             if child.path.suffix == ".toml"
         ]
-        self.bars: dict[str, DueBar] = {}
-        self.states: dict[str, QLabel] = {}
+        self.active: tuple[str, ...] = ("(none laid out yet)",)
+        self.blocks: dict[str, ActiveBlock] = {}
+        self.body: QWidget = QWidget()
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-
-        # The CNC machines, then the others; then the tools to fetch.
-        item: MachineItem
-        for item in self.items:
-            if item.controller:
-                layout.addWidget(self.cnc_block(item, open_machine))
-        for item in self.items:
-            if not item.controller:
-                layout.addWidget(other_line(item))
-        if not self.items:
-            layout.addWidget(QLabel("No machines yet."))
+        layout.addWidget(self.body)
         layout.addWidget(heading("Tools to fetch"))
         self.fetch: QLabel = QLabel()
         layout.addWidget(self.fetch)
         layout.addStretch(1)
         self.refresh(False)
 
-    def cnc_block(
-        self, item: MachineItem, open_machine: Callable[[str], None]
-    ) -> QWidget:
-        """Return a CNC machine's three lines.
+    def lay_out(self, connected: dict[str, MachineControl]) -> None:
+        """Lay the entries out again: active machines, then the others.
 
         Arguments:
-        * `item` (`MachineItem`): The machine.
-        * `open_machine` (`Callable[[str], None]`): Shows a machine's
-          own panel, by name.
-
-        Returns:
-        * (`QWidget`): Its name button and state, its details, and its
-          next task's bar.
+        * `connected` (`dict[str, MachineControl]`): The machines
+          connected, by name.
         """
-        block: QWidget = QWidget()
-        grid: QGridLayout = QGridLayout(block)
-        grid.setContentsMargins(0, 4, 0, 4)
-        grid.setVerticalSpacing(1)
-        button: QPushButton = QPushButton(item.name)
-        button.setToolTip(f"Show the {item.name}'s own panel")
-        button.clicked.connect(_opener(open_machine, item.name))
-        state: QLabel = QLabel()
-        details: QLabel = QLabel(item.details)
-        details.setStyleSheet(f"color: {colors().quiet}")
-        meter: DueBar = DueBar()
-        grid.addWidget(button, 0, 0)
-        grid.addWidget(state, 0, 1)
-        grid.addWidget(details, 1, 1)
-        grid.addWidget(meter, 2, 1, Qt.AlignmentFlag.AlignLeft)
-        grid.setColumnStretch(1, 1)
-        self.states[item.name] = state
-        self.bars[item.name] = meter
-        return block
+        # A new body in place of the old one.
+        old: QWidget = self.body
+        self.body = QWidget()
+        outer: QLayout | None = self.layout()
+        assert isinstance(outer, QVBoxLayout)
+        outer.replaceWidget(old, self.body)
+        old.deleteLater()
+        layout: QVBoxLayout = QVBoxLayout(self.body)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.blocks = {}
+
+        # The active machines, each a block; then the rest, a line each.
+        item: MachineItem
+        if self.active:
+            layout.addWidget(heading("Active"))
+        for item in self.items:
+            if item.name in self.active:
+                block: ActiveBlock = ActiveBlock(item, self.open_machine)
+                self.blocks[item.name] = block
+                layout.addWidget(block)
+        if len(self.active) < len(self.items):
+            layout.addWidget(heading("Not active"))
+        for item in self.items:
+            if item.name not in self.active:
+                layout.addWidget(
+                    idle_line(
+                        item, connected.get(item.name), self.open_machine
+                    )
+                )
+        if not self.items:
+            layout.addWidget(QLabel("No machines yet."))
 
     def refresh(self, blink: bool) -> None:
-        """Show each machine's state and bar, and the tools to fetch.
+        """Show each machine where it belongs, and the tools to fetch.
 
         Arguments:
         * `blink` (`bool`): Which half of a blink this is.
@@ -426,32 +486,129 @@ class MachinesView(QWidget):
         connected: dict[str, MachineControl] = {
             control.name: control for control in controls
         }
-        item: MachineItem
-        for item in self.items:
-            if not item.controller:
-                continue
-            control: MachineControl | None = connected.get(item.name)
-            reason: str = "" if control is None else control.busy()
-            state: str = (
-                "not initialized yet"
-                if control is None and item.missing
-                else "not connected"
-                if control is None
-                else "running"
-                if reason
-                else "ready"
-            )
-            label: QLabel = self.states[item.name]
-            label.setText(f"{item.kind}, {item.controller}: {state}")
-            label.setToolTip(reason)
-            meter: DueBar = self.bars[item.name]
-            if control is None:
-                meter.show_due(None, blink)
-                meter.setFormat("not connected")
-            else:
-                meter.show_due(control.due(), blink)
+        active: tuple[str, ...] = tuple(
+            item.name
+            for item in self.items
+            if item.name in connected and is_active(connected[item.name])
+        )
+        if active != self.active:
+            self.active = active
+            self.lay_out(connected)
+        name: str
+        block: ActiveBlock
+        for name, block in self.blocks.items():
+            block.refresh(connected[name], blink)
         fetches: list[str] = fetch_list(controls)
         self.fetch.setText("\n".join(fetches) if fetches else "None.")
+
+
+# Class `ActiveBlock`:
+class ActiveBlock(QWidget):
+    """An active machine's entry in the `machines/` summary (#154).
+
+    Its name button (which opens its own panel) and state; its
+    details; its program and progress; its next task's bar; its next
+    tools.
+
+    Attributes:
+    * `state` (`QLabel`): Its kind, controller and state.
+    * `job` (`QProgressBar`): How far along its program is.
+    * `meter` (`DueBar`): The time to its operator's next task.
+    * `plan` (`QLabel`): The tool cutting now and the next few.
+    * `item` (`MachineItem`): The machine.
+    """
+
+    def __init__(
+        self, item: MachineItem, open_machine: Callable[[str], None]
+    ) -> None:
+        """Make the entry.
+
+        Arguments:
+        * `item` (`MachineItem`): The machine.
+        * `open_machine` (`Callable[[str], None]`): Shows a machine's
+          own panel, by name.
+        """
+        super().__init__()
+        self.item: MachineItem = item
+        grid: QGridLayout = QGridLayout(self)
+        grid.setContentsMargins(0, 4, 0, 4)
+        grid.setVerticalSpacing(1)
+        button: QPushButton = QPushButton(item.name)
+        button.setToolTip(f"Show the {item.name}'s own panel")
+        button.clicked.connect(_opener(open_machine, item.name))
+        self.state: QLabel = QLabel()
+        details: QLabel = QLabel(item.details)
+        details.setStyleSheet(f"color: {colors().quiet}")
+        self.job: QProgressBar = QProgressBar()
+        self.job.setRange(0, BAR_STEPS)
+        self.job.setTextVisible(True)
+        self.meter: DueBar = DueBar()
+        self.plan: QLabel = QLabel()
+        grid.addWidget(button, 0, 0)
+        grid.addWidget(self.state, 0, 1)
+        grid.addWidget(details, 1, 1)
+        grid.addWidget(self.job, 2, 1)
+        grid.addWidget(self.meter, 3, 1, Qt.AlignmentFlag.AlignLeft)
+        grid.addWidget(self.plan, 4, 1)
+        grid.setColumnStretch(1, 1)
+
+    def refresh(self, control: MachineControl, blink: bool) -> None:
+        """Bring the entry up to date.
+
+        Arguments:
+        * `control` (`MachineControl`): The machine.
+        * `blink` (`bool`): Which half of a blink this is.
+        """
+        reason: str = control.busy()
+        report: Report = control.report()
+        state: str = "running" if reason else "loaded"
+        self.state.setText(
+            f"{self.item.kind}, {self.item.controller}: {state}"
+        )
+        self.state.setToolTip(reason)
+        self.job.setValue(round(min(max(report.done, 0.0), 1.0) * BAR_STEPS))
+        self.job.setFormat(f"{report.program}  {report.progress}".strip())
+        self.meter.show_due(control.due(), blink)
+        self.plan.setText(report.plan)
+        self.plan.setVisible(bool(report.plan))
+
+
+# Function `idle_line()`:
+def idle_line(
+    item: MachineItem,
+    control: MachineControl | None,
+    open_machine: Callable[[str], None],
+) -> QWidget:
+    """Return a line for a machine that is not active (#154).
+
+    Arguments:
+    * `item` (`MachineItem`): The machine.
+    * `control` (`MachineControl | None`): Its controls, if connected.
+    * `open_machine` (`Callable[[str], None]`): Shows a machine's own
+      panel, by name.
+
+    Returns:
+    * (`QWidget`): A CNC machine's name button and state; any other
+      machine's (or a file that does not read) one line of text.
+    """
+    if not item.controller or item.error:
+        return other_line(item)
+    state: str = (
+        "ready"
+        if control is not None
+        else "not initialized yet"
+        if item.missing
+        else "not connected"
+    )
+    line: QWidget = QWidget()
+    row: QHBoxLayout = QHBoxLayout(line)
+    row.setContentsMargins(0, 0, 0, 0)
+    button: QPushButton = QPushButton(item.name)
+    button.setToolTip(f"Show the {item.name}'s own panel")
+    button.clicked.connect(_opener(open_machine, item.name))
+    row.addWidget(button)
+    row.addWidget(QLabel(f"{item.kind}, {item.controller}: {state}"), 1)
+    return line
 
 
 # Function `other_line()`:

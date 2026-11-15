@@ -152,6 +152,47 @@ BARE_KEY: re.Pattern[str] = re.compile(r"[A-Za-z0-9_-]+")
 VERSION: re.Pattern[str] = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 
+# How to fill in a controller's `tool_change` (`T.osiade~5.1.9`
+# #151).
+TOOL_CHANGE_HOW: str = """\
+The G-code written at every tool change: one or more lines, each \
+made of G-code words or a whole-line comment.
+
+* `{number}` becomes the tool's T number, and `{number:02d}` the \
+same number with two digits (`3` becomes `03`).
+* `{description}` becomes the tool's label, e.g. "End mill (1/4in \
+2-flute HSS)".
+
+For example:
+
+```
+(MSG, Insert T{number:02d}: {description})
+M0
+T{number:02d} M6 G43 H{number:02d}
+```
+
+* The `MSG` line shows the operator which tool to put in.
+* `M0` pauses until Start is pressed.
+* `T03 M6` changes to tool 3.
+* `G43 H03` turns on tool 3's length offset."""
+
+
+# How to fill in a controller's `post_processor` (`T.osiade~5.1.9`
+# #151).
+POST_PROCESSOR_HOW: str = """\
+LinuxCNC (`linuxcnc`, the default when it is left out) needs none: \
+scraftcam writes LinuxCNC G-code, as LinuxCNC is not proprietary.
+
+For another controller, give a command with `{input}` and \
+`{output}`, e.g. `my_post {input} {output}`.  scraftcam writes its \
+LinuxCNC G-code to `{input}` and runs the command, which writes this \
+controller's G-code to `{output}`.  If the command fails, the job \
+stops and its messages are shown."""
+
+# The built-in post processor: none, LinuxCNC G-code as it is.
+LINUXCNC: str = "linuxcnc"
+
+
 # Class `TableField`:
 # It only holds what the schema says of a key, so the count is fine.
 @dataclass(frozen=True, slots=True)
@@ -182,10 +223,12 @@ class TableField:  # pylint: disable=too-many-instance-attributes
       it, from `dimension_letters()`) of a size on the sketches in
       `Tool_Models.md`, or `""`; a letter means the same size on every
       sketch.
+    * `how` (`str`): How to fill it in, in Markdown, shown under the
+      field's ▶ (`T.osiade~5.1.9` #149), or `""`.
 
     Constructor:
     * `TableField(key, form, meaning, required, of, choices, open, letter,
-      needed)`
+      needed, how)`
     """
 
     # Constructor arguments:
@@ -198,6 +241,7 @@ class TableField:  # pylint: disable=too-many-instance-attributes
     open: bool = field(init=True, default=False)
     letter: str = field(init=True, default="")
     needed: bool = field(init=True, default=False)
+    how: str = field(init=True, default="")
 
     # Method `TableField.__post_init__()`:
     def __post_init__(self) -> None:
@@ -278,27 +322,44 @@ HEADER: tuple[TableField, ...] = (
         "string",
         "Unique among the things of its kind.",
         True,
+        how=(
+            "What the GUI calls it, e.g. `Home shop` or `Shop mill`.  "
+            "No two of the same kind may share a name."
+        ),
     ),
     TableField(
         "kind",
         "string",
         "What the rest of the file is.",
         True,
+        how="Set when the file is made, and never changed.",
     ),
     TableField(
-        "language", "string", "The language of the names and notes.", True
+        "language",
+        "string",
+        "The language of the names and notes.",
+        True,
+        how="In English, e.g. `English` or `German`.",
     ),
     TableField(
         "version",
         "version",
         "The format version, `MAJOR.MINOR.PATCH`.",
         True,
+        how=(
+            "The version of scraftcam's file format the file was "
+            "written in, set by scraftcam: not the item's own version."
+        ),
     ),
     TableField(
         "notes",
         "string",
         "Anything worth writing down about it (the GUI shows and edits "
         "it; `#` comments are not kept).",
+        how=(
+            "Free text, as many lines as needed: where it came from, "
+            "what to watch out for, catalog pages."
+        ),
     ),
 )
 
@@ -424,6 +485,11 @@ def _tool_fields(*special: TableField) -> tuple[TableField, ...]:
             "Its unique id, a number from 1, unique among all the tools "
             "of the shop (this is not a T number).",
             True,
+            how=(
+                "Give each new tool the next unused number; it never "
+                "changes, even when the tool moves to another machine "
+                "or another T number."
+            ),
         ),
         TableField("description", "string", "What it is, in a few words."),
         *special,
@@ -432,6 +498,10 @@ def _tool_fields(*special: TableField) -> tuple[TableField, ...]:
             "length",
             "The shank diameter, if not `diameter`.",
             letter="S",
+            how=(
+                "Leave it out when the shank is the same size as the "
+                "cutter; give it for a reduced or oversize shank."
+            ),
         ),
         TableField(
             "overall_length",
@@ -439,11 +509,20 @@ def _tool_fields(*special: TableField) -> tuple[TableField, ...]:
             "Its whole length (OAL).",
             True,
             letter="O",
+            how=(
+                "From the tip to the end of the shank, as the catalog "
+                'gives it, e.g. `"2-1/2 in"`.'
+            ),
         ),
         TableField(
             "holder",
             "holder_list",
             "What holds it, from the spindle to its bore (see Tool Holders).",
+            how=(
+                "A list from the spindle down, ending in the bore with "
+                'its unit, e.g. `["r8", "1/4 in"]` (a plain R8 collet) or '
+                '`["cat40", "er32", "1/2 in"]` (a CAT40 ER32 collet chuck).'
+            ),
         ),
         TableField(
             "material",
@@ -465,7 +544,16 @@ def _tool_fields(*special: TableField) -> tuple[TableField, ...]:
         TableField("vendor_pn", "string", "The vendor's part number."),
         TableField("cost", "money", "What it cost."),
         TableField("acquired", "date", "When it was bought (`2026-10-27`)."),
-        TableField("rpm", "speed", "The spindle speed to cut at."),
+        TableField(
+            "rpm",
+            "speed",
+            "The spindle speed to cut at.",
+            how=(
+                "Usually left out: scraftcam works it out from the "
+                "material cut and the tool's material.  Give it to "
+                'override that for every material, e.g. `"3000 rpm"`.'
+            ),
+        ),
         TableField("feed", "feed", "The feed to cut at."),
         TableField("plunge", "feed", "The feed going straight down."),
     )
@@ -494,6 +582,10 @@ def _size_fields(*, length_of_cut: bool = True) -> tuple[TableField, ...]:
             "How deep it can cut (LOC).",
             True,
             letter="L",
+            how=(
+                "The length of its flutes, from the tip, as the catalog "
+                "gives it."
+            ),
         ),
     )
 
@@ -584,6 +676,10 @@ KINDS: dict[str, TableKind] = {
                     "The kinds of machines the shop has, computer "
                     "controlled or manual (for prep work).",
                     choices=SHOP_MACHINE_KINDS,
+                    how=(
+                        "A list, e.g. `cnc_mill, manual_bandsaw`.  "
+                        "[New Machine] offers these kinds."
+                    ),
                 ),
                 TableField(
                     "machines",
@@ -886,15 +982,16 @@ air = false
             (
                 TableField(
                     "post_processor",
-                    "choice",
-                    "Which dialect of G-code it reads.",
-                    required=True,
-                    choices=("linuxcnc",),
+                    "string",
+                    "A program that rewrites scraftcam's G-code for this "
+                    "controller.",
+                    how=POST_PROCESSOR_HOW,
                 ),
                 TableField(
                     "tool_change",
                     "string",
                     "The lines that change the tool.",
+                    how=TOOL_CHANGE_HOW,
                 ),
                 TableField(
                     "template",
@@ -916,12 +1013,19 @@ air = false
                     "Our reading of `vendor_version`, MAJOR.MINOR.PATCH "
                     '(e.g. "3.43.66"; "0.0.0" when unknown), filled in '
                     "when `vendor_version` is entered.",
+                    how=(
+                        "Filled in for you from `vendor_version`; fix it "
+                        "by hand only when the reading is wrong."
+                    ),
                 ),
                 TableField(
                     "support_ended",
                     "date",
-                    "When the vendor stopped updating it (left out: "
-                    "unknown).",
+                    "When the vendor stopped updating it (left out: unknown).",
+                    how=(
+                        "A date, e.g. `2026-11-14`.  Leave it out while "
+                        "the vendor still updates it."
+                    ),
                 ),
             ),
             True,
@@ -1502,6 +1606,11 @@ hole_diameter = "0.144 in"
                     "each midway between four grid holes, as many as fit, "
                     "centered (none if not given).",
                     letter="Tp",
+                    how=(
+                        'A multiple of `pitch`, e.g. `"2 in"` on a '
+                        "1 in grid; tooling holes locate the plate on the "
+                        "table.  Leave it out for a plate without them."
+                    ),
                 ),
                 TableField(
                     "tooling_tap_diameter",
@@ -1748,6 +1857,12 @@ group = "soft"
                     "Its surface speed, as a share of HSS's (HSS's own is "
                     "100 %).",
                     True,
+                    how=(
+                        'A percentage, e.g. `"250 %"` for carbide, '
+                        "which cuts about two and a half times as fast as "
+                        "HSS.  Every tool of this material has its spindle "
+                        "speed scaled by it."
+                    ),
                 ),
                 TableField(
                     "description", "string", "What it is, in a few words."
@@ -2964,6 +3079,30 @@ def scalar_problem(value: object, schema: TableField) -> str:
     return problem
 
 
+# Function `post_processor_problem()`:
+def post_processor_problem(command: str) -> str:
+    """Return what is wrong with a controller's `post_processor` (#151).
+
+    Arguments:
+    * `command` (`str`): `"linuxcnc"`, or a command that rewrites
+      LinuxCNC G-code.
+
+    Returns:
+    * (`str`): The problem, or `""` if there is none.
+    """
+    if command.strip().lower() == LINUXCNC:
+        return ""
+    missing: list[str] = [
+        name for name in ("{input}", "{output}") if name not in command
+    ]
+    return (
+        f"{command!r} is not `linuxcnc` or a command with "
+        + " and ".join(f"`{name}`" for name in missing)
+        if missing
+        else ""
+    )
+
+
 # Function `_integer_problem()`:
 def _integer_problem(value: object, *, positive: bool) -> str:
     """Return what is wrong with a whole number.
@@ -3046,6 +3185,10 @@ def _string_problem(value: object, schema: TableField) -> str:
             + ", ".join(f'"{choice}"' for choice in schema.choices)
             + also
         )
+
+    # A controller's post processor: LinuxCNC, or a command (#151).
+    if schema.key == "post_processor":
+        return post_processor_problem(value)
 
     # A version has the same major version, and no newer minor one.
     if schema.form == "version":
@@ -3432,9 +3575,9 @@ def cnc_machine(
     Raises:
     * `ValueError`:
       If the shop has no such machine, the machine is not initialized
-      yet (`not_initialized()`) or has no `preferences`, a loaded tool other than a drill has no `rpm`,
-      `feed` or `plunge`, or a drill has no speed and feed for the
-      material.
+      yet (`not_initialized()`) or has no `preferences`, a loaded tool
+      other than a drill has no `rpm`, `feed` or `plunge`, or a drill
+      has no speed and feed for the material.
     """
     # Find the machine, initialized, and its preferences.
     machine: dict[str, object] = _machine(shop, name)

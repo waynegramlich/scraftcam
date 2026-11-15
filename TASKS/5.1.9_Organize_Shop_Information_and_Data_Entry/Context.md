@@ -232,3 +232,106 @@ when the user likes it (#85, #112).
 * Not run: the whole test suite; the LinuxCNC end-to-end suite.
 * Related tasks made: `T.cpfj~5.7` (carousel planning for a job),
   `T.rslsao~5.8` (several LinuxCNC simulators at once), both Pending.
+
+## Shop and Controller Panels (#147-#151, 2026-11-14)
+
+Decided with the user after a `show_demo.py` run; coding started.
+Tests: only small changes until the user approves the design.
+* #147: every directory in the tree is "(directory)", "(folder)" on
+  Windows, the shop's root included.
+* #148: (1) bug: `tree.edit_path()` gave shop `.toml` items no file,
+  so neither [Enable Editing] nor [Edit] showed; every shop item gets
+  its `.toml` (the root `shop.toml`).  (2) `units` is a choice:
+  "imperial (in)" / "metric (mm)", stored `in`/`mm`.  (3) [Edit] is
+  [Edit TOML File]; the TOML text is dropped from every panel.
+* #149: each field row has a ▶/▼ toggling how to fill it in (help
+  text in `KINDS`); `kind` shown, never editable.
+* #150: a directory's panel shows an explanation of what it holds
+  (not a list; the tree's ▶/▼ shows that).  `controllers/` text as
+  drafted; `machines/` keeps its list (#134).
+* #151: (1) `post_processor` stays: left out or "linuxcnc" is
+  built in; otherwise a command with `{input}` and `{output}` that
+  rewrites scraftcam's LinuxCNC G-code; an error stops the job.  (2)
+  `template` not listed in a controller file; in a machine's copy
+  read only, "Copied from: NAME (`controllers/FILE`)".  (3)
+  `tool_change` help as drafted (`{number}`, `{number:02d}`,
+  `{description}`, the MSG/M0/M6/G43 example).
+* Coded 2026-11-14 (checkers clean, small GUI/shop tests pass; no
+  new tests until the user approves the design): #147
+  (`Node.label()`), #148.1 (`edit_path()`), #148.2 (closed choices are
+  drop-downs: `Panel._choice_entry()`, `CHOICE_LABELS`), #148.3
+  (`EDIT`; TOML text hidden; `Panel.fit()` lays out first), #149
+  (`TableField.how`, `fields.field_help()`, `toggle_help()`; only
+  `tool_change` and `post_processor` have `how` yet), #150
+  (`tree.EXPLANATIONS`; all but `controllers` are drafts), #151.1
+  (`post_processor` a checked string, `post_processor_problem()`,
+  `gcode.post_process()`: not yet called anywhere, as only LinuxCNC
+  runs), #151.2 (`templates.copied_from()`, `Panel.copied`).
+  `Shops.md` and schemas regenerated.  Open: tables inside an item
+  (controller, axes, spindle) are no longer shown at all; proposed ▶
+  headings with indented rows.
+* #152-#155 (2026-11-14, after the user's demo run): the guide's
+  wording is the user's (`GUIDE`); #152 "Shop: / Design:" gone from
+  the top line (the title bar has them); #153 [Enable Editing] and
+  [Edit TOML File] are in each panel, under its title
+  (`Panel.edit_row`, `editing_box`, `edit_button`, `edit_file`;
+  `Window.edit(panel)`); #154 machine panels stay sticky while
+  running; before a start the user's answer ("keep them sticky") to
+  be confirmed; the click elsewhere goes to a squeezed new panel
+  (`free_panel()`), to be made visible; the huge machine panel later.
+* #154 coded 2026-11-14 (awaiting the user's demo run): the
+  `machines/` list shows active machines first (`is_active()`: busy,
+  or a program loaded; paused or waiting counts), each an
+  `ActiveBlock` (state, details, job bar from `Report`, next-task bar,
+  tool plan); then "Not active" a line each in tree order
+  (`idle_line()`); tools to fetch only for active machines; the list
+  is laid out again when the active set changes.  `MachineControl`
+  has `report` (default `no_report`); `run.py`'s `report()` reads the
+  HMI's `lines`, `sums`, `at`, `progress_line()`, `plan`.  A machine's
+  panel is sticky only while it is active (`free_panel()`,
+  `Panel.drop_machine()`).
+* #156-#157 decided 2026-11-14 (#1-#16 of that round): [Close Panel]
+  on each panel but a last one; an active machine's asks to stop it
+  first; [Detach] -> own small window, [Reattach]; tree clicks never
+  go to a detached panel; closing one follows [Close Panel]; [Exit
+  Program] replaces the top line's [x], asking to stop all running
+  machines first; the window manager's close does the same; minimal
+  form shows neither panel button.  Coded so far: [Close Panel]
+  (`Window.close_panel()`, `show_close_buttons()`,
+  `Panel.close_button`), [Exit Program] (`EXIT`, still today's
+  refusal while running).  Not yet: [Detach]/[Reattach], the
+  stop-all question on exit, hiding [Close Panel] in the minimal form.
+* #157 coded 2026-11-14: [Detach]/[Reattach] (`Window.detach_panel()`,
+  `DetachedWindow`, `Window.detached`, `holder()`, `all_panels()`);
+  its title bar close is [Close Panel].  Not yet: closing the main
+  window closing its detached ones; the exit question; minimal form.
+* 2026-11-14: [Exit Program] (`Window.exit_program()`) and the title
+  bar's close (a spontaneous `closeEvent`) ask "X is running.  Stop
+  them all and exit?" (`ask_to_stop()`); closing the main window
+  deletes its detached windows; the minimal form hides [Detach] and
+  [Close Panel].  Left: a panel or window closing by itself once its
+  machine has stopped.
+* 2026-11-14: a panel told to close while its machine stops closes
+  once it has (`Window.closing`, `follow_machines()`); [Exit Program]
+  likewise (`Window.exiting`).
+
+## Where Things Stand (2026-11-14, end of session)
+
+#147-#157 are decided and coded (see the entries above); the user
+has not yet run the demo on #152-#157.  Help texts and the
+directory explanations other than `controllers/` are Claude's
+drafts for the user to revise; `rpm` "overrides for every material"
+and `tooling_pitch` "a multiple of `pitch`" are not checked against
+the code.  Next:
+1. The user's demo run of #147-#157 and feedback.
+2. Tables inside an item (a machine's controller, axes, spindle,
+   preferences, carousel) are not shown since the TOML text went;
+   proposed: a ▶ heading per table, collapsed, with indented rows
+   (not agreed yet).  Their fields' help waits on it.
+3. Tests for [Close Panel], [Detach]/[Reattach], the exit question,
+   the drop-downs and field help, once the user approves the design.
+4. `gcode.post_process()` is not called yet (only LinuxCNC runs).
+5. The huge machine panel (#105) is still to be redone.
+Tests run this session: `test_gui_window`, `test_gui_machines`,
+`test_gui_fields`, `test_gui_tree`, `test_gui_templates`,
+`test_shops`, `test_shop_schema`, `test_gcode`; all pass.

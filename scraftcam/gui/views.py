@@ -28,8 +28,8 @@ from .app import App
 from .fields import (
     Row,
     check,
+    field_help,
     read_item,
-    rest_text,
     rows,
     sketches,
     with_value,
@@ -41,9 +41,25 @@ from .machines import (
     MachineTab,
     is_machines_directory,
 )
-from .templates import FollowUp, FollowUpView, follow_ups, is_template
+from .templates import (
+    FollowUp,
+    FollowUpView,
+    copied_from,
+    follow_ups,
+    is_template,
+)
 from .theme import colors, sketch_text
-from .tree import DIRECTORY, ERROR, FILE, PACKAGE, SHOP, Node, docstring
+from .tree import (
+    DIRECTORY,
+    ERROR,
+    EXPLANATIONS,
+    FILE,
+    PACKAGE,
+    SHOP,
+    Node,
+    docstring,
+    edit_path,
+)
 
 # `PySide6` lives in `~/.scraftcam/packages/`, so it is put on
 # `sys.path` (and fetched, the first time) before it is imported.
@@ -66,15 +82,20 @@ from PySide6.QtGui import (  # noqa: E402
 )
 from PySide6.QtSvgWidgets import QSvgWidget  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
+    QCheckBox,
+    QComboBox,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QLayout,
     QLineEdit,
     QPlainTextEdit,
+    QPushButton,
     QScrollArea,
     QSplitter,
     QSplitterHandle,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -83,9 +104,23 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 # pylint: enable=wrong-import-position,wrong-import-order
 
+# [Edit TOML File]'s label (#148).
+EDIT: str = "Edit TOML File"
+
 # A splitter's handle: wide enough to see and grab, in the palette's
 # colors, so it shows in light and dark mode alike (#25).
 HANDLE_WIDTH: int = 7
+
+# A field's entry: a line, the notes' lines, or a closed choice's
+# drop-down (#148).
+Entry = QLineEdit | QPlainTextEdit | QComboBox
+
+# What a choice's drop-down shows for a value, where its value alone
+# does not say enough (#148).
+CHOICE_LABELS: dict[str, str] = {
+    "in": "imperial (in)",
+    "mm": "metric (mm)",
+}
 HANDLE_STYLE: str = (
     "QSplitter::handle { background: palette(mid); } "
     "QSplitter::handle:hover { background: palette(highlight); }"
@@ -133,10 +168,75 @@ def item_text(node: Node) -> str:
         except (OSError, UnicodeDecodeError) as error:
             return f"{node.path}: can not be read: {error}"
     if node.kind == DIRECTORY:
-        return f"{node.path}\n{len(node.children)} items."
+        return EXPLANATIONS.get(
+            node.path.name, f"{node.path}\n{len(node.children)} items."
+        )
     if node.kind == PACKAGE and not (node.path / "__init__.py").is_file():
         return f"{node.path}"
     return docstring(node.path)
+
+
+# Function `toggle_help()`:
+def toggle_help(arrow: QToolButton, about: QLabel) -> None:
+    """Show or hide how to fill in a field, turning its ▶ to ▼ (#149).
+
+    Arguments:
+    * `arrow` (`QToolButton`): The field's ▶.
+    * `about` (`QLabel`): How to fill it in.
+    """
+    about.setVisible(about.isHidden())
+    arrow.setArrowType(
+        Qt.ArrowType.RightArrow if about.isHidden() else Qt.ArrowType.DownArrow
+    )
+
+
+# Function `entry_text()`:
+def entry_text(entry: Entry) -> str:
+    """Return what a field's entry holds, as the file would.
+
+    Arguments:
+    * `entry` (`Entry`): The entry.
+
+    Returns:
+    * (`str`): Its text, or a drop-down's value (#148).
+    """
+    if isinstance(entry, QComboBox):
+        return str(entry.currentData())
+    if isinstance(entry, QPlainTextEdit):
+        return entry.toPlainText()
+    return entry.text()
+
+
+# Function `read_only()`:
+def read_only(entry: Entry, fixed: bool) -> None:
+    """Make a field's entry read only, or editable.
+
+    Arguments:
+    * `entry` (`Entry`): The entry.
+    * `fixed` (`bool`): True for read only (a drop-down is greyed).
+    """
+    if isinstance(entry, QComboBox):
+        entry.setEnabled(not fixed)
+    else:
+        entry.setReadOnly(fixed)
+
+
+# Function `text_view()`:
+def text_view() -> QPlainTextEdit:
+    """Return a panel's text: read only, not wrapped.
+
+    Returns:
+    * (`QPlainTextEdit`): The text.
+    """
+    text: QPlainTextEdit = QPlainTextEdit()
+    text.setReadOnly(True)
+    text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+    return text
+
+
+# Function `no_edit()`:
+def no_edit() -> None:
+    """Do nothing: a panel's `edit_file` until the window's."""
 
 
 # Function `no_controls()`:
@@ -206,7 +306,10 @@ def missing_label() -> QLabel:
 
 
 # Class `Panel`:
-class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
+# A panel shows an item, a machine, the guide or the `machines/`
+# summary, each with its own few methods, so the counts are fine.
+# pylint: disable-next=too-many-instance-attributes,too-many-public-methods
+class Panel(QFrame):
     """A panel: shows one item, outlined while it is the current one.
 
     Attributes:
@@ -227,6 +330,8 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
       own panel, by name (set by the window).
     * `guide` (`QLabel`): The guide shown at start, until an item or
       machine is (#139).
+    * `copied` (`QLabel`): Which template a machine's controller
+      was copied from (#151), hidden when none.
     * `missing` (`QLabel`): The fields the item needs to run that it
       does not have yet, "Not initialized yet" (#145), hidden when
       none.
@@ -237,8 +342,23 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
     * `editing` (`bool`): True while its fields may be edited
       ([Enable Editing], #140); a new item starts read only, unless
       it was just made.
+    * `edit_row` (`QWidget`): [Enable Editing] and [Edit TOML File],
+      under the title, for an item that can be edited (#153).
+    * `editing_box` (`QCheckBox`): [Enable Editing].
+    * `edit_button` (`QPushButton`): [Edit TOML File], greyed while
+      [Enable Editing] is unchecked.
+    * `edit_file` (`Callable[[], None]`): What [Edit TOML File] calls
+      (set by the window).
+    * `close_button` (`QPushButton`): [Close Panel], at the right end
+      of the title line (#156), hidden on a window's last panel.
+    * `close_panel` (`Callable[[], None]`): What [Close Panel] calls
+      (set by the window).
+    * `detach_button` (`QPushButton`): [Detach], or [Reattach] while
+      the panel is in a window of its own (#157).
+    * `detach_panel` (`Callable[[], None]`): What it calls (set by the
+      window).
     * `clicked` (`Signal`): Sent when the panel is clicked.
-    * `entries` (`dict[str, QLineEdit | QPlainTextEdit]`): Each
+    * `entries` (`dict[str, Entry]`): Each
       field's entry, by key.
     * `fields` (`QScrollArea`): The field rows, hidden for an item
       that has none.
@@ -274,11 +394,15 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         self.editing: bool = False
         self.follow_up: FollowUpView | None = None
         self.say: Callable[[str], None] = no_machine
+        self.edit_file: Callable[[], None] = no_edit
+        self.close_panel: Callable[[], None] = no_edit
+        self.detach_panel: Callable[[], None] = no_edit
         self.guide: QLabel = guide_label()
         self.missing: QLabel = missing_label()
+        self.copied: QLabel = missing_label()
         self.item: dict[str, object] = {}
         self.rows: list[Row] = []
-        self.entries: dict[str, QLineEdit | QPlainTextEdit] = {}
+        self.entries: dict[str, Entry] = {}
         self.shown: dict[str, QLabel] = {}
         self.units: str = "in"
         self.written: str = ""
@@ -291,13 +415,18 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         self.views: list[QSvgWidget] = []
         QVBoxLayout(self.sketch).setContentsMargins(0, 0, 0, 0)
         self.sketch.hide()
-        self.text: QPlainTextEdit = QPlainTextEdit()
-        self.text.setReadOnly(True)
-        self.text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.text: QPlainTextEdit = text_view()
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.addWidget(self.title)
+        self.close_button: QPushButton = QPushButton("Close Panel")
+        self.detach_button: QPushButton = QPushButton("Detach")
+        layout.addLayout(self._make_title_line())
+        self.editing_box: QCheckBox = QCheckBox("Enable Editing")
+        self.edit_button: QPushButton = QPushButton(EDIT)
+        self.edit_row: QWidget = self._make_edit_row()
+        layout.addWidget(self.edit_row)
         layout.addWidget(self.missing)
+        layout.addWidget(self.copied)
 
         # The field rows, with the sketch to their right, above the
         # text; the user drags the lines between them (#25).
@@ -330,7 +459,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
             self.clicked.emit()
         elif event.type() == QEvent.Type.FocusOut:
             key: str
-            entry: QLineEdit | QPlainTextEdit
+            entry: Entry
             for key, entry in self.entries.items():
                 if entry is watched:
                     self.write(key)
@@ -363,11 +492,33 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         self.node = None
         self.title.hide()
         self.split.hide()
+        self._show_edit_row()
         self.header = MachineTab(machine.name)
         layout: QLayout | None = self.layout()
         assert isinstance(layout, QVBoxLayout)
         layout.addWidget(self.header)
         layout.addWidget(machine.widget, 1)
+        machine.widget.show()
+
+    def drop_machine(self) -> None:
+        """Give up the machine shown, if any, so an item can be (#154).
+
+        Only for a machine that is not active; its controls are kept
+        (hidden, with no parent) until it is opened again.
+        """
+        if not self.machines:
+            return
+        layout: QLayout | None = self.layout()
+        assert layout is not None
+        machine: MachineControl = self.machines.pop()
+        layout.removeWidget(machine.widget)
+        machine.widget.hide()
+        machine.widget.setParent(None)
+        if self.header is not None:
+            layout.removeWidget(self.header)
+            self.header.deleteLater()
+            self.header = None
+        self.title.show()
 
     def show_dues(self, blink: bool) -> None:
         """Bring the machine's bar, or the summary, up to date (#102).
@@ -389,11 +540,78 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         self.editing = editing
         row: Row
         for row in self.rows:
-            entry: QLineEdit | QPlainTextEdit | None = self.entries.get(
-                row.schema.key
-            )
+            entry: Entry | None = self.entries.get(row.schema.key)
             if entry is not None:
-                entry.setReadOnly(not (row.editable and editing))
+                read_only(entry, not (row.editable and editing))
+        self._show_edit_row()
+
+    def _make_title_line(self) -> QHBoxLayout:
+        """Make the title line: the title, then [Close Panel] (#156).
+
+        Returns:
+        * (`QHBoxLayout`): The line.
+        """
+        self.close_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.close_button.clicked.connect(self._press_close)
+        self.close_button.hide()
+        self.detach_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.detach_button.clicked.connect(self._press_detach)
+        line: QHBoxLayout = QHBoxLayout()
+        line.addWidget(self.title, 1)
+        line.addWidget(self.detach_button)
+        line.addWidget(self.close_button)
+        return line
+
+    def _make_edit_row(self) -> QWidget:
+        """Make the row of [Enable Editing] and [Edit TOML File] (#153).
+
+        Returns:
+        * (`QWidget`): The row, hidden until an item can be edited.
+        """
+        self.editing_box.setToolTip(
+            "Let this item be changed, here or with [Edit TOML File]"
+        )
+        self.editing_box.toggled.connect(self.set_editing)
+        self.edit_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.edit_button.clicked.connect(self._press_edit)
+        row: QWidget = QWidget()
+        line: QHBoxLayout = QHBoxLayout(row)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.addWidget(self.editing_box)
+        line.addWidget(self.edit_button)
+        line.addStretch(1)
+        row.hide()
+        return row
+
+    def _show_edit_row(self) -> None:
+        """Show [Enable Editing] and [Edit TOML File] if they fit (#153).
+
+        Only for an item with a file to edit, never with a machine,
+        the `machines/` summary or the guide.
+        """
+        self.edit_row.setVisible(
+            self.node is not None
+            and not self.machines
+            and self.summary is None
+            and edit_path(self.node) is not None
+        )
+        self.editing_box.blockSignals(True)
+        self.editing_box.setChecked(self.editing)
+        self.editing_box.blockSignals(False)
+        self.edit_button.setEnabled(self.editing)
+
+    def _press_close(self) -> None:
+        """Close the panel ([Close Panel], #156)."""
+        self.close_panel()
+
+    def _press_detach(self) -> None:
+        """Detach or reattach the panel (#157)."""
+        self.detach_panel()
+
+    def _press_edit(self) -> None:
+        """Open the item's file in an editor ([Edit TOML File])."""
+        self.clicked.emit()
+        self.edit_file()
 
     def show_guide(self, text: str) -> None:
         """Show the guide, until an item or a machine is shown (#139).
@@ -406,6 +624,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         self.split.hide()
         self.guide.setText(text)
         self.guide.show()
+        self._show_edit_row()
 
     def drop_summary(self) -> None:
         """Take the `machines/` summary away, if it is shown."""
@@ -445,6 +664,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
             self.show_follow_ups([])
         self.node = node
         self.units = units
+        self._show_edit_row()
         if same and self.written and node.kind in (SHOP, FILE):
             try:
                 if node.path.read_text(encoding="utf-8") == self.written:
@@ -454,6 +674,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         self.written = ""
         self.drop_summary()
         self.missing.hide()
+        self.copied.hide()
 
         # The `machines/` directory: its summary, in place of the rest.
         self.guide.hide()
@@ -490,9 +711,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
             return
         self.fill_rows()
         self.show_missing()
-        rest: str = rest_text(self.item)
-        self.text.setVisible(bool(rest))
-        self.text.setPlainText(rest)
+        self.text.hide()
 
         # A template changed outside the panel ([Edit]): follow it up
         # (#142).
@@ -511,6 +730,14 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         lines, though never above a third of the panel.  What the user
         drags stays until the next item is shown.
         """
+        # Lay the panel out first: with no text below, nothing else
+        # makes Qt size the lines before they are measured (#148).
+        panel_layout: QLayout | None = self.layout()
+        if panel_layout is not None:
+            panel_layout.activate()
+        self.split.refresh()
+        self.top.refresh()
+
         # Across: the rows' width, with their scroll bar and frame.
         frame: int = 2 * self.fields.frameWidth()
         content: QWidget | None = self.fields.widget()
@@ -533,6 +760,8 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
                 down // 3,
             )
             self.split.setSizes([down - text_height, text_height])
+        elif down > 0:
+            self.split.setSizes([down, 0])
 
     def restyle(self) -> None:
         """Draw the panel again, in the scheme now in use (#24)."""
@@ -579,7 +808,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         """Make a row per field: its key, its entry, its value shown."""
         grid_widget: QWidget = QWidget()
         grid: QGridLayout = QGridLayout(grid_widget)
-        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
         self.entries = {}
         self.shown = {}
         number: int
@@ -589,7 +818,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
             letter: str = row.schema.letter
             label: QLabel = QLabel(f"{key} ({letter})" if letter else key)
             label.setToolTip(row.schema.meaning)
-            entry: QLineEdit | QPlainTextEdit
+            entry: Entry
             if key == "notes":
                 entry = QPlainTextEdit(row.text)
                 entry.setFixedHeight(4 * entry.fontMetrics().height() + 12)
@@ -597,23 +826,40 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
                     functools.partial(self.notes_typed, key)
                 )
                 entry.installEventFilter(self)
+            elif row.schema.form == "choice" and not row.schema.open:
+                entry = self._choice_entry(row)
             else:
                 entry = QLineEdit(row.text)
                 entry.textEdited.connect(functools.partial(self.typed, key))
                 entry.editingFinished.connect(
                     functools.partial(self.write, key)
                 )
-            entry.setReadOnly(not (row.editable and self.editing))
+            read_only(entry, not (row.editable and self.editing))
             entry.setToolTip(row.schema.meaning)
             shown: QLabel = QLabel(row.shown)
             shown.setStyleSheet(f"color: {colors().quiet}")
-            grid.addWidget(label, number, 0, Qt.AlignmentFlag.AlignTop)
-            grid.addWidget(entry, number, 1)
-            grid.addWidget(shown, number, 2, Qt.AlignmentFlag.AlignTop)
+
+            # Its ▶, which shows or hides how to fill it in, under it
+            # (#149).
+            about: QLabel = QLabel(field_help(row.schema))
+            about.setTextFormat(Qt.TextFormat.MarkdownText)
+            about.setWordWrap(True)
+            about.hide()
+            arrow: QToolButton = QToolButton()
+            arrow.setArrowType(Qt.ArrowType.RightArrow)
+            arrow.setAutoRaise(True)
+            arrow.setToolTip("How to fill it in")
+            arrow.clicked.connect(functools.partial(toggle_help, arrow, about))
+            top: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignTop
+            grid.addWidget(arrow, 2 * number, 0, top)
+            grid.addWidget(label, 2 * number, 1, top)
+            grid.addWidget(entry, 2 * number, 2)
+            grid.addWidget(shown, 2 * number, 3, top)
+            grid.addWidget(about, 2 * number + 1, 1, 1, 3)
             self.entries[key] = entry
             self.shown[key] = shown
             self.look(row)
-        grid.setRowStretch(len(self.rows), 1)
+        grid.setRowStretch(2 * len(self.rows), 1)
         self.fields.setWidget(grid_widget)
         self.fields.show()
 
@@ -634,10 +880,43 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         Arguments:
         * `row` (`Row`): The field.
         """
-        entry: QLineEdit | QPlainTextEdit = self.entries[row.schema.key]
+        entry: Entry = self.entries[row.schema.key]
         entry.setStyleSheet(bad_style() if row.problem else "")
         entry.setToolTip(row.problem or row.schema.meaning)
         self.shown[row.schema.key].setText(row.shown)
+
+    def _choice_entry(self, row: Row) -> QComboBox:
+        """Make a closed choice's drop-down, written once picked (#148).
+
+        Arguments:
+        * `row` (`Row`): The field.
+
+        Returns:
+        * (`QComboBox`): The drop-down, on the row's value (blank
+          when it has none or one not in the choices).
+        """
+        box: QComboBox = QComboBox()
+        if row.text not in row.schema.choices:
+            box.addItem(row.text, row.text)
+        choice: str
+        for choice in row.schema.choices:
+            box.addItem(CHOICE_LABELS.get(choice, choice), choice)
+        box.setCurrentIndex(box.findData(row.text))
+        box.activated.connect(
+            functools.partial(self._picked, row.schema.key, box)
+        )
+        return box
+
+    def _picked(self, key: str, box: QComboBox, _index: int) -> None:
+        """Check and write a choice just picked (#148).
+
+        Arguments:
+        * `key` (`str`): The field's key.
+        * `box` (`QComboBox`): Its drop-down.
+        * `_index` (`int`): The item picked (`box` says its value).
+        """
+        self.typed(key, str(box.currentData()))
+        self.write(key)
 
     def typed(self, key: str, text: str) -> None:
         """Check a field as it is typed (#15).
@@ -656,7 +935,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
         Arguments:
         * `key` (`str`): The field's key.
         """
-        entry: QLineEdit | QPlainTextEdit = self.entries[key]
+        entry: Entry = self.entries[key]
         if isinstance(entry, QPlainTextEdit):
             self.typed(key, entry.toPlainText())
 
@@ -673,9 +952,7 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
             return
 
         # A controller's `vendor_version`: our reading of it too (#144).
-        triple: QLineEdit | QPlainTextEdit | None = self.entries.get(
-            "vendor_triple"
-        )
+        triple: Entry | None = self.entries.get("vendor_triple")
         if key == "vendor_version" and changed.get("kind") == "controller":
             changed["vendor_triple"] = vendor_triple(
                 str(changed.get("vendor_version", ""))
@@ -706,6 +983,13 @@ class Panel(QFrame):  # pylint: disable=too-many-instance-attributes
             "Not initialized yet: " + ", ".join(missing) if missing else ""
         )
         self.missing.setVisible(bool(missing))
+        copied: str = (
+            copied_from(self.node.path, self.item)
+            if self.node is not None
+            else ""
+        )
+        self.copied.setText(copied)
+        self.copied.setVisible(bool(copied))
 
     def show_follow_ups(self, found: list[FollowUp]) -> None:
         """Show what a template change means for its machines (#142).
