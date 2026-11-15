@@ -36,6 +36,7 @@ import re
 import sys
 import textwrap
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypeAlias, cast
@@ -128,6 +129,7 @@ FORMS: tuple[str, ...] = (
     "choice_list",
     "version",
     "triple",
+    "page_ranges",
     "date",
     "table",
     "list",
@@ -462,7 +464,14 @@ SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tooling", ("grid_plate",)),
     ("stock_materials", ("materials", "material")),
     ("machines", ("machine",)),
+    ("catalogs", ("catalog",)),
 )
+
+# Where a directory's items are, when not its own `*.toml` files: a
+# catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.cm~5.1.10` #43).
+CATALOG: str = "catalog.toml"
+CATALOG_PAGES: str = "pages"
+ITEM_PATTERNS: dict[str, str] = {"catalogs": f"*/*/{CATALOG}"}
 
 
 # Function `_tool_fields()`:
@@ -714,6 +723,14 @@ KINDS: dict[str, TableKind] = {
                     "What its tools are made of, and how fast each cuts: "
                     "the files in `tool_materials/`.",
                     of="tool_material",
+                ),
+                TableField(
+                    "catalogs",
+                    "list",
+                    "The vendors' catalogs the shop's products come "
+                    "from: the files in `catalogs/`, one in each "
+                    "edition's directory.",
+                    of="catalog",
                 ),
             ),
             True,
@@ -1874,6 +1891,63 @@ name = "carbide"
 speed_factor = "250 %"
 """,
         ),
+        TableKind(
+            "catalog",
+            "A vendor's catalog, one edition of it: "
+            "`catalogs/VENDOR/EDITION/catalog.toml`.  The catalog's "
+            "PDF (or a link to it) and `catxtract`'s working files are "
+            "in `pages/` beside it, never under version control "
+            "(`T.cm~5.1.10` #50, #58).",
+            (
+                TableField("vendor", "string", "Who publishes it.", True),
+                TableField(
+                    "edition", "string", "Which edition (`2026`).", True
+                ),
+                TableField(
+                    "pdf",
+                    "string",
+                    "The PDF's file name, in `pages/`.",
+                    True,
+                ),
+                TableField(
+                    "pages",
+                    "positive_integer",
+                    "How many pages the PDF has.",
+                    True,
+                ),
+                TableField(
+                    "index_pages",
+                    "page_ranges",
+                    "The pages of its index (printed page numbers).",
+                    how=(
+                        "Pages and ranges, e.g. `451-455, 460` (in the "
+                        "file, `[[451, 455], 460]`)."
+                    ),
+                ),
+                TableField(
+                    "page_offset",
+                    "integer",
+                    "The PDF's page number less the printed one (0 if "
+                    "not given).",
+                    how=(
+                        "A catalog whose printed page 1 is the PDF's "
+                        "page 5 has `page_offset = 4`.  Page numbers "
+                        "everywhere else are the printed ones."
+                    ),
+                ),
+                TableField("url", "string", "The vendor's web site."),
+            ),
+            True,
+            """\
+name = "Shars 2026"
+vendor = "Shars"
+edition = "2026"
+pdf = "2026_Shars_Catalog.pdf"
+pages = 456
+index_pages = [[451, 455]]
+url = "https://www.shars.com"
+""",
+        ),
     )
 }
 
@@ -2551,7 +2625,8 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
         kinds: tuple[str, ...]
         for directory, kinds in SHOP_DIRECTORIES:
             path: Path
-            for path in sorted((self.directory / directory).glob("*.toml")):
+            pattern: str = ITEM_PATTERNS.get(directory, "*.toml")
+            for path in sorted((self.directory / directory).glob(pattern)):
                 item: dict[str, object] | None = self.item(path, kinds)
                 if item is not None:
                     found.setdefault(str(item["kind"]), []).append(item)
@@ -2561,6 +2636,7 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
         shop["tools"] = [collection("tools", "Tools", found)]
         shop["tooling"] = [collection("tooling", "Tooling", found)]
         shop["tool_materials"] = found.get("tool_material", [])
+        shop["catalogs"] = found.get("catalog", [])
         cutting: list[dict[str, object]] = found.get("materials", [])
         if cutting:
             materials: dict[str, object] = dict(cutting[0])
@@ -3062,8 +3138,8 @@ def scalar_problem(value: object, schema: TableField) -> str:
             problem = f"{value!r} is not MAJOR.MINOR.PATCH (such as 2.9.4)"
     elif form in ("integer", "positive_integer"):
         problem = _integer_problem(value, positive=form == "positive_integer")
-    elif form == "holder_list":
-        problem = _holder_problem(value)
+    elif form in VALUE_PROBLEMS:
+        problem = VALUE_PROBLEMS[form](value)
     elif form == "boolean":
         if not isinstance(value, bool):
             problem = f"{value!r} is not `true` or `false`"
@@ -3072,8 +3148,6 @@ def scalar_problem(value: object, schema: TableField) -> str:
             value, datetime.datetime
         ):
             problem = f"{value!r} is not a date (such as 2026-10-27)"
-    elif form == "t_numbers":
-        problem = _t_numbers_problem(value)
     elif form == "choice_list":
         problem = _choice_list_problem(value, schema)
     return problem
@@ -3141,6 +3215,78 @@ def _choice_list_problem(value: object, schema: TableField) -> str:
         if problem:
             return problem
     return ""
+
+
+# Function `_page_ranges_problem()`:
+def _page_ranges_problem(value: object) -> str:
+    """Return what is wrong with a list of page ranges (#63).
+
+    Arguments:
+    * `value` (`object`): The value: a list of pages (`460`) and
+      ranges (`[451, 455]`, first below last).
+
+    Returns:
+    * (`str`): The first problem, or `""` if there is none.
+    """
+    if not isinstance(value, list) or not value:
+        return f"{value!r} is not a list of pages and ranges"
+    item: object
+    for item in value:
+        # A page, or a list of two pages.
+        pages: list[object] = item if isinstance(item, list) else [item]
+        good: bool = all(
+            isinstance(page, int) and not isinstance(page, bool) and page >= 1
+            for page in pages
+        )
+        if not good or len(pages) != (2 if isinstance(item, list) else 1):
+            return f"{item!r} is not a page (460) or a range ([451, 455])"
+
+        # A range goes up.
+        if len(pages) == 2 and cast(int, pages[0]) >= cast(int, pages[1]):
+            return f"{item!r}: the first page must come before the last"
+    return ""
+
+
+# Function `page_ranges_text()`:
+def page_ranges_text(value: object) -> str:
+    """Return a list of page ranges as a panel shows it (#63).
+
+    Arguments:
+    * `value` (`object`): The list (`[[451, 455], 460]`).
+
+    Returns:
+    * (`str`): E.g. `"451-455, 460"`; `""` for no value.
+    """
+    if not isinstance(value, list):
+        return "" if value is None else str(value)
+    return ", ".join(
+        "-".join(str(page) for page in item)
+        if isinstance(item, list)
+        else str(item)
+        for item in value
+    )
+
+
+# Function `page_ranges_value()`:
+def page_ranges_value(text: str) -> object:
+    """Return the list of page ranges that a text stands for (#63).
+
+    Arguments:
+    * `text` (`str`): E.g. `"451-455, 460"`.
+
+    Returns:
+    * (`object`): E.g. `[[451, 455], 460]`, or `text` itself when it
+      is not pages and ranges.
+    """
+    value: list[object] = []
+    piece: str
+    for piece in text.split(","):
+        pages: list[str] = [page.strip() for page in piece.split("-")]
+        if len(pages) > 2 or not all(page.isdigit() for page in pages):
+            return text
+        numbers: list[int] = [int(page) for page in pages]
+        value.append(numbers if len(numbers) == 2 else numbers[0])
+    return value
 
 
 # Function `_chosen()`:
@@ -3248,6 +3394,14 @@ def _t_numbers_problem(value: object) -> str:
         if not isinstance(name, str):
             return f"T{number}: {name!r} is not a tool name"
     return ""
+
+
+# The forms checked by a function of the value alone.
+VALUE_PROBLEMS: dict[str, Callable[[object], str]] = {
+    "holder_list": _holder_problem,
+    "t_numbers": _t_numbers_problem,
+    "page_ranges": _page_ranges_problem,
+}
 
 
 # Function `collection()`:

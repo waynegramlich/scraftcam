@@ -15,6 +15,7 @@ from tests import qt_app
 
 # The example shop, and the new `tool_change` the tests give LinuxCNC.
 SHOP: Path = Path("examples/shop")
+
 NEW: str = "T{number:02d} M6"
 
 
@@ -45,7 +46,9 @@ class FollowUpTest(unittest.TestCase):
             tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         )
         self.top: Path = Path(temporary).resolve() / "shop"
-        shutil.copytree(SHOP, self.top)
+        shutil.copytree(
+            SHOP, self.top, ignore=shutil.ignore_patterns("catalogs")
+        )
         self.template: Path = self.top / "controllers" / "linuxcnc.toml"
         self.mill: Path = self.top / "machines" / "shop_mill.toml"
         self.router: Path = self.top / "machines" / "shop_router.toml"
@@ -122,7 +125,9 @@ class VersionTest(unittest.TestCase):
                 tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
             )
         )
-        shutil.copytree(SHOP, top / "shop")
+        shutil.copytree(
+            SHOP, top / "shop", ignore=shutil.ignore_patterns("catalogs")
+        )
         template: Path = top / "shop" / "controllers" / "linuxcnc.toml"
         panel: Panel = Panel(1)
         panel.show_node(Node("linuxcnc.toml", FILE, template, ""))

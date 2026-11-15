@@ -56,6 +56,21 @@ SIMPLE: dict[str, dict[str, object]] = {
     "positive_integer": {"type": "integer", "minimum": 1},
     "boolean": {"type": "boolean"},
     "date": {"format": "date"},
+    "page_ranges": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+            "anyOf": [
+                {"type": "integer", "minimum": 1},
+                {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 1},
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
+            ]
+        },
+    },
     "holder_list": {
         "type": "array",
         "items": {"type": "string"},

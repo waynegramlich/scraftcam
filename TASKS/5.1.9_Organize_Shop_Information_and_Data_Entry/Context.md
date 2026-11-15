@@ -333,3 +333,11 @@ Open items (numbers sticky):
 Tests run this session: `test_gui_window`, `test_gui_machines`,
 `test_gui_port` (two stale expectations fixed), `test_lcnc_hmi`;
 all pass.  Not run: the whole suite; the LinuxCNC end-to-end suite.
+
+## 2026-11-15: Changes from `T.cm~5.1.10`
+
+A shop item's panel may have [Open Pages] beside [Edit TOML File]
+(catalogs only, `Panel.pages_button`); the action rows gained
+"catalogs/: [New Catalog]" (for the shop's root and `catalogs/`).
+`fields.PLAIN` has the new `page_ranges` form.  Tests copying
+`examples/shop` leave `catalogs/` out.

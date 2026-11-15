@@ -21,6 +21,8 @@ from ..shops import (
     UNITS,
     TableField,
     measure,
+    page_ranges_text,
+    page_ranges_value,
     scalar_problem,
 )
 
@@ -39,6 +41,7 @@ PLAIN: tuple[str, ...] = (
     "date",
     "version",
     "triple",
+    "page_ranges",
 )
 
 # The header keys shown but not edited: changing them changes what
@@ -117,6 +120,8 @@ def value_of(text: str, schema: TableField) -> tuple[object, str]:
             value = int(text)
         elif form == "date":
             value = datetime.date.fromisoformat(text.strip())
+        elif form == "page_ranges":
+            value = page_ranges_value(text)
     except ValueError:
         pass
     if form == "boolean" and text.strip() in ("true", "false"):
@@ -130,6 +135,7 @@ FORM_HELP: dict[str, str] = {
     "date": "A date, year first, e.g. `2026-11-14`.",
     "integer": "A whole number.",
     "positive_integer": "A whole number from 1 up.",
+    "page_ranges": "Pages and ranges, e.g. `451-455, 460`.",
     "triple": "Three numbers, `MAJOR.MINOR.PATCH`, e.g. `3.43.66`.",
 }
 
@@ -263,7 +269,11 @@ def rows(item: dict[str, object], units: str) -> list[Row]:
         value: object = item.get(schema.key)
         row: Row = Row(
             schema,
-            text_of(value),
+            (
+                page_ranges_text(value)
+                if schema.form == "page_ranges"
+                else text_of(value)
+            ),
             schema.key not in FIXED and not is_table(value),
         )
         check(row, row.text, units)

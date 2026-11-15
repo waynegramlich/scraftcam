@@ -121,3 +121,13 @@ kept per shop in `~/.scraftcam/layouts/` and comes back at start.
 The machine panel's tabs and every top line are narrower.  The user:
 "it just works".  Detach/attach designs were tried and dropped.
 Next: tests for it (#207), see `T.osiade~5.1.9`'s `Context.md`.
+
+## 2026-11-15: `T.cm~5.1.10` reopened: catalogs in the shop
+
+Catalogs are `catalogs/VENDOR/EDITION/catalog.toml` in the shop, the
+PDF and `catxtract`'s pages unversioned in `pages/`; [New Catalog]
+and [Open Pages] (a pop-up `catxtract`) in the GUI.  Only purchased
+products go under version control.  First tool from a catalog page:
+the Shars Z setter, `tooling/setters.py` `z_setter(imperial)`, shown
+in SolidCraft.  McMaster-Carr web pages are on hold (their rules).
+See `T.cm~5.1.10`'s `Context.md`.

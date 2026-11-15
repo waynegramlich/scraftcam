@@ -245,7 +245,9 @@ class NewMachineTest(unittest.TestCase):
         """Grey with no template; made with its own copy; editing on."""
         with tempfile.TemporaryDirectory() as temporary:
             top: Path = Path(temporary) / "shop"
-            shutil.copytree(SHOP, top)
+            shutil.copytree(
+                SHOP, top, ignore=shutil.ignore_patterns("catalogs")
+            )
             model: App = App((top / "shop.toml").resolve(), None)
             window: Window = Window(model)
             machines_dir: tree.Node = window.tree.nodes[

@@ -143,7 +143,7 @@ class CopiedShop(unittest.TestCase):
         shutil.copytree(
             EXAMPLES,
             self.directory,
-            ignore=shutil.ignore_patterns(".#*", "#*#", "*~"),
+            ignore=shutil.ignore_patterns(".#*", "#*#", "*~", "catalogs"),
         )
 
     def change(self, name: str, old: str, new: str) -> None:
@@ -732,6 +732,65 @@ class TestNotInitialized(CopiedShop):
         )
         self.assertEqual(shops.scalar_problem("2.9.4", triple), "")
         self.assertIn("MAJOR.MINOR.PATCH", shops.scalar_problem("2.9", triple))
+
+
+class TestCatalogs(CopiedShop):
+    """Catalogs, `catalogs/VENDOR/EDITION/catalog.toml` (T.cm~5.1.10)."""
+
+    CATALOG: str = "catalogs/shars/2026/catalog.toml"
+
+    def setUp(self) -> None:
+        """Add a Shars catalog, with `pages/` beside it."""
+        super().setUp()
+        edition: Path = self.directory / "catalogs" / "shars" / "2026"
+        (edition / "pages").mkdir(parents=True)
+        (edition / "catalog.toml").write_text(
+            'name = "Shars 2026"\n'
+            'kind = "catalog"\n'
+            'language = "English"\n'
+            'version = "0.0.1"\n'
+            'vendor = "Shars"\n'
+            'edition = "2026"\n'
+            'pdf = "2026_Shars_Catalog.pdf"\n'
+            "pages = 456\n"
+            "index_pages = [[451, 455], 460]\n",
+            encoding="utf-8",
+        )
+
+    def test_read(self) -> None:
+        """A catalog two levels down is read; a stray `.toml` is not."""
+        (self.directory / "catalogs" / "stray.toml").write_text("x = 1\n")
+        shop: dict[str, Any] = shops.read(self.directory)
+        self.assertEqual(
+            [catalog["name"] for catalog in shop["catalogs"]], ["Shars 2026"]
+        )
+        self.assertEqual(shop["catalogs"][0]["index_pages"], [[451, 455], 460])
+
+    def test_problems(self) -> None:
+        """A required key left out, and a bad range, are reported."""
+        self.change(self.CATALOG, "pages = 456\n", "")
+        self.change(self.CATALOG, "[451, 455]", "[455, 451]")
+        found: list[str] = self.problems()
+        self.assertTrue(any("pages" in p for p in found), found)
+        self.assertTrue(any("first page must come" in p for p in found))
+
+    def test_page_ranges(self) -> None:
+        """Text and values go both ways; bad ones are refused."""
+        self.assertEqual(
+            shops.page_ranges_value("451-455, 460"), [[451, 455], 460]
+        )
+        self.assertEqual(
+            shops.page_ranges_text([[451, 455], 460]), "451-455, 460"
+        )
+        self.assertEqual(shops.page_ranges_value("4-5-6"), "4-5-6")
+        self.assertEqual(shops.page_ranges_value("x"), "x")
+        schema: shops.TableField = next(
+            f for f in shops.KINDS["catalog"].fields if f.key == "index_pages"
+        )
+        self.assertEqual(shops.scalar_problem([7, [1, 2]], schema), "")
+        bad: object
+        for bad in ([], [0], [True], [[1, 2, 3]], [[3, 3]], "7"):
+            self.assertNotEqual(shops.scalar_problem(bad, schema), "", bad)
 
 
 class TestMarkdown(unittest.TestCase):

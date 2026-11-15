@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..shop_writer import item_text
-from ..shops import FORMAT_VERSION, SHOP_FILE
+from ..shops import CATALOG, CATALOG_PAGES, FORMAT_VERSION, SHOP_FILE
 from .tree import DESIGN_LIMIT, Node, design_tree, shop_tree
 
 # What the top line shows for a shop or a design that is missing.
@@ -70,6 +70,7 @@ NEW_AXES: dict[str, tuple[str, ...]] = {
     "router": ("X", "Y", "Z"),
 }
 MACHINES: str = "machines"
+CATALOGS: str = "catalogs"
 
 # The directory a new shop is offered in, under the current one.
 NEW_SHOP_DIRECTORY: str = "shop"
@@ -80,6 +81,15 @@ VERSION_CONTROLS: tuple[tuple[str, str], ...] = (
     ("git", ".git"),
     ("hg", ".hg"),
 )
+
+# A catalog's `pages/` is never under version control (`T.cm~5.1.10`
+# #50, #58): the line that keeps it out, per ignore file, for any
+# catalog wherever the shop is in the repository.
+IGNORE_LINES: dict[str, str] = {
+    ".git": "**/catalogs/*/*/pages/",
+    ".hg": "re:(^|/)catalogs/[^/]+/[^/]+/pages/",
+}
+IGNORE_FILES: dict[str, str] = {".git": ".gitignore", ".hg": ".hgignore"}
 
 
 # Class `Message`:
@@ -204,6 +214,114 @@ def version_control_hint(directory: Path) -> str:
     return (
         f"The shop is not under version control; "
         f"e.g. `{installed[0]} init` in {directory}."
+    )
+
+
+# Function `ignores_needed()`:
+def ignores_needed(directory: Path) -> list[tuple[Path, str]]:
+    """Return the ignore lines a shop's catalogs still need (#51).
+
+    Arguments:
+    * `directory` (`Path`): The shop's directory.
+
+    Returns:
+    * (`list[tuple[Path, str]]`): Each ignore file of the nearest
+      repository (`.gitignore`, `.hgignore`) that lacks its line,
+      with the line; `[]` outside a repository.
+    """
+    top: Path
+    for top in (directory.resolve(), *directory.resolve().parents):
+        found: list[str] = [
+            marker for marker in IGNORE_LINES if (top / marker).exists()
+        ]
+        if found:
+            needed: list[tuple[Path, str]] = []
+            marker: str
+            for marker in found:
+                path: Path = top / IGNORE_FILES[marker]
+                text: str = (
+                    path.read_text(encoding="utf-8") if path.exists() else ""
+                )
+                if IGNORE_LINES[marker] not in text.splitlines():
+                    needed.append((path, IGNORE_LINES[marker]))
+            return needed
+    return []
+
+
+# Function `add_ignores()`:
+def add_ignores(needed: list[tuple[Path, str]]) -> None:
+    """Add ignore lines at the end of their files (#51).
+
+    Arguments:
+    * `needed` (`list[tuple[Path, str]]`): From `ignores_needed()`.
+
+    Raises:
+    * `OSError`: If a file can not be written.
+    """
+    path: Path
+    line: str
+    for path, line in needed:
+        text: str = path.read_text(encoding="utf-8") if path.exists() else ""
+        if text and not text.endswith("\n"):
+            text += "\n"
+        text += f"# Catalog PDFs and their pages (scraftcam).\n{line}\n"
+        path.write_text(text, encoding="utf-8")
+
+
+# Function `pdf_pages()`:
+def pdf_pages(pdf: Path) -> int:
+    """Return how many pages a PDF has.
+
+    Arguments:
+    * `pdf` (`Path`): The PDF.
+
+    Returns:
+    * (`int`): Its page count.
+
+    Raises:
+    * `ValueError`: If it can not be read as a PDF.
+    """
+    # Imported here: it fetches the PDF packages on first use.
+    from ..catalog.pdf import Document  # pylint: disable=import-outside-toplevel
+
+    # The PDF libraries raise their own errors, of no common class.
+    try:
+        return len(Document(pdf))
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        raise ValueError(f"{pdf} can not be read as a PDF: {error}") from error
+
+
+# Function `new_catalog_text()`:
+def new_catalog_text(vendor: str, edition: str, pdf: str, pages: int) -> str:
+    """Write a new catalog's `catalog.toml` (`T.cm~5.1.10` #61).
+
+    Arguments:
+    * `vendor` (`str`): Who publishes it (not empty).
+    * `edition` (`str`): Which edition (not empty).
+    * `pdf` (`str`): The PDF's file name, in `pages/`.
+    * `pages` (`int`): How many pages it has.
+
+    Returns:
+    * (`str`): The file's text.
+
+    Raises:
+    * `ValueError`: If the vendor or edition is empty.
+    """
+    vendor = " ".join(vendor.split())
+    edition = " ".join(edition.split())
+    if not vendor or not edition:
+        raise ValueError("the catalog needs a vendor and an edition")
+    return item_text(
+        {
+            "name": f"{vendor} {edition}",
+            "kind": "catalog",
+            "language": "English",
+            "version": FORMAT_VERSION,
+            "vendor": vendor,
+            "edition": edition,
+            "pdf": pdf,
+            "pages": pages,
+        }
     )
 
 
@@ -536,6 +654,52 @@ class App:  # pylint: disable=too-many-instance-attributes
         if path.exists():
             raise ValueError(f"{path} already exists")
         directory.mkdir(exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        self.created.add(str(path.resolve()))
+        self.reload_tree()
+        self.say(f"Created {path}.")
+        return path.resolve()
+
+    def new_catalog(
+        self, vendor: str, edition: str, pdf: Path, *, link: bool, pages: int
+    ) -> Path:
+        """Make a new catalog, its PDF copied or linked into `pages/`.
+
+        Arguments:
+        * `vendor` (`str`): Who publishes it.
+        * `edition` (`str`): Which edition.
+        * `pdf` (`Path`): The catalog's PDF.
+        * `link` (`bool`): True to link to the PDF, False to copy it.
+        * `pages` (`int`): How many pages it has (`pdf_pages()`).
+
+        Returns:
+        * (`Path`): The new `catalog.toml`.
+
+        Raises:
+        * `ValueError`: With no shop, an empty answer, no such PDF, or
+          a catalog there already.
+        * `OSError`: If it can not be written.
+        """
+        if self.shop is None:
+            raise ValueError("there is no shop")
+        if not pdf.is_file():
+            raise ValueError(f"{pdf} is not a file")
+        text: str = new_catalog_text(vendor, edition, pdf.name, pages)
+        directory: Path = (
+            self.shop.parent
+            / CATALOGS
+            / Path(file_name(vendor)).stem
+            / Path(file_name(edition)).stem
+        )
+        path: Path = directory / CATALOG
+        if path.exists():
+            raise ValueError(f"{path} already exists")
+        (directory / CATALOG_PAGES).mkdir(parents=True, exist_ok=True)
+        placed: Path = directory / CATALOG_PAGES / pdf.name
+        if link:
+            placed.symlink_to(pdf.resolve())
+        else:
+            shutil.copyfile(pdf, placed)
         path.write_text(text, encoding="utf-8")
         self.created.add(str(path.resolve()))
         self.reload_tree()

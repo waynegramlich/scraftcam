@@ -180,6 +180,23 @@ def minutes(amount: float) -> str:
     return f"{seconds // 60}:{seconds % 60:02d}"
 
 
+# Function `is_catalogs_directory()`:
+def is_catalogs_directory(node: Node) -> bool:
+    """Tell whether an item is a shop's `catalogs/` directory.
+
+    Arguments:
+    * `node` (`Node`): The item.
+
+    Returns:
+    * (`bool`): True for `catalogs/` beside a `shop.toml`.
+    """
+    return (
+        node.path.name == "catalogs"
+        and node.path.is_dir()
+        and (node.path.parent / "shop.toml").is_file()
+    )
+
+
 # Function `is_machines_directory()`:
 def is_machines_directory(node: Node) -> bool:
     """Tell whether an item is a shop's `machines/` directory.

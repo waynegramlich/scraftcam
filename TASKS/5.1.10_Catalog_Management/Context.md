@@ -353,3 +353,344 @@ pages were not copied into the real `SharsMD/`.
 The scratch pages (207-211, lathe tooling the user does not own) are
 not kept.  Suspended by the user until the Catalogs tab is designed
 (`T.osiade~5.1.9`).
+
+## 2026-11-15: Reopened: the catalog infrastructure
+
+The GUI is Qt; the user wants the catalog infrastructure now.  Issue
+numbers continue after #22.
+
+* #23: A record documents a purchased product (a tool or stock):
+  part numbers, description, price; the object matters more than the
+  purchase (the user).
+* #24: Sources: a `.pdf` catalog page (Shars, `catxtract`) or a
+  vendor's web site (McMaster-Carr), one product at a time, never a
+  whole site.  The user's idea: the site's [Print] gives a PDF, which
+  is then treated like a Shars page.
+* #25: No images (or other source material) under version control;
+  if it is lost, so be it (the user).
+* #26: First, find out how hard web site extraction is (the user,
+  leaning that way).
+
+## 2026-11-15: #27-#30 answered
+
+* #27: No past McMaster-Carr purchases on record; the user picked a
+  screw page, had it email a link, and printed it to paper (it
+  works).  A printer that only collects the PDF would do.  McMaster
+  also offers 3D (`.step`, SolidWorks, ...) and 2D (PDF, DWG, DXF,
+  EDRW, ...) files.
+* #28: `.step` files are available (for the sources question).
+* #29, #30: agreed (object first, purchase fields optional; one
+  record per product, several shop items may point to it).
+* Found: `model_cache.py` already puts STEP files into a SolidCraft
+  design, so a vendor's `.step` should drop in the same way.
+
+## 2026-11-15: The browser's PDF is clipped
+
+* #27: "Save to PDF" works but the page comes out clipped; `cups-pdf`
+  might do better.  #28 (vendor `.step` files): the user agrees
+  strongly.  #29, #30 agreed again.  #31: feel our way; a clipped PDF
+  is not very useful.
+
+## 2026-11-15: The clipped McMaster-Carr PDF
+
+* The paper printout was clipped too; the user's print-dialog
+  experiments failed.  Firefox "Save Page As..." did not work well
+  either (#34).
+* #35: `/tmp/McMaster-Carr.pdf` (copied to the scratchpad): Firefox,
+  A4 (596 x 842 pt), 2 pages, a real text layer (`pdftotext` reads
+  it).  It is a filtered listing page (`/products/screws/thread-size~0...`),
+  not a product's own page.  The right third is gone: lines end
+  mid-word, the part number and price columns are missing, the URL
+  is cut.  What is left: the title (Stainless Steel Slotted Flat Head
+  Screws), the description, and one row (0000-160, 5/32", 82°,
+  Standard, 0.040").
+* Next idea (#37): the product's own page and its 2D PDF drawing and
+  `.step`, which are made to print.
+
+## 2026-11-15: The 2D PDF drawing works (#37)
+
+`~/Downloads/91781A340_18-8 Stainless Steel Slotted Flat Head
+Screw-1.PDF` (Firefox would only save into `~/Downloads/`): 1 page,
+Letter landscape, made by SOLIDWORKS PDF Publisher, vector drawing
+with a real text layer (only images: a logo).  The file name and the
+PDF title are `PART_TITLE`.  Text: part number 91781A340, the title
+(18-8 Stainless Steel Slotted Flat Head Screw), thread 0000-160,
+countersink angle 82deg, and four bare dimensions (0.04in, 0.1563in,
+0.021in, 0.011in) with no names: which is which comes only from where
+they sit on the drawing.  Next: the `.step`.
+
+## 2026-11-15: `.step` download Forbidden
+
+McMaster-Carr now answers `Forbidden` for the `.step` (#39); maybe a
+temporary block after the many print/save tries.  #37 and #38
+(pick up files from `~/Downloads/` by part number) agreed.
+
+## 2026-11-15: Web sites on hold
+
+#39-#42: the user will think about web sites; no breaking a vendor's
+anti-scraping rules.  Focus now: integrate what works (PDF catalogs,
+`catxtract`) into the GUI.
+
+## 2026-11-15: Plan for #43-#45 (draft, awaiting the user)
+
+#43: catalogs in the shop as `catalogs/VENDOR/EDITION/` (the user:
+`catalogs/shars/2026/`).  #44 agreed.  #45 agreed; how a table entry
+is chosen is open.  #46 (carry-over only on request) unclear to the
+user; parked.
+
+* S1: `catalogs/` in the shop: a catalog directory holds `catalog.toml`
+  (vendor, edition, title, the PDF's name), the PDF, and the
+  `page_NNN/` directories.  Not under version control: the PDF and
+  `*.png` (#25).  Tree: `catalogs/` -> vendor -> edition -> pages,
+  labeled "Page 318: TITLE".  Move `SharsMD/` and the PDF.
+* S2: `catxtract`'s `App` in a panel: clicking an edition opens it;
+  the pages and [Enable Editing] as elsewhere.
+* S3: a page's panel shows its saved tables; picking a row starts a
+  `tools/` file filled in from it, linked back to the page (#45;
+  design by question rounds first).
+* Open: the repository is PUBLIC on GitHub; the example shop's
+  `catalogs/shars/2026/` text (Shars' tables) would be published.
+
+## 2026-11-15: Only purchased products under version control
+
+* #46: invert the default: carry-over regions only on request
+  (agreed).
+* The whole-catalog extraction is dropped: people mark only the
+  images, tables and text of the product bought; the exception is the
+  index entries.
+* #47: copyright: agreed it is a concern; quoting short passages is
+  allowed.  Solution open.
+* #48: the user copies the catalog PDF (or a symbolic link to it)
+  into `catalogs/...`; never under version control.  Under version
+  control: only the products actually purchased.  The PDF and its
+  page number give the rest.
+* Found: every tool kind already has `manufacturer`,
+  `manufacturer_pn`, `vendor`, `vendor_pn`, `cost`, `acquired`
+  (`shops._tool_fields()`), so the tool file can be the product
+  record.
+
+## 2026-11-15: Plan agreed (#49-#53)
+
+* #49: the tool file is the product record; new fields `catalog`,
+  `catalog_page`.  #50: `catalog.toml` (vendor, edition, PDF name,
+  page count) under version control; the PDF and `catxtract`'s
+  working files not.  #51: [New Catalog] shows the ignore lines and
+  offers to add them.  #52: S1-S3 as planned.  #53: `SharsMD/` stays.
+* #0 (the user): the same strategy mostly works for McMaster-Carr:
+  the unique part number is what the user needs; downloading a
+  product's `.pdf` drawing and `.step` by hand violates nothing.
+
+## 2026-11-15: S1 design draft (chunk 1, awaiting the user)
+
+Found: the tree (`tree.shop_children()`) already nests directories and
+lists `.toml` files; the shop reader (`shops._Reader`, `SHOP_DIRECTORIES`
+loop) globs only `DIR/*.toml`, so `catalogs/` needs `**/catalog.toml`.
+Draft: `catalog` kind (`name`, `vendor`, `edition`, `pdf`, `pages`,
+optional `url`, `notes`); everything unversioned in the edition's
+`files/` (the PDF or a link, `catxtract`'s `pages/`), one ignore
+line `catalogs/**/files/`; the tree hides `files/`; [New Catalog] in
+the `catalogs/` panel (vendor, edition, PDF, copy or link).
+
+## 2026-11-15: S1 design answers
+
+#58: `pages/` in place of `files/` (the user).  #59-#62 agreed.  The
+user: capture the index pages separately; that is where everybody
+starts.  Drafted: `index_pages` and `page_offset` in `catalog.toml`;
+the catalog's panel opens on its index.
+
+## 2026-11-15: S1 chunk 2: the `catalog` kind
+
+#63-#66 agreed.  Coded: `KINDS["catalog"]` (`vendor`, `edition`,
+`pdf`, `pages` required; `index_first`, `index_last` (two
+`positive_integer` fields in place of a `[first, last]` list, no new
+form), `page_offset`, `url`); `SHOP_DIRECTORIES` gets `catalogs`;
+`CATALOG`, `CATALOG_PAGES`, `ITEM_PATTERNS` (`catalogs/*/*/catalog.toml`)
+used by `_Reader.directories()`; the shop's `catalogs` list; the tree
+skips a `pages/` beside a `catalog.toml`.  Schemas and `Shops.md`
+regenerated (`catalog.json` new).  A catalog shows as "Shars 2026
+(file)", like every shop item.  Checked on a scratch shop copy;
+checkers clean; `test_shops`, `test_shop_schema`, `test_gui_tree`
+pass.  Next (chunk 3): tests for it, then [New Catalog].
+
+## 2026-11-15: S1 chunk 3: `index_pages` as page ranges
+
+The user: the index is a list of page ranges, a lone page a single
+number.  Coded: form `page_ranges` (TOML `[[451, 455], 460]`; the
+panel shows and takes `451-455, 460`): `shops._page_ranges_problem()`,
+`page_ranges_text()`, `page_ranges_value()`; `fields.PLAIN`,
+`value_of()`, `rows()`, `FORM_HELP`; `shop_schema.SIMPLE`.
+`index_first`/`index_last` replaced by `index_pages`.  The one-value
+checks moved into `shops.VALUE_PROBLEMS` (pylint's branch count).
+Checkers clean; `test_shops`, `test_shop_schema`, `test_gui_tree`,
+`test_gui_fields` pass (66).  Next: tests for catalogs and page
+ranges, then [New Catalog].
+
+## 2026-11-15: S1 chunk 4: tests
+
+`tests.test_shops.TestCatalogs` (read two levels down, a stray
+`catalogs/*.toml` not read; a missing `pages` and a backwards range
+reported; page range text both ways and bad values) and
+`test_gui_tree.ShopTreeTest.test_catalog_pages` (a catalog's `pages/`
+hidden, another kept).  All pass; checkers clean.  Next: [New
+Catalog].
+
+## 2026-11-15: S1 chunk 5: [New Catalog], the model's part
+
+`gui/app.py`: `CATALOGS`; `IGNORE_LINES` (git `**/catalogs/*/*/pages/`,
+hg `re:(^|/)catalogs/[^/]+/[^/]+/pages/`, both checked in real
+repositories with the shop in a subdirectory), `IGNORE_FILES`;
+`ignores_needed()` (the nearest repository's ignore files lacking the
+line), `add_ignores()`; `pdf_pages()` (via `catalog.pdf.Document`,
+imported on use); `new_catalog_text()`; `App.new_catalog(vendor,
+edition, pdf, *, link, pages)`: `catalogs/VENDOR/EDITION/` from
+`file_name()` stems, the PDF copied or linked into `pages/`.  Tried on
+a scratch shop; checkers clean.  Next: the dialog, then tests.
+
+## 2026-11-15: S1 chunk 6: the [New Catalog] dialog
+
+`window.py`: `new_catalog_row` (`catalogs/:` [New Catalog]), shown for
+the shop's root and `catalogs/` (`machines.is_catalogs_directory()`),
+as a shop has no `catalogs/` until its first; `NewCatalogDialog`
+(vendor, edition, PDF with [Choose...] (Qt's own dialog), "Link to it"
+(default) / "Copy it"; [Create] grey, saying what is missing);
+`Window.new_catalog()`, `offer_ignores()` (a yes/no question listing
+each file and line; "no" says what was not added).  `tree.EXPLANATIONS`
+has `catalogs`.  New `tests/test_gui_catalogs.py` (3 tests:
+ignores, `new_catalog_text()`, the dialog end to end with
+`pdf_pages` and the question mocked).  Checkers clean;
+`test_gui_window`, `test_gui_machines`, `test_gui_tree`,
+`test_gui_catalogs` pass (23).  Next: the user's GUI run of [New
+Catalog]; then S2 (`catxtract` in a panel).
+
+## 2026-11-15: #67 pruning markup
+
+#67 (the user): at some point, delete any page markup that no shop
+tool was made from.  Needs S3's `catalog_page` (a page no tool cites
+is unused); the index pages are kept.
+
+## 2026-11-15: S2 question: `catxtract` in a panel or its own window
+
+Found: `catxtract.App` sizes its zoom to fill the screen's height
+(`(screen_height - 190) / page_height`) and fixes the page view to
+the picture's size (`PageView.show_png()`); the GUI starts at 720 x
+480 and a panel may be 235 px wide.  Asked the user (#68): its own
+window from the catalog's panel ([Open Pages]), or inside the panel
+(zoom fitted to the panel, scrolling).  Panels show the machines list
+by swapping a widget in (`Panel.show_node()`, `summary`).
+
+## 2026-11-15: S2: [Open Pages] (#68: its own window)
+
+#68 decided (the user): `catxtract` in a pop-up window, never in a
+panel ("there is not much resolution to start with").  Coded in
+`window.py`: `open_pages_row` ("Catalog:" [Open Pages]), shown when
+the current panel's item is a catalog (`Window.shown_catalog()`, from
+`Panel.item`); `Window.open_pages()`: `catxtract.App(pages/PDF,
+pages/)` (imported on use; a type-only import gives `Pages`), titled
+"catxtract: NAME", started at `index_start()` (first index page plus
+`page_offset`) by setting `page_no` and `show_page()` (no save of the
+page it opened on); one per catalog in `CATALOG_WINDOWS`, raised if
+open; a missing PDF is said.  `close_catalogs()` when the last window
+closes (each saves its page).  Tests: `OpenPagesTest` (2) in
+`test_gui_catalogs`.  Checkers clean; `test_gui_catalogs`,
+`test_gui_window`, `test_gui_machines`, `test_catalog_pdf` pass (29).
+Not yet: the user's GUI run; carry-over regions only on request
+(#46).
+
+## 2026-11-15: First real use: Shars page 414 (Z-axis setter)
+
+The user made `examples/shop/catalogs/shars/2026/` with [New Catalog]
+(linked PDF; the repository's `.gitignore`/`.hgignore` got the lines;
+only `catalog.toml` is unignored, as planned) and marked page 414:
+`pages/page_414/page_414.md` holds the title (garbled with the page
+header: "& & Tramming Tool Coaxial Indicator Zero Setter"), the
+description, one image, and a table: Height, Square L×W, Graduation,
+Accuracy, Magnetic Pull (Lbs), "Order No. Price" (two columns merged:
+`303-3104 $121.85`, `303-3104M133.60`); rows 2" and 50mm.
+No `index_pages` set yet.
+
+* [New Catalog] was hard to find under the top line; the user wants
+  [Open Pages] beside [Edit TOML File]: done (`Panel.pages_button`,
+  `Panel.open_pages`, `views.OPEN_PAGES`; `Window.open_pages(panel)`;
+  the top-line row is gone).  `Panel.__init__()` quiets
+  `too-many-statements` (51/50) with a comment.
+* Tests copied `examples/shop` with the user's catalog in it (and a
+  link to the 60 MB PDF): every `copytree` of the example shop in
+  `test_shops`, `test_gui_catalogs`, `test_gui_machines`,
+  `test_gui_templates` now leaves `catalogs` out.  82 tests pass;
+  checkers clean.
+* Next: a setter kind (#37, #39, #40), the setter's file from the
+  `.md` row, as S3's first case.
+
+## 2026-11-15: The Z setter: model first (#39-#43)
+
+#39: the user's is the imperial one (2", 303-3104).  #40: a tool, in
+`tooling/`.  #41: kind `z_setter`, no magnetic pull.  #42: the point
+of the work; the user: make the tool (its model) first, before any
+catalog hook.  Found the pattern to copy (the grid plate): kind in
+`shops.KINDS` and the `tooling` collection's list (`grid_plates`);
+`tooling/tools.py` `GridPlate` (`from_shop()`, `named()`, `REGISTRY`,
+`model()`, `keep_out()`, `cacheable()`); `tooling/shop_registries.use_shop()`;
+sketches in `tooling/tool_models.py` (`Tool_Models.md`); tree labels.
+
+## 2026-11-15: The user's catalog run undone
+
+The user: undo their run and go back to before the Z setter and the
+catalog were tried together; the setter is a tooling method first,
+with arguments (here only `imperial: bool`), and the schema (#44) is
+in doubt.  Done: `examples/shop/catalogs/` (catalog.toml, the link to
+the PDF, the markup of pages 1, 413, 414) moved to the scratchpad
+(`undone_catalogs/`, gone when the session ends); the two ignore lines
+taken off `.gitignore` and `.hgignore` (`git diff .gitignore` now
+empty).  The PDF at the top is untouched.  Kept: the code (Open Pages
+in the panel, the tests' copies without `catalogs`).
+
+## 2026-11-15: The Z setter's shape (#49, the user)
+
+`z_setter(imperial: bool)` agreed.  A blue cube (2.05 in square, 2 in
+tall setter); a silver cylinder, 1 in diameter, out of the top, with a
+.1 in 45 deg chamfer at its top; on the front a 1.5 in diameter silver
+ring, about .25 in thick, around a white graduated dial recessed .1 in
+from the ring; a black pointer: a prism from the dial's center to near
+the ring.  Open questions #50-#61 (defaults proposed).
+
+## 2026-11-15: `z_setter()` modeled (#50-#61)
+
+Answers: 2.000 in from the base to the cylinder's top; dial dead
+center on the front; ring stands .25 in out; dial .1 in back from the
+ring; pointer straight up (it reads zero only at the exact height);
+no graduations, no rounded edges, nothing else on the faces; only the
+imperial one is owned; origin and facing not worth discussing.
+Coded: `scraftcam/tooling/setters.py` (new, executable): `ZSetter`
+(frozen dataclass, mm; `block_height()`, `dial_radius()`,
+`pointer_length()`, `cylinder_profile()`, `ring_profile()`,
+`dial_profile()`, `model()` -> block, cylinder, ring, dial, pointer
+bodies, each colored), `z_setter(imperial)`, `main()` (`python3 -m
+scraftcam.tooling.setters 8081 [metric]`).  Guesses: cylinder rise
+.25 in, ring width .1 in, pointer .04 x .02 in, .05 in short of the
+ring; metric: 50 mm (the catalog's height; the user wrote 52 mm, the
+square's side), the rest scaled by 52/52.07.  Shown in a second
+SolidCraft on 8081 (the demo's is on 8080); awaiting the user's look.
+Checkers clean.  Not yet: tests, `tools.py` keep-outs, a sketch.
+
+## Where Things Stand (2026-11-15, end of session)
+
+The user: "Perfect" on the Z setter in SolidCraft; committed to git.
+Done: S1 (`catalog` kind, `page_ranges`, [New Catalog], ignore
+lines), S2's [Open Pages] (pop-up `catxtract`, beside [Edit TOML
+File]), `tooling/setters.py` `z_setter(imperial)`.  Open:
+1. #44: whether (and how) setters get a shop schema; `tooling/` holds
+   only grid plates.
+2. Z setter: tests; keep-out zones; a sketch with letters for
+   `Tool_Models.md`; registering it (`shop_registries.use_shop()`);
+   showing it from `tools.py`'s `main()`.
+3. #46: carry-over regions only on request (S2).
+4. S3 (#45, #48): a marked row -> a shop item, via a general
+   `new_item_text(kind, values)`; `catalog`/`catalog_page` on items;
+   split merged columns ("Order No. Price").
+5. #67: delete markup no shop item cites.
+6. Web sites on hold (#39-#42 of the McMaster-Carr round).
+The 8081 SolidCraft (second window) may still be open.  Tests run:
+`test_shops`, `test_shop_schema`, `test_gui_tree`, `test_gui_fields`,
+`test_gui_catalogs`, `test_gui_window`, `test_gui_machines`,
+`test_gui_templates`, `test_catalog_pdf`; all pass.  Not run: the
+whole suite.

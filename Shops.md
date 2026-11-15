@@ -205,6 +205,12 @@ has a `name` even when it is not a file of its own.
 |                  | `tool_material`       |          | made of, and how fast |
 |                  |                       |          | each cuts: the files  |
 |                  |                       |          | in `tool_materials/`. |
+| `catalogs`       | list of `catalog`     | no       | The vendors' catalogs |
+|                  |                       |          | the shop's products   |
+|                  |                       |          | come from: the files  |
+|                  |                       |          | in `catalogs/`, one   |
+|                  |                       |          | in each edition's     |
+|                  |                       |          | directory.            |
 
 ```toml
 name = "Home shop"
@@ -1387,4 +1393,36 @@ of these.  It has a `name` even when it is not a file of its own.
 ```toml
 name = "carbide"
 speed_factor = "250 %"
+```
+
+## `catalog`
+
+A vendor's catalog, one edition of it:
+`catalogs/VENDOR/EDITION/catalog.toml`.  The catalog's PDF (or a link to
+it) and `catxtract`'s working files are in `pages/` beside it, never
+under version control (`T.cm~5.1.10` #50, #58).  It has a `name` even
+when it is not a file of its own.
+
+| Key           | Value            | Required | Meaning                       |
+| ------------- | ---------------- | -------- | ----------------------------- |
+| `vendor`      | string           | yes      | Who publishes it.             |
+| `edition`     | string           | yes      | Which edition (`2026`).       |
+| `pdf`         | string           | yes      | The PDF's file name, in       |
+|               |                  |          | `pages/`.                     |
+| `pages`       | positive integer | yes      | How many pages the PDF has.   |
+| `index_pages` | page ranges      | no       | The pages of its index        |
+|               |                  |          | (printed page numbers).       |
+| `page_offset` | integer          | no       | The PDF's page number less    |
+|               |                  |          | the printed one (0 if not     |
+|               |                  |          | given).                       |
+| `url`         | string           | no       | The vendor's web site.        |
+
+```toml
+name = "Shars 2026"
+vendor = "Shars"
+edition = "2026"
+pdf = "2026_Shars_Catalog.pdf"
+pages = 456
+index_pages = [[451, 455]]
+url = "https://www.shars.com"
 ```

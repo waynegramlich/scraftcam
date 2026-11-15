@@ -47,6 +47,31 @@ class ShopTreeTest(unittest.TestCase):
             self.assertIn("syntax error", root.children[2].error)
             self.assertIn("line 1", root.children[2].error)
 
+    def test_catalog_pages(self) -> None:
+        """A catalog's `pages/` is not shown; another `pages/` is."""
+        with tempfile.TemporaryDirectory() as temporary:
+            top: Path = Path(temporary)
+            (top / "shop.toml").write_text('name = "Home"\n')
+            edition: Path = top / "catalogs" / "shars" / "2026"
+            (edition / "pages").mkdir(parents=True)
+            (edition / "catalog.toml").write_text('name = "Shars 2026"\n')
+            (top / "catalogs" / "pages").mkdir()
+            root: tree.Node = tree.shop_tree(top / "shop.toml")
+            self.assertEqual(
+                labels(root),
+                [
+                    "Home (directory)",
+                    [
+                        "catalogs (directory)",
+                        ["pages (directory)"],
+                        [
+                            "shars (directory)",
+                            ["2026 (directory)", ["Shars 2026 (file)"]],
+                        ],
+                    ],
+                ],
+            )
+
     def test_tools(self) -> None:
         """Tools show their function and sizes, sorted by them (#21)."""
         with tempfile.TemporaryDirectory() as temporary:

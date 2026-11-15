@@ -35,8 +35,15 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import FrameType
+from typing import TYPE_CHECKING
 
 from ..packages import require
+from ..shops import CATALOG_PAGES
+
+# Only for its type: imported when a catalog is opened (#68), since it
+# fetches the PDF packages.
+if TYPE_CHECKING:
+    from ..catalog.catxtract import App as Pages
 from . import port, theme
 from .app import (
     MACHINE_KINDS,
@@ -47,7 +54,10 @@ from .app import (
     UNITS,
     App,
     Message,
+    add_ignores,
     controller_templates,
+    ignores_needed,
+    pdf_pages,
 )
 from .editor import HINT, editor_command
 from .fields import shop_units
@@ -55,12 +65,13 @@ from .layout import read_layout, save_layout
 from .machines import (
     MachineControl,
     is_active,
+    is_catalogs_directory,
     is_machines_directory,
     machine_item,
 )
 from .port import Method, PortError, text_param
 from .theme import colors
-from .tree import Node, edit_path
+from .tree import SHOP, Node, edit_path
 from .views import (
     Panel,
     TreeView,
@@ -151,6 +162,11 @@ STOP_MS: int = 250
 
 # Every open window, oldest first (the command port's `window`).
 WINDOWS: list["Window"] = []
+
+# The `catxtract` windows open, by their `catalog.toml`: one each, in
+# a window of its own, as a page needs all the screen it can get
+# (`T.cm~5.1.10` #68).
+CATALOG_WINDOWS: dict[str, "Pages"] = {}
 
 # [New Window] (#200).
 NEW_WINDOW: str = "New Window"
@@ -325,6 +341,37 @@ def close_rows() -> None:
         top.close()
 
 
+# Function `index_start()`:
+def index_start(item: dict[str, object]) -> int:
+    """Return the PDF page a catalog's index starts on (#63, #66).
+
+    Arguments:
+    * `item` (`dict[str, object]`): The catalog, as read.
+
+    Returns:
+    * (`int`): Its first index page plus `page_offset`, counting
+      from 1; 0 when it has no index pages.
+    """
+    ranges: object = item.get("index_pages")
+    if not isinstance(ranges, list) or not ranges:
+        return 0
+    first: object = ranges[0]
+    page: object = first[0] if isinstance(first, list) else first
+    offset: object = item.get("page_offset", 0)
+    if not isinstance(page, int) or not isinstance(offset, int):
+        return 0
+    return page + offset
+
+
+# Function `close_catalogs()`:
+def close_catalogs() -> None:
+    """Close every `catxtract` window, each saving its page (#68)."""
+    pages: Pages
+    for pages in list(CATALOG_WINDOWS.values()):
+        pages.close()
+    CATALOG_WINDOWS.clear()
+
+
 # Function `restore_layout()`:
 def restore_layout(first: "Window") -> None:
     """Bring back the layout kept for the shop, if any (#186, #187).
@@ -414,6 +461,8 @@ class Window(QWidget):
       by label (for the command port's `press`).
     * `message_label` (`QLabel`): The latest message.
     * `action_rows` (`QWidget`): The action rows.
+    * `new_catalog_row` (`QWidget`): The action row with [New
+      Catalog], for `catalogs/` and the shop (`T.cm~5.1.10` #61).
     * `new_machine_row` (`QWidget`): The action row with [New
       Machine], for `machines/` (#141).
     * `new_shop_row` (`QWidget`): The action row with [New Shop].
@@ -477,6 +526,9 @@ class Window(QWidget):
         )
         self.new_machine_row: QWidget = self.action_row(
             rows, QLabel("machines/:"), "New Machine", self.new_machine
+        )
+        self.new_catalog_row: QWidget = self.action_row(
+            rows, QLabel("catalogs/:"), "New Catalog", self.new_catalog
         )
 
         # The tree on the left, then the panels; the first is current.
@@ -674,6 +726,7 @@ class Window(QWidget):
         panel.open_machine = self.open_machine
         panel.say = functools.partial(self.model.say, problem=True)
         panel.edit_file = functools.partial(self.edit, panel)
+        panel.open_pages = functools.partial(self.open_pages, panel)
         panel.close_panel = functools.partial(self.close_panel, panel)
         panel.move_panel = functools.partial(self.move_panel, panel)
         panel.clicked.connect(functools.partial(self.make_current, panel))
@@ -1054,6 +1107,58 @@ class Window(QWidget):
             else "First put a controller template in controllers/"
         )
 
+        # [New Catalog], for `catalogs/` and the shop itself, since a
+        # shop has no `catalogs/` until its first (`T.cm~5.1.10` #61).
+        catalogs: bool = node is not None and (
+            node.kind == SHOP or is_catalogs_directory(node)
+        )
+        self.new_catalog_row.setVisible(catalogs)
+        self.buttons["New Catalog"].setVisible(catalogs)
+        self.buttons["New Catalog"].setToolTip(
+            "Add a vendor's catalog: its PDF, copied or linked"
+        )
+
+    def open_pages(self, panel: Panel) -> None:
+        """Open a panel's catalog in `catxtract` ([Open Pages], #68).
+
+        In a window of its own, at its first index page (else where
+        `catxtract` starts); one already open comes to the front.
+
+        Arguments:
+        * `panel` (`Panel`): The panel whose button was pressed.
+        """
+        # The catalog, and its PDF in `pages/`.
+        if panel.node is None or panel.item.get("kind") != "catalog":
+            return
+        path: Path = panel.node.path
+        found: Pages | None = CATALOG_WINDOWS.get(str(path))
+        if found is not None and not found.closed:
+            found.raise_()
+            found.activateWindow()
+            return
+        item: dict[str, object] = panel.item
+        pages: Path = path.parent / CATALOG_PAGES
+        pdf: Path = pages / str(item.get("pdf", ""))
+        if not pdf.is_file():
+            self.model.say(
+                f"{pdf} is missing: put the PDF, or a link to it, there",
+                problem=True,
+            )
+            return
+
+        # Imported here: it fetches the PDF packages on first use.
+        # pylint: disable-next=import-outside-toplevel
+        from ..catalog.catxtract import App as Opened
+
+        opened: Pages = Opened(pdf, pages)
+        opened.setWindowTitle(f"catxtract: {item.get('name', path.parent)}")
+        start: int = index_start(item)
+        if 1 <= start <= len(opened.doc):
+            opened.page_no = start - 1
+            opened.show_page()
+        CATALOG_WINDOWS[str(path)] = opened
+        opened.show()
+
     def edit(self, panel: Panel) -> None:
         """Open a panel's file in an editor ([Edit TOML File], #124).
 
@@ -1285,6 +1390,33 @@ class Window(QWidget):
         dialog: NewMachineDialog = NewMachineDialog(self, self.model)
         dialog.open()
 
+    def new_catalog(self) -> None:
+        """Ask about the new catalog, and make it ([New Catalog])."""
+        dialog: NewCatalogDialog = NewCatalogDialog(self, self.model)
+        dialog.open()
+
+    def offer_ignores(self) -> None:
+        """Offer to keep catalogs' `pages/` out of version control (#51)."""
+        if self.model.shop is None:
+            return
+        needed: list[tuple[Path, str]] = ignores_needed(self.model.shop.parent)
+        if not needed:
+            return
+        lines: str = "\n".join(f"{path}:  {line}" for path, line in needed)
+        answer: QMessageBox.StandardButton = QMessageBox.question(
+            self,
+            "Keep the PDFs out of version control?",
+            "A catalog's PDF and its pages are never under version "
+            f"control.  Add these lines?\n\n{lines}",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self.model.say("Not added: " + lines.replace("\n", "; "))
+            return
+        try:
+            add_ignores(needed)
+        except OSError as error:
+            self.model.say(str(error), problem=True)
+
     def show_created(self, path: Path) -> None:
         """Show an item just made, editing enabled (#140).
 
@@ -1336,6 +1468,8 @@ class Window(QWidget):
             WINDOWS[0].controls |= self.controls
             self.machines = []
             self.controls = set()
+        else:
+            close_catalogs()
         show_rows_buttons()
         event.accept()
 
@@ -1787,6 +1921,134 @@ class NewShopDialog(QDialog):
             self.model.say(str(error), problem=True)
             return
         self.accept()
+
+
+# Class `NewCatalogDialog`:
+class NewCatalogDialog(QDialog):
+    """The questions for a new catalog (`T.cm~5.1.10` #61).
+
+    Its vendor, its edition, its PDF, and whether the PDF is copied
+    into the catalog's `pages/` or linked to.  [Create] stays grey
+    until all three are given.
+
+    Attributes:
+    * `model` (`App`): What every window shows.
+    * `vendor` (`QLineEdit`): Who publishes it.
+    * `edition` (`QLineEdit`): Which edition.
+    * `pdf` (`QLineEdit`): The PDF's file.
+    * `how` (`QComboBox`): Link or copy (its data: True to link).
+    * `make_button` (`QPushButton`): [Create].
+    * `buttons` (`QDialogButtonBox`): [Cancel].
+    """
+
+    def __init__(self, parent: "Window", model: App) -> None:
+        """Make the dialog; `open()` shows it.
+
+        Arguments:
+        * `parent` (`Window`): The window it belongs to.
+        * `model` (`App`): What every window shows.
+        """
+        super().__init__(parent)
+        self.model: App = model
+        self.setWindowTitle("New Catalog")
+        form: QFormLayout = QFormLayout(self)
+
+        # The vendor, with [Create] beside it, and the edition.
+        self.vendor: QLineEdit = QLineEdit()
+        self.vendor.setPlaceholderText("e.g. Shars")
+        self.vendor.textChanged.connect(self.check)
+        self.make_button: QPushButton = QPushButton("Create")
+        self.make_button.setDefault(True)
+        self.make_button.clicked.connect(self.make_catalog)
+        named: QHBoxLayout = QHBoxLayout()
+        named.addWidget(self.vendor, 1)
+        named.addWidget(self.make_button)
+        form.addRow("Vendor:", named)
+        self.edition: QLineEdit = QLineEdit()
+        self.edition.setPlaceholderText("e.g. 2026")
+        self.edition.textChanged.connect(self.check)
+        form.addRow("Edition:", self.edition)
+
+        # The PDF, with [Choose...], and how it gets into `pages/`.
+        self.pdf: QLineEdit = QLineEdit()
+        self.pdf.setPlaceholderText("The catalog's PDF")
+        self.pdf.textChanged.connect(self.check)
+        choose: QPushButton = QPushButton("Choose...")
+        choose.clicked.connect(self.choose_pdf)
+        chosen: QHBoxLayout = QHBoxLayout()
+        chosen.addWidget(self.pdf, 1)
+        chosen.addWidget(choose)
+        form.addRow("PDF:", chosen)
+        self.how: QComboBox = QComboBox()
+        self.how.addItem("Link to it", True)
+        self.how.addItem("Copy it", False)
+        form.addRow("Into pages/:", self.how)
+
+        # [Cancel].
+        self.buttons: QDialogButtonBox = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttons.rejected.connect(self.reject)
+        form.addRow(self.buttons)
+        self.check()
+
+    def pdf_path(self) -> Path:
+        """Return the PDF as typed or chosen.
+
+        Returns:
+        * (`Path`): Its file, `~` expanded.
+        """
+        return Path(self.pdf.text().strip()).expanduser()
+
+    def check(self) -> None:
+        """Grey [Create], saying why, until all three are given."""
+        pdf: bool = bool(self.pdf.text().strip()) and self.pdf_path().is_file()
+        missing: list[str] = [
+            what
+            for what, given in (
+                ("a vendor", bool(self.vendor.text().strip())),
+                ("an edition", bool(self.edition.text().strip())),
+                ("a PDF", pdf),
+            )
+            if not given
+        ]
+        self.make_button.setEnabled(not missing)
+        self.make_button.setToolTip(
+            "Give it " + ", ".join(missing) + "." if missing else ""
+        )
+
+    def choose_pdf(self) -> None:
+        """Choose the PDF ([Choose...]), with Qt's own dialog (#117)."""
+        chosen: str
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self,
+            "The catalog's PDF",
+            str(Path.home()),
+            "PDF files (*.pdf *.PDF)",
+            options=QFileDialog.Option.DontUseNativeDialog,
+        )
+        if chosen:
+            self.pdf.setText(chosen)
+
+    def make_catalog(self) -> None:
+        """Make the catalog ([Create]); on a problem, say so and stay."""
+        try:
+            pdf: Path = self.pdf_path()
+            path: Path = self.model.new_catalog(
+                self.vendor.text(),
+                self.edition.text(),
+                pdf,
+                link=bool(self.how.currentData()),
+                pages=pdf_pages(pdf),
+            )
+        except (ValueError, OSError) as error:
+            self.model.say(str(error), problem=True)
+            return
+        self.accept()
+        parent: QObject | None = self.parent()
+        if isinstance(parent, Window):
+            parent.offer_ignores()
+            parent.show_created(path)
 
 
 # Class `NewMachineDialog`:

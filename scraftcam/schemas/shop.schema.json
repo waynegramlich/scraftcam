@@ -131,6 +131,20 @@
               }
             ]
           }
+        },
+        "catalogs": {
+          "description": "The vendors' catalogs the shop's products come from: the files in `catalogs/`, one in each edition's directory.",
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/catalog"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
         }
       },
       "required": [],
@@ -2561,6 +2575,87 @@
       },
       "required": [
         "speed_factor"
+      ],
+      "additionalProperties": false
+    },
+    "catalog": {
+      "description": "A vendor's catalog, one edition of it: `catalogs/VENDOR/EDITION/catalog.toml`.  The catalog's PDF (or a link to it) and `catxtract`'s working files are in `pages/` beside it, never under version control (`T.cm~5.1.10` #50, #58).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Unique among the things of its kind.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "What the rest of the file is.",
+          "const": "catalog"
+        },
+        "language": {
+          "description": "The language of the names and notes.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The format version, `MAJOR.MINOR.PATCH`.",
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "notes": {
+          "description": "Anything worth writing down about it (the GUI shows and edits it; `#` comments are not kept).",
+          "type": "string"
+        },
+        "vendor": {
+          "description": "Who publishes it.",
+          "type": "string"
+        },
+        "edition": {
+          "description": "Which edition (`2026`).",
+          "type": "string"
+        },
+        "pdf": {
+          "description": "The PDF's file name, in `pages/`.",
+          "type": "string"
+        },
+        "pages": {
+          "description": "How many pages the PDF has.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "index_pages": {
+          "description": "The pages of its index (printed page numbers).",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            ]
+          }
+        },
+        "page_offset": {
+          "description": "The PDF's page number less the printed one (0 if not given).",
+          "type": "integer"
+        },
+        "url": {
+          "description": "The vendor's web site.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vendor",
+        "edition",
+        "pdf",
+        "pages"
       ],
       "additionalProperties": false
     }

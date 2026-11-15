@@ -109,6 +109,9 @@ from PySide6.QtWidgets import (  # noqa: E402
 # [Edit TOML File]'s label (#148).
 EDIT: str = "Edit TOML File"
 
+# A catalog's button, beside [Edit TOML File] (`T.cm~5.1.10` #68).
+OPEN_PAGES: str = "Open Pages"
+
 # A splitter's handle: wide enough to see and grab, in the palette's
 # colors, so it shows in light and dark mode alike (#25).
 HANDLE_WIDTH: int = 7
@@ -238,7 +241,8 @@ def text_view() -> QPlainTextEdit:
 
 # Function `no_edit()`:
 def no_edit() -> None:
-    """Do nothing: a panel's `edit_file` until the window's."""
+    """Do nothing: a panel's `edit_file` (or `open_pages`) until the
+    window's."""
 
 
 # Function `no_move()`:
@@ -404,6 +408,11 @@ class Panel(QFrame):
       [Enable Editing] is unchecked.
     * `edit_file` (`Callable[[], None]`): What [Edit TOML File] calls
       (set by the window).
+    * `pages_button` (`QPushButton`): [Open Pages], for a catalog
+      (`T.cm~5.1.10` #68), never greyed: marking pages does not
+      change the catalog's file.
+    * `open_pages` (`Callable[[], None]`): What [Open Pages] calls
+      (set by the window).
     * `close_button` (`QPushButton`): [Close] (#181), at the right end
       of the title line (#156), hidden on a window's last panel.
     * `close_panel` (`Callable[[], None]`): What [Close] calls
@@ -439,6 +448,9 @@ class Panel(QFrame):
 
     clicked: Signal = Signal()
 
+    # It makes every one of the panel's widgets, a statement or two
+    # each; split up, it would only scatter them.
+    # pylint: disable-next=too-many-statements
     def __init__(self, number: int) -> None:
         """Make an empty panel.
 
@@ -456,6 +468,7 @@ class Panel(QFrame):
         self.follow_up: FollowUpView | None = None
         self.say: Callable[[str], None] = no_machine
         self.edit_file: Callable[[], None] = no_edit
+        self.open_pages: Callable[[], None] = no_edit
         self.close_panel: Callable[[], None] = no_edit
         self.move_panel: Callable[[int], None] = no_move
         self.guide: QLabel = guide_label()
@@ -483,6 +496,7 @@ class Panel(QFrame):
         layout.addLayout(self._make_title_line())
         self.editing_box: QCheckBox = QCheckBox("Enable Editing")
         self.edit_button: QPushButton = QPushButton(EDIT)
+        self.pages_button: QPushButton = QPushButton(OPEN_PAGES)
         self.edit_row: QWidget = self._make_edit_row()
         layout.addWidget(self.edit_row)
         layout.addWidget(self.missing)
@@ -662,8 +676,15 @@ class Panel(QFrame):
         row: QWidget = QWidget()
         line: QHBoxLayout = QHBoxLayout(row)
         line.setContentsMargins(0, 0, 0, 0)
+        self.pages_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.pages_button.setToolTip(
+            "Mark the catalog's pages in catxtract, starting at its index"
+        )
+        self.pages_button.clicked.connect(self._press_pages)
+        self.pages_button.hide()
         line.addWidget(self.editing_box)
         line.addWidget(self.edit_button)
+        line.addWidget(self.pages_button)
         line.addStretch(1)
         row.hide()
         return row
@@ -684,6 +705,7 @@ class Panel(QFrame):
         self.editing_box.setChecked(self.editing)
         self.editing_box.blockSignals(False)
         self.edit_button.setEnabled(self.editing)
+        self.pages_button.setVisible(self.item.get("kind") == "catalog")
 
     def _press_close(self) -> None:
         """Close the panel ([Close Panel], #156)."""
@@ -738,6 +760,11 @@ class Panel(QFrame):
         """Open the item's file in an editor ([Edit TOML File])."""
         self.clicked.emit()
         self.edit_file()
+
+    def _press_pages(self) -> None:
+        """Open the catalog in `catxtract` ([Open Pages], #68)."""
+        self.clicked.emit()
+        self.open_pages()
 
     def show_guide(self, text: str) -> None:
         """Show the guide, until an item or a machine is shown (#139).
@@ -836,6 +863,7 @@ class Panel(QFrame):
         if node.kind in (SHOP, FILE) and node.path.suffix == ".toml":
             self.item = read_item(node.path)[0]
             self.rows = rows(self.item, units)
+        self._show_edit_row()
         self.show_sketches(sketches(self.item) if self.rows else [])
         if not self.rows:
             self.fields.hide()

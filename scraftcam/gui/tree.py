@@ -28,7 +28,14 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..shops import KINDS, SHOP_DIRECTORIES, tool_label, tool_order
+from ..shops import (
+    CATALOG,
+    CATALOG_PAGES,
+    KINDS,
+    SHOP_DIRECTORIES,
+    tool_label,
+    tool_order,
+)
 
 # How wide a tooltip's lines are (characters).
 ABOUT_WIDTH: int = 60
@@ -296,6 +303,13 @@ def about_item(item: dict[str, object]) -> str:
 # #150); the tree's ▶ lists what is in it.  `controllers` is the
 # user's; the rest are Claude's drafts, for the user to revise.
 EXPLANATIONS: dict[str, str] = {
+    "catalogs": (
+        "Vendors' catalogs, one directory per vendor and edition (for "
+        "example shars/2026/), so that each tool or material bought can "
+        "name the catalog page it came from.  A catalog's PDF and its "
+        "marked pages are in its pages/, never under version control; "
+        "[New Catalog] adds one."
+    ),
     "controllers": (
         "A controller is the software that runs a CNC machine: it "
         "reads G-code and moves the axes (for example LinuxCNC, GRBL "
@@ -452,6 +466,10 @@ def shop_children(directory: Path, skip: Path | None = None) -> list[Node]:
     children: list[Node] = []
     path: Path
     for path in entries(directory):
+        # A catalog's `pages/` is its PDF and `catxtract`'s working
+        # files, shown in the catalog's panel (`T.cm~5.1.10` #59).
+        if path.name == CATALOG_PAGES and (directory / CATALOG).is_file():
+            continue
         if path.is_dir():
             branch: Node = Node(path.name, DIRECTORY, path)
             branch.about = about_directory(path.name)
