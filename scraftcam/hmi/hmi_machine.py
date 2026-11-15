@@ -78,6 +78,9 @@ RAPID_SPEED: float = 60.0
 # How many lines the executed and coming windows show.
 SHOWN: int = 6
 
+# The G-code windows' width, in characters; longer lines end in `...`.
+GCODE_WIDTH: int = 32
+
 # A tool change line (`M6`, outside a comment).
 TOOL_CHANGE: re.Pattern[str] = re.compile(r"\bM0*6\b", re.IGNORECASE)
 
@@ -128,8 +131,8 @@ TOGGLES: tuple[tuple[str, str, bool], ...] = (
     ("Holders", "holder", True),
 )
 
-# The HMI's tabs, one for each task, in their order.
-TABS: tuple[str, ...] = ("Configure", "NC Files", "Execute")
+# The HMI's sections, one for each task, in their order (#159).
+TABS: tuple[str, ...] = ("Setup", "Tools", "G-code", "Job", "Execute")
 
 # The MDI line's backgrounds: empty, RS-274, and not.
 BLANK: str = "white"

@@ -5,7 +5,6 @@ import os
 import tempfile
 import time
 import unittest
-from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
@@ -99,12 +98,11 @@ class WindowTest(unittest.TestCase):
         self.assertNotIn(top.redraw, model.listeners)
 
     def test_machine_panel(self) -> None:
-        """A machine's panel: never replaced, busy refuses, minimal."""
+        """A machine's panel: never replaced, and busy refuses."""
         top: Window = Window(App(None, None))
         top.show()
         busy: list[str] = ["The mill is running"]
         stops: list[str] = []
-        told: list[Callable[[bool], None]] = []
 
         # Function `reason()`:
         def reason() -> str:
@@ -117,7 +115,6 @@ class WindowTest(unittest.TestCase):
             Panel(9),
             reason,
             functools.partial(stops.append, "stop"),
-            told.append,
             functools.partial(Due, "T05", 0.5, 2.0, False),
         )
         top.connect_machine(control)
@@ -130,14 +127,6 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(meter.value(), 750)
         self.assertEqual(top.busy(), "The mill is running")
 
-        # Minimal: the machine's panel alone; full: all back.
-        told[0](True)
-        self.assertTrue(top.tree.isHidden())
-        self.assertTrue(top.panels[1].isHidden())
-        self.assertFalse(top.panels[0].isHidden())
-        told[0](False)
-        self.assertFalse(top.tree.isHidden())
-        self.assertFalse(top.panels[1].isHidden())
         busy.clear()
         top.close()
         self.assertFalse(top.isVisible())

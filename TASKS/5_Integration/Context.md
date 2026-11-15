@@ -103,3 +103,11 @@ row in each panel, drop-downs, ▶ help per field, directory
 explanations, `post_processor` as a command; the `machines/` list
 shows active machines first; [Close Panel], [Detach]/[Reattach],
 [Exit Program] with stop questions.  Awaiting the user's demo run.
+
+## 2026-11-14: `T.osiade~5.1.9` #158-#172
+
+The machine panel is smaller: a core (strip, the next tool large,
+progress, position in three lines) over tabs Setup, Tools, G-code,
+Job, Execute, at most 5 widgets to a row; the minimal form is gone,
+as the `machines/` list is the power operator's home.  The user
+liked it in a demo run.  Next: see `T.osiade~5.1.9`'s `Context.md`.

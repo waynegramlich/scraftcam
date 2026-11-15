@@ -67,7 +67,6 @@ from .views import Panel, TreeView, TreeWatcher, entry_text, splitter
 require("PySide6")
 # pylint: disable=wrong-import-position,wrong-import-order
 from PySide6.QtCore import (  # noqa: E402
-    QByteArray,
     QCoreApplication,
     QEvent,
     QMessageLogContext,
@@ -409,8 +408,6 @@ class Window(QWidget):
     * `splitter` (`QSplitter`): The tree, then the panels.
     * `tree` (`TreeView`): The shop's and the design's files.
     * `current` (`int`): The current panel's index (#122).
-    * `minimal` (`bool`): True while shrunk to a machine's panel (#94).
-    * `full_geometry` (`QByteArray`): Where the window was, full.
     * `machine_timer` (`QTimer`): Keeps [Stop All] and the machine
       tabs' bars up to date.
     * `blink` (`bool`): Which half of a blink it is (a waiting
@@ -469,8 +466,6 @@ class Window(QWidget):
         self.exiting: bool = False
         self.machines: list[MachineControl] = []
         self.current: int = 0
-        self.minimal: bool = False
-        self.full_geometry: QByteArray = QByteArray()
         self.add_panel()
         tree_width: int = int(WIDTH * TREE_MOST)
         self.splitter.setSizes([tree_width, WIDTH - tree_width])
@@ -800,20 +795,6 @@ class Window(QWidget):
         * `machine` (`MachineControl`): The controls.
         """
         self.machines.append(machine)
-        machine.on_minimal(functools.partial(self.machine_minimal, machine))
-
-    def machine_minimal(self, machine: MachineControl, minimal: bool) -> None:
-        """Shrink to a machine's panel, or show it all (#94).
-
-        Arguments:
-        * `machine` (`MachineControl`): The machine going minimal.
-        * `minimal` (`bool`): True to shrink, False to show it all.
-        """
-        panel: Panel
-        for panel in self.panels:
-            if machine in panel.machines:
-                self.set_minimal(panel, minimal)
-                return
 
     def free_panel(self) -> Panel:
         """Return the panel a click shows an item in, and make it current.
@@ -877,49 +858,6 @@ class Window(QWidget):
         if self is not clicked:
             self.raise_()
             self.activateWindow()
-
-    def set_minimal(self, panel: Panel, minimal: bool) -> None:
-        """Shrink to a machine's panel alone, on top; or show it all.
-
-        While a machine runs, SolidCraft should have the screen, and
-        never cover the machine's Pause (#90, #94, #95).  Only the
-        message, [Stop All], [x] and the panel stay.  Wayland leaves
-        "on top" to the desktop, which may not do it.
-
-        Arguments:
-        * `panel` (`Panel`): The machine's panel.
-        * `minimal` (`bool`): True to shrink, False to show it all.
-        """
-        if minimal == self.minimal:
-            return
-        self.minimal = minimal
-        if minimal:
-            self.full_geometry = self.saveGeometry()
-        hidden: list[QWidget] = [
-            self.tree,
-            self.action_rows,
-            self.buttons["Tree"],
-            self.buttons["+ Panel"],
-            *[other for other in self.panels if other is not panel],
-        ]
-        widget: QWidget
-        for widget in hidden:
-            widget.setVisible(not minimal)
-
-        # The panel's own buttons only in the full form (#16).
-        panel.detach_button.setVisible(not minimal)
-        if minimal:
-            panel.close_button.hide()
-        else:
-            self.show_close_buttons()
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, minimal)
-        self.show()
-        if minimal:
-            self.resize(self.minimumSizeHint())
-        else:
-            self.restoreGeometry(self.full_geometry)
-            self.redraw()
-            self.fit_tree()
 
     def busy(self) -> str:
         """Say why this window may not close, if it may not (#56, #67).

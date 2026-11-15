@@ -56,7 +56,6 @@ def control(
         Panel(9),
         functools.partial(reason, busy or []),
         nothing,
-        nothing,
         functools.partial(answer, due),
         (
             no_report
@@ -70,7 +69,7 @@ def control(
 
 # Function `nothing()`:
 def nothing(*_arguments: object) -> None:
-    """Do nothing: a control's `stop()` and `on_minimal()`."""
+    """Do nothing: a control's `stop()`."""
 
 
 # Function `reason()`:

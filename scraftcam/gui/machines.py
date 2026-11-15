@@ -97,16 +97,13 @@ class MachineControl:
     * `busy` (`Callable[[], str]`): Why nothing may close yet (the
       machine runs, or its spindle is on), or `""` (#56).
     * `stop` (`Callable[[], None]`): Stops the machine at once.
-    * `on_minimal` (`Callable[[Callable[[bool], None]], None]`): Hands
-      the controls what to call when they go minimal (True) or full
-      (False), so the window can shrink with them (#94).
     * `due` (`Callable[[], Due | None]`): When the operator is next
       needed (#102); `None` with no program.
     * `report` (`Callable[[], Report]`): Its program, progress and next
       tools (#154).
 
     Constructor:
-    * `MachineControl(name, widget, busy, stop, on_minimal, due, report)`
+    * `MachineControl(name, widget, busy, stop, due, report)`
     """
 
     # Constructor arguments:
@@ -114,7 +111,6 @@ class MachineControl:
     widget: QWidget = field(init=True)
     busy: Callable[[], str] = field(init=True)
     stop: Callable[[], None] = field(init=True)
-    on_minimal: Callable[[Callable[[bool], None]], None] = field(init=True)
     due: Callable[[], "Due | None"] = field(init=True)
     report: Callable[[], Report] = field(init=True, default=no_report)
 

@@ -335,3 +335,114 @@ the code.  Next:
 Tests run this session: `test_gui_window`, `test_gui_machines`,
 `test_gui_fields`, `test_gui_tree`, `test_gui_templates`,
 `test_shops`, `test_shop_schema`, `test_gcode`; all pass.
+
+## Machine Sub-Panels (#158-#162, 2026-11-14)
+
+The machine panel is too big (#105); it is split into ordinary
+panels.  Agreed by the user: #158 and #159; #160-#162 proposed, not
+yet decided.  Work in 3 minute increments, a summary after each; no
+big test suites.
+* #158: a small core panel per machine: name, kind, state; run
+  button, [Skip Tool], [Stop]; position with S and F; next-task bar;
+  the message.  The core is also the minimal form.
+* #159: sub-panels opened on demand: Setup (Next Step, Set Origin,
+  Home, Set X/Y/Z, jogs), Tool Table (#80, #81; later), Tools (tool
+  plan, -Tool/+Tool, carousel), G-code (executed, coming, MDI), Job
+  (NC Files, #74), Execute (Expert slider, progress, next tool, View
+  check boxes).
+* Plan: `HMI.__init__()` (`lcnc_hmi.py:480-767`) builds a core plus
+  `HMI.sections` (name -> `QWidget`), from today's `TABS`
+  (`hmi_machine.py:132`).  Standalone, the sections go in the
+  notebook as tabs (`tab()`, `select_tab()`, the port's `tab` and
+  `tests/test_lcnc_hmi.py:568-590` keep working); in the GUI,
+  `MachineControl` gets the sections and the window opens each in a
+  panel of its own.
+* Increment 1: read the code, plan above.  Nothing coded yet.
+* Increment 2: the HMI's tabs are the #159 sections, `TABS` =
+  Setup, Tools, G-code, Job, Execute (`hmi_machine.py`); the tool
+  plan moved to Tools, the View boxes to Execute; the core above
+  them is the strip, position, message.  Standalone they are still
+  tabs.  Checkers clean; `test_lcnc_hmi`, `test_carousel` pass.
+  Next: `MachineControl.sections`, the core's section buttons, and
+  `Window` opening a section in a panel of its own.
+* Increment 3: the GUI shows the sections in panels of their own.
+  `MachineControl.sections`; `HMI.take_sections()` (run.py passes
+  them; the notebook is then empty and hidden, `tab()` gives "");
+  `Panel.section_row` (a button per section under the machine's
+  header), `show_section()`, `section`, `open_section`,
+  `_show_header()`; `drop_machine()` drops a section too;
+  `Window.open_section()` (an open one made current, else a new
+  panel).  Section panels are not sticky (#162 undecided).  Checkers
+  clean; `test_gui_machines`, `test_gui_window`, `test_lcnc_hmi`
+  pass; an offscreen smoke script (not a test) checked opening,
+  reopening and dropping.  Not yet: a GUI run by the user; tests.
+* Decided (the user, 2026-11-14, after a `show_demo.py` run): the
+  section panels "are not going to work".  Each panel is laid out
+  for what it manages; a machine panel's tasks are tabs (a
+  `QTabWidget`) under its core.  This replaces #159's panels of
+  their own; #160 and #162 are moot.  Increment 3's code was taken
+  out again (the five files put back as of hg 804), so the GUI shows
+  the HMI with its own tabs: Setup, Tools, G-code, Job, Execute.
+* The user liked the tabs in a `show_demo.py` run (2026-11-14):
+  the core over the tabs is small enough, and the tabs' order and
+  grouping are right.  Renaming the Execute tab or the MDI [Execute]
+  button comes much later.  `test_lcnc_hmi`'s `test_tabs` now checks
+  each task's controls are on its tab and the core is above them.
+* Narrow machine panel (the user, 2026-11-14: "just too big"; at
+  most 5 low level widgets to a row), coded, awaiting the user's
+  `show_demo.py` run: the position is three lines (X Y Z; T S F;
+  line, machine, material); Setup has a row per axis (`[-X] [+X]
+  [entry] [Set X]`) and the five jog steps on a row of their own;
+  the G-code windows are `GCODE_WIDTH` (32) characters, no
+  horizontal scroll bar, longer lines cut short with `...`
+  (`elided()`).  The user may not like the per-axis rows.  Tests:
+  only the existing ones (pass); more after the user's run.
+
+## Operator Views (#168-#172, 2026-11-14, agreed by the user)
+
+The minimal form surprised the user (the tree went at Start); the
+`machines/` list covers it: power operators live there, and what an
+operator wants is "what is the next tool?" and "when do I need it?".
+* #168: no minimal form at all (replaces #90-#95; #167 moot).  Done:
+  gone are `HMI.set_minimal()`, `toggle_minimal()`, `size_button`,
+  `minimal`, `on_minimal`; `Window.set_minimal()`,
+  `machine_minimal()`, `minimal`, `full_geometry`;
+  `MachineControl.on_minimal`; "stay on top".  Tests adjusted;
+  checkers clean; the five HMI/GUI test files pass.
+* #169: `machines/` is the power operator's home; next-tool work goes
+  there first.
+* #170: a machine's panel opens with the answer, large, under its
+  header: "Next: T05 1/4in end mill, in 3:20" ("■ NOW" waiting).
+* #171: a little more for one machine: the tool after next, the
+  job's time left.
+* #172: [Stop] in each strip, [Stop All] on the top line: unchanged.
+* #170, #171 coded (awaiting the user's run): `HMI.next_tool` moved
+  from Execute to the core, under the strip, bold at `NEXT_SCALE`
+  (1.6) times, "■ NOW: " first while `intervention()` waits; the
+  progress line (file, line, time left) under it.  Its text is
+  `next_tool_text()`: the next tool change, not only the manual ones
+  (`next_intervention()`, the header's bar).  The tool after next
+  (#171) is still only in the Tools tab's plan.
+
+## Where Things Stand (2026-11-14, second session's end)
+
+The user liked #168-#171 in a `show_demo.py` run ("quite good";
+tweaks to come over time).  The machine panel is now: header (name,
+next-task bar), strip (run button, [Skip Tool], [Stop]), the next
+tool large, the progress line, the position in three lines, the
+message, then tabs Setup, Tools, G-code, Job, Execute.  The earlier
+"Where Things Stand" list is renumbered here, open items only:
+1. #163: tables inside a shop item (controller, axes, spindle,
+   preferences, carousel) are not shown; proposed ▶ headings.
+2. #164: a Tool Table tab (#80, #81, #83).
+3. #165: the Job tab as a directory of `.nc` files (#74, #77, #78).
+4. #166: tests for [Close Panel], [Detach]/[Reattach], the exit
+   question, drop-downs, field help; and for the narrow rows,
+   `elided()`, the next tool line, now the user has run them.
+5. The big next-tool line names the next tool change; the header's
+   bar the next one by hand; differ only with a carousel.
+6. Renaming the Execute tab or the MDI [Execute]: much later.
+7. `gcode.post_process()` is not called yet (only LinuxCNC runs).
+Tests run this session: `test_lcnc_hmi`, `test_carousel`,
+`test_hmi_origin_axes`, `test_gui_machines`, `test_gui_window`;
+all pass.  Not run: the whole suite; the LinuxCNC end-to-end suite.

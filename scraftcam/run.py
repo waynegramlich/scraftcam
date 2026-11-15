@@ -192,11 +192,6 @@ def machine_maker(
                 hmi.plan.text(),
             )
 
-        # Function `listen()`:
-        def listen(callback: Callable[[bool], None]) -> None:
-            """Have the HMI call `callback` when it goes minimal or full."""
-            hmi.on_minimal = callback
-
         try:
             hmi.open(options.program)
         except (ValueError, OSError) as error:
@@ -206,7 +201,6 @@ def machine_maker(
             hmi,
             hmi.busy,
             hmi.on_stop,
-            listen,
             due,
             report,
         )

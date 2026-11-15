@@ -555,7 +555,7 @@ class TestHeadless(unittest.TestCase):
         )
 
     def test_run_toggle(self) -> None:
-        """One run button, named for the run; Start goes minimal."""
+        """One run button, named for the run (#96)."""
         self.assertEqual(self.panel.run_toggle.text(), "Start")
         self.panel.set_running(True, False)
         self.assertEqual(self.panel.run_toggle.text(), "Pause")
@@ -564,11 +564,6 @@ class TestHeadless(unittest.TestCase):
         self.panel.ended = True
         self.panel.set_running(False, False)
         self.assertEqual(self.panel.run_toggle.text(), "Restart")
-        self.panel.set_minimal(True)
-        self.assertTrue(self.panel.notebook.isHidden())
-        self.assertEqual(self.panel.size_button.text(), "Full")
-        self.panel.toggle_minimal()
-        self.assertFalse(self.panel.notebook.isHidden())
 
     def test_expert(self) -> None:
         """The slider is greyed out until Expert is agreed to (#79)."""
@@ -583,8 +578,30 @@ class TestHeadless(unittest.TestCase):
         self.assertFalse(self.panel.slider.isEnabled())
 
     def test_tabs(self) -> None:
-        """Each tab can be shown, and `show` says which one is."""
-        self.assertEqual(self.panel.show_state()["tab"], "Configure")
+        """Each tab holds its task's controls (#159), and can be shown."""
+        # Imported here: `PySide6` is on `sys.path` only once `tests` is.
+        from PySide6.QtWidgets import (  # pylint: disable=import-outside-toplevel
+            QWidget,
+        )
+
+        # Each control on its task's tab; the core above the tabs.
+        widget: QWidget
+        tab: str
+        for widget, tab in (
+            (self.panel.origin_button, "Setup"),
+            (self.panel.jog_buttons[0], "Setup"),
+            (self.panel.plan, "Tools"),
+            (self.panel.carousel, "Tools"),
+            (self.panel.mdi_entry, "G-code"),
+            (self.panel.executed, "G-code"),
+            (self.panel.slider, "Execute"),
+            (next(iter(self.panel.toggles.values())), "Execute"),
+        ):
+            self.assertTrue(self.panel.tabs[tab].isAncestorOf(widget), tab)
+        self.assertFalse(self.panel.notebook.isAncestorOf(self.panel.position))
+
+        # Each tab shown in turn, by the port's `tab`.
+        self.assertEqual(self.panel.show_state()["tab"], "Setup")
         for name in hmi_machine.TABS:
             self.assertEqual(self.ask(f"tab {name}"), "ok")
             self.assertEqual(self.panel.show_state()["tab"], name)
