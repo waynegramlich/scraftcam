@@ -11,7 +11,6 @@
 @5.1.9_Organize_Shop_Information_and_Data_Entry/Details.md
 @5.1.9_Organize_Shop_Information_and_Data_Entry/Context.md
 @5.1.10_Catalog_Management/Details.md
-@5.1.10_Catalog_Management/Context.md
 @5.3_Create_More_Tools/Details.md
 @5.3_Create_More_Tools/Context.md
 @5.4_New_Path_for_Each_Tool_Change/Details.md
@@ -19,6 +18,8 @@
 @5.6_Import_a_Project_from_a_Different_Shop/Details.md
 @5.7_Carousel_Planning_for_a_Job/Details.md
 @5.8_Run_Several_LinuxCNC_Simulators_at_Once/Details.md
+@5.9_Adding_a_New_Tool/Details.md
+@5.9_Adding_a_New_Tool/Context.md
 @../ISSUES/2_Archive_Merged_GitHub_Repositories/Summary.md
 @../ISSUES/3_Main_Part_Goes_Translucent_in_show_demo/Summary.md
 @../ISSUES/1_PathRack_Hidden_Path_Shows_Again/Summary.md

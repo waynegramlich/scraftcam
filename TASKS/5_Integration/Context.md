@@ -131,3 +131,8 @@ products go under version control.  First tool from a catalog page:
 the Shars Z setter, `tooling/setters.py` `z_setter(imperial)`, shown
 in SolidCraft.  McMaster-Carr web pages are on hold (their rules).
 See `T.cm~5.1.10`'s `Context.md`.
+
+## 2026-11-15: `T.cm~5.1.10` suspended; `T.ant~5.9` opened
+
+Catalogs wait until an end user can model a tool and hook it in
+easily: `T.ant~5.9` (Adding a New Tool), Open.
