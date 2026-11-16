@@ -136,3 +136,13 @@ See `T.cm~5.1.10`'s `Context.md`.
 
 Catalogs wait until an end user can model a tool and hook it in
 easily: `T.ant~5.9` (Adding a New Tool), Open.
+
+## 2026-11-15: `T.cmt~5.3`: the parametric model library
+
+5.3 now builds the library for parametric parts and assemblies:
+plain editable dataclasses, `update()` passes until stable, a
+separate `build()`, `Placement` with quaternion `Rotation`,
+native-unit `Length`, field metadata driving schema, GUI and docs;
+no `SC` prefixes.  `attrs` was tried and rejected.  Next:
+`scraftcam/model.py`, then the drill vise (the user measures it).
+See `T.cmt~5.3`'s `Context.md`.
