@@ -23,3 +23,11 @@ Models will subclass `SolidModel`, and their parameters will reach
 SolidCraft as live parameters (a GUI edit rebuilds in milliseconds);
 step 11 ("See it in SolidCraft from its panel") builds on that.  See
 `T.cmt~5.3`'s `Context.md`.
+
+## 2026-11-16: First `SolidModel`
+
+`scraftcam/model.py` (`SolidModel`, `meta()`, `Length`, ...) and
+the first model on it, `scraftcam/tooling/jaw_plate.py` `JawPlate`
+(live SolidCraft parameters), are in; see `T.cmt~5.3`'s
+`Context.md`.  Field metadata (`meta()`) is idea 1's "one place per
+kind" start.

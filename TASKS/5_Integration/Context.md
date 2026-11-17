@@ -156,3 +156,11 @@ subclass `SolidModel`; our GUI edits go one way to SolidCraft
 parameters; one visible design window unless the user allows more,
 plus simulation windows per machine.  `T.cm~5.1.10` is Reference
 until 5.3 has tools.  See `T.cmt~5.3`'s `Context.md`.
+
+## 2026-11-16: `scraftcam/model.py` and a live `JawPlate`
+
+`T.cmt~5.3`: the model library's first steps are coded (`Length`,
+`Angle`, quaternion `Rotation`, `Placement`, `SolidModel` settling
+by passes within a wall clock limit) and `JawPlate` builds in
+SolidCraft driven by parameters.  Next: `SolidCraftLink`, then the
+Kurt vise.  See `T.cmt~5.3`'s `Context.md`.

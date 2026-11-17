@@ -294,3 +294,120 @@ Next: those two, then `scraftcam/model.py` (`Length`, `Rotation`,
 session; the findings above are enough to redo them):
 `param_block.py`, `param_watch.py`, `param_names.py`,
 `two_windows.py`, `live_in_assembly.py`.
+
+## 2026-11-16: #16, #41, #45-#47 answered
+
+* #16: the split agreed: `SolidModel` holds fields and metadata,
+  settles by passes, and `build()` makes the features and the named
+  parameters; a helper per live SolidCraft holds the connection and
+  the last values sent, and chooses a parameter change or a new
+  `build()` (shape-changing fields, by metadata).
+* #41.1-5: agreed.  #41.4 (no builds while a machine runs) matters
+  little: our LinuxCNC is user space, not real time.
+* #45: rotations are done with quaternions only; a 4x4 matrix is
+  made from one at the very end, for SolidCraft.  Go ahead with the
+  experiment.
+* #46: agreed, step by step: `Length`, `Rotation`, `Placement` first;
+  then `SolidModel`, the pass driver and the helper.
+* #47: no drill vise for now.  `JawPlate` first, then the Kurt vise.
+
+## 2026-11-16: #45 experiment: `occurrence.move(matrix=...)`
+
+Scratchpad `rot_test.py` (headless; a 10 x 20 x 5 mm box at the
+origin, moved by 90 degrees about Z then +100 mm in X):
+* A design's first occurrence is grounded and refuses to move:
+  `occurrence.ground(occurrence=, grounded=False)` first.
+* `matrix` is row-major, column vectors: `[[R00, R01, R02, tx],
+  [R10, ...], [R20, ...]]` (12 numbers; or 16), so p' = R p + t.
+  The box went to x 80..100, y 0..10: as expected.
+* The `transform` it returns (and `occurrence.properties` has none)
+  is the transpose: row vectors, the translation in the bottom row.
+* A move is relative: it composes with the current placement (a
+  second identical move gave 180 degrees, t = (100, 100, 0)).  No
+  command sets an absolute placement (none in `occurrence.*` or
+  `component.*`).
+* A matrix off rigid by 1e-6 is refused ("not rigid ... above the
+  tolerance 1e-9"); `tolerance` raises it to at most 1e-3.
+* So the helper keeps each occurrence's last sent `Placement`
+  (quaternion and translation) and sends the delta: q_d = q_new
+  q_old^-1, t_d = t_new - R(q_d) t_old, made into a matrix only at
+  the call.  A unit quaternion gives |R^T R - I| near 1e-16, far
+  inside the tolerance.  The returned `transform` can be compared
+  with ours to catch drift.
+
+## 2026-11-16: #45-#52 answered; `model.py` chunk 1
+
+* #45/#48: errors pile up when many 4x4 matrices are multiplied;
+  SolidCraft does exactly that with relative moves, so the helper
+  compares its returned `transform` with ours and sends a
+  correction past 1e-8 (1e-7 might be visible; 1e-9 is not).
+* #49: degrees; radians are converted with 9 decimals (the user:
+  at least 6).
+* #50 -> #53 (on hold): preferred units.  Until then a composed
+  `Placement`'s translation is in mm.
+* #51: the new `JawPlate` takes the Kurt plate's numbers; the old
+  class stays until the user has seen it.
+* Chunk 1 done: `scraftcam/model.py` (`parse_number()`,
+  `number_text()`, `Length`, `Angle`, `Rotation`, `Placement` with
+  `compose()`, `inverse()`, `delta()`, `matrix()`) and
+  `tests/test_model.py` (12 tests, pass; all checkers clean).
+  Next: `SolidModel`, the pass driver, the helper.
+
+## 2026-11-16: #53-#58 answered; `model.py` chunk 2
+
+* #53: preferred units per model: whoever designs a model sets its
+  unit (`SolidModel.UNIT`); its results use it.
+* #54: `Length(3, "in")`, `Angle(90)` take plain ints.
+* #55: `meta(unit, label, help_text, shape=False)`; `unit` one of
+  `UNIT_KINDS` (`length`, `angle`, `count`, `text`, `flag`).
+* #56: a wall clock limit, not a pass count: `settle(seconds=5.0)`
+  raises `NotSettledError` naming the results still moving.
+  A `nan` (from a result run off to `inf`) counts as moving.
+* #57: `SolidCraftLink`; more modelers (each with an MCP-like
+  interface) later, not now.
+* #58: the user is left out of `JawPlate`'s parameters: Claude
+  converts, and reports how long the changes took.
+* Chunk 2 done (about 2 minutes by the clock): `SolidModel`
+  (`settle()`, `results()`, `parameters()` with dotted paths,
+  `parameter_fields()`), `meta()`, `NotSettledError`; 16 tests pass,
+  checkers clean.  Next: `SolidCraftLink`, then `JawPlate`.
+
+## 2026-11-16: #59-#63; `JawPlate` chunk 3
+
+* #59 expanded for the user (prefix names per model in a design),
+  not yet answered.  #60: agreed (users never see it).  #61:
+  headless in development; a window only when the user wants to
+  see.  #62: internal, skipped.
+* Chunk 3 (about 3 minutes by the clock, 18:43-18:47):
+  `scraftcam/tooling/jaw_plate.py` `JawPlate(SolidModel)`, unit
+  inches, the Kurt numbers as defaults (old `tools.JawPlate` kept);
+  `update()` has the old checks plus results `half_length`,
+  `half_spacing`, `volume`; `build(solidcraft, name)` adds every
+  `Length` parameter and result as `NAME__PATH` and dimensions the
+  sketches by them.  `tests/test_jaw_plate.py` (4 tests, 0.7 s, the
+  SolidCraft one skipped without `solidcraft-cli`): built headless,
+  then `jaw__width` and `jaw__counterbore_depth` changed in one call;
+  volume within 1e-4 and the box right both times.
+* SolidCraft sketch findings: `sketch.dimension(entities=["origin",
+  "c1"], type="vertical")` conflicts with a horizontal one ("origin"
+  with a circle is not what it seems); `["origin", "c1.center"]`
+  works for both (dof 0).  `x`/`y` are not dimension entities.
+  `sketch.create(plane="YZ", offset="jaw__half_length")` takes a
+  parameter, so the face's sketch follows the thickness.  Volume
+  differs from ours by about 1e-5 relative.
+
+## 2026-11-16: Where things stand (before `git commit`)
+
+* #59: decided: a model added to a design is always given a number,
+  `NAME_NNN` (e.g. `jaw_plate_001__width`); the names are hardly
+  seen by users.
+* Done: `scraftcam/model.py` (`Length`, `Angle`, `Rotation`,
+  `Placement`, `SolidModel`, `meta()`, `settle()` with a wall clock
+  limit), `scraftcam/tooling/jaw_plate.py` (`JawPlate`, live
+  parameters), `tests/test_model.py` (16), `tests/test_jaw_plate.py`
+  (4); all pass, checkers clean.
+* Next: #64 the user sees the plate in a SolidCraft window; then #65
+  `SolidCraftLink` (remembers what was sent; sends changed values in
+  one `parameters.change`, rebuilds on a `shape` field; places by
+  quaternion deltas; drift check past 1e-8, #48; `_NNN` names, #59);
+  then #66 the Kurt vise on `SolidModel`, retiring `tools.JawPlate`.
