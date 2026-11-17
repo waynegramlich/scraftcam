@@ -4,11 +4,15 @@
 @2.5_Tool_Models/Details.md
 @2.5.1_Create_tools_from_Shop.md/Details.md
 @2.5.2_Document_Tool_Models/Details.md
+@2.5.2.1_SVG_Diagrams_from_Models/Details.md
+@2.5.2.1_SVG_Diagrams_from_Models/Context.md
 @3.4_Minimal_LinuxCNC_Control_Panel/Details.md
 @4_Implementing_Keepout_Zones/Details.md
 @5_Integration/Details.md
 @5_Integration/Context.md
 @5.1.9_Organize_Shop_Information_and_Data_Entry/Details.md
+@5.1.9.1_Original_and_Changed_Values/Details.md
+@5.1.9.1_Original_and_Changed_Values/Context.md
 @5.1.10_Catalog_Management/Details.md
 @5.1.10_Catalog_Management/Context.md
 @5.3_Create_More_Tools/Details.md

@@ -171,3 +171,11 @@ The `JawPlate` was shown live in a SolidCraft window; the link that
 keeps models up to date in SolidCraft (`scraftcam/solidcraft_link.py`)
 has its first chunk.  Next: models inside models (#69), then the Kurt
 vise.  See `T.cmt~5.3`'s `Context.md`.
+
+## 2026-11-16: Two new sub-tasks; GUI by layers
+
+`T.sdfm~2.5.2.1` (SVG diagrams from models) and `T.oacv~5.1.9.1`
+(original and changed values) are created, Open, for the user's
+review.  The user's idea: a model's panel organized by layers (a
+global layer plus a sub-panel per layer, each with its SVG); tools
+are the dry run for the end products.  See `T.cmt~5.3`.

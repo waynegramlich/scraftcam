@@ -454,3 +454,27 @@ origin, moved by 90 degrees about Z then +100 mm in X):
 * Not yet: models nested in models placed by their parents (children
   composed down the tree); `Angle` parameters (only `Length`s are
   sent); a GUI field calling `send()`.
+
+## 2026-11-16: #69-#73 answered; where things stand (before `/clear`)
+
+* #69: try one SolidCraft sub-component per child model.
+* #70: no window demo of the link needed.
+* #71: a tool, like anything, is an assembly: parts (a `SolidModel`,
+  or a `.step` equivalent) in sub-assemblies up to the final
+  assembly.  Each model is a component; a part is a leaf.
+* GUI direction (the user, thinking aloud, not settled): organize a
+  model's panel by its layers and their SVG diagrams, a global layer
+  always visible plus a sub-panel per layer; the user tweaks tools
+  and saves them into their shop.  Tools are the dry run; the end
+  products people design come after.  Claude's proposal: layers are
+  child models, the global layer the parent's own fields.
+* #72 -> new `T.sdfm~2.5.2.1` (SVG diagrams from models; SolidCraft
+  has `sketch.insert_svg` but no SVG export in our bindings).
+  #73 -> new `T.oacv~5.1.9.1` (original and changed values,
+  highlighted).  Both Open with draft `Details.md`; the user decides
+  in the morning where they belong (Claude suggested #72 under
+  `T.dtm~2.5.2`, which is where it was put).
+* Next (after the user's morning review): #69, child models as
+  sub-components placed by the parent's `update()`, composed by
+  `SolidCraftLink`; then the Kurt vise as an assembly with its jaw
+  plates as parts.
