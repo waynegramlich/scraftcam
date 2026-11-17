@@ -164,3 +164,10 @@ until 5.3 has tools.  See `T.cmt~5.3`'s `Context.md`.
 by passes within a wall clock limit) and `JawPlate` builds in
 SolidCraft driven by parameters.  Next: `SolidCraftLink`, then the
 Kurt vise.  See `T.cmt~5.3`'s `Context.md`.
+
+## 2026-11-16: `SolidCraftLink` (`T.cmt~5.3`)
+
+The `JawPlate` was shown live in a SolidCraft window; the link that
+keeps models up to date in SolidCraft (`scraftcam/solidcraft_link.py`)
+has its first chunk.  Next: models inside models (#69), then the Kurt
+vise.  See `T.cmt~5.3`'s `Context.md`.

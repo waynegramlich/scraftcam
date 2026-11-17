@@ -430,3 +430,27 @@ origin, moved by 90 degrees about Z then +100 mm in X):
   names (#59); then #66 the Kurt vise.  Work goes in ~3 minute
   chunks, each ending with a numbered summary and a top 5.
 * `git`: `1eff0d4` (model.py, jaw_plate.py, tests), pushed.
+
+## 2026-11-16: #64 shown; #65 `SolidCraftLink` chunk 1
+
+* #64 done: the user saw the plate in a window (`--control 8085`):
+  "a vice jaw with 2 countersunk holes".  Build 730 ms; width 5 in
+  140 ms; counterbore depth 5/8 in 93 ms (headless: 2-5 ms; the
+  window's redraw, or a covered window, `solidcraft-to-front`).
+  Raising on this KDE: `loadScript FILE NAME`, then
+  `org.kde.kwin.Scripting.start` (no `/Scripting/ScriptN ... run`).
+* #66: the user will say what they see once the Kurt vise is shown.
+* #65 chunk 1: `scraftcam/solidcraft_link.py` `SolidCraftLink`
+  (`add(model, base, placement)` -> `BASE_NNN`, each model in its own
+  component, ungrounded; `send(name)` -> `unchanged`/`changed`/
+  `rebuilt`; `place()` by quaternion delta, drift past `DRIFT` 1e-8
+  corrected by a matrix; `remove()`), `SolidModel.build()` on the
+  base class.  Found: `component.delete` takes the component's
+  features; its parameters are then deleted one by one by prefix
+  (24 ms for 10); a rebuilt occurrence is at identity and ungrounded
+  (only the design's first is grounded), so its placement is sent
+  whole again.  `tests/test_solidcraft_link.py` (4 tests, 0.2 s,
+  headless); checkers clean.
+* Not yet: models nested in models placed by their parents (children
+  composed down the tree); `Angle` parameters (only `Length`s are
+  sent); a GUI field calling `send()`.

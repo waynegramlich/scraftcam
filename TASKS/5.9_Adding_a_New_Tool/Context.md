@@ -31,3 +31,10 @@ the first model on it, `scraftcam/tooling/jaw_plate.py` `JawPlate`
 (live SolidCraft parameters), are in; see `T.cmt~5.3`'s
 `Context.md`.  Field metadata (`meta()`) is idea 1's "one place per
 kind" start.
+
+## 2026-11-16: `SolidCraftLink`
+
+`scraftcam/solidcraft_link.py` keeps models built in a SolidCraft up
+to date (numbered names, one component each, edits as parameter
+changes, rebuilds on `shape` fields, placements); step 11 ("See it in
+SolidCraft from its panel") will call its `send()`.  See `T.cmt~5.3`.

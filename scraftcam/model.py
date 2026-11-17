@@ -19,7 +19,8 @@
   `init=False` fields, computed by `update()`.  `settle()` repeats
   `update()` until no result moves, within a wall clock limit.
 
-The SolidCraft link (`SolidCraftLink`) comes later.
+`SolidCraftLink` (`scraftcam.solidcraft_link`) keeps models built in
+a SolidCraft up to date.
 """
 
 import math
@@ -28,7 +29,10 @@ import time
 from collections.abc import Iterator
 from dataclasses import Field, dataclass, field, fields
 from fractions import Fraction
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:  # Only for hints: the values need no SolidCraft.
+    from .pybind.scraftpybind import PyBind
 
 # A point or direction: `(x, y, z)`, in millimeters for points.
 Vector = tuple[float, float, float]
@@ -834,6 +838,26 @@ class SolidModel:
         `update()`, read their results and check their own parameters
         together (raising `ValueError`); this one does nothing.
         """
+
+    # Method `SolidModel.build()`:
+    def build(self, solidcraft: "PyBind", name: str) -> str:
+        """Build the model in the active SolidCraft component.
+
+        Each length parameter and result becomes the SolidCraft
+        parameter `NAME__PATH` (dots made `__`), so that
+        `SolidCraftLink` can change it later.
+
+        Arguments:
+        * `solidcraft` (`PyBind`): The SolidCraft session.
+        * `name` (`str`): The model's name, and its parameters' prefix.
+
+        Returns:
+        * (`str`): The body's name.
+
+        Raises:
+        * `NotImplementedError`: Always; each model builds itself.
+        """
+        raise NotImplementedError(f"{type(self).__name__}.build()")
 
     # Method `SolidModel.settle()`:
     def settle(self, seconds: float = SETTLE_SECONDS) -> int:
