@@ -123,3 +123,10 @@ Tests run 2026-11-15: `test_shops`, `test_shop_schema`,
 `test_gui_tree`, `test_gui_fields`, `test_gui_catalogs`,
 `test_gui_window`, `test_gui_machines`, `test_gui_templates`,
 `test_catalog_pdf`; all pass.  Not run: the whole suite.
+
+## 2026-11-16: Reference while `T.cmt~5.3` makes tools
+
+Set to Reference by the user: catalogs are hard to test without new
+tools to add, so `T.cmt~5.3` makes some first; this task resumes
+after.  Its decisions above guide the new tools' shop fields
+(`manufacturer`, `vendor_pn`, `catalog`, `catalog_page`, ...).

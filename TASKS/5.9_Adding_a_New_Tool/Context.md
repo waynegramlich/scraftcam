@@ -16,3 +16,10 @@ units from which the schema, reader, GUI fields and docs come,
 native-unit `Length`, `Placement` with quaternion `Rotation`) is
 designed in `T.cmt~5.3`'s `Context.md`; coding starts there with
 `scraftcam/model.py`.
+
+## 2026-11-16: Live parameters for models (`T.cmt~5.3`)
+
+Models will subclass `SolidModel`, and their parameters will reach
+SolidCraft as live parameters (a GUI edit rebuilds in milliseconds);
+step 11 ("See it in SolidCraft from its panel") builds on that.  See
+`T.cmt~5.3`'s `Context.md`.

@@ -146,3 +146,13 @@ native-unit `Length`, field metadata driving schema, GUI and docs;
 no `SC` prefixes.  `attrs` was tried and rejected.  Next:
 `scraftcam/model.py`, then the drill vise (the user measures it).
 See `T.cmt~5.3`'s `Context.md`.
+
+## 2026-11-16: Live SolidCraft parameters (`T.cmt~5.3`)
+
+Tested: SolidCraft parameters drive sketches and extrudes, rebuild in
+milliseconds, work inside an assembly beside cached STEP parts, and
+several off-screen SolidCrafts can run at once.  Decided: models
+subclass `SolidModel`; our GUI edits go one way to SolidCraft
+parameters; one visible design window unless the user allows more,
+plus simulation windows per machine.  `T.cm~5.1.10` is Reference
+until 5.3 has tools.  See `T.cmt~5.3`'s `Context.md`.
