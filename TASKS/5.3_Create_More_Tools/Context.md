@@ -478,3 +478,12 @@ origin, moved by 90 degrees about Z then +100 mm in X):
   sub-components placed by the parent's `update()`, composed by
   `SolidCraftLink`; then the Kurt vise as an assembly with its jaw
   plates as parts.
+
+## 2026-11-17: `Parallel` on `SolidModel` (from `T.sdfm~2.5.2.1`)
+
+`scraftcam/tooling/parallel.py` `Parallel(SolidModel)` (inches, any
+number of holes), its side a `scraftcam/outline.py` `Profile`; the
+old `tools.Parallel` stays until the GUI is debugged (the user).
+`SolidModel.solidcraft_values()` is the link's new hook (`JawPlate`
+unchanged).  Next here, still: #69 child models as sub-components,
+then the Kurt vise.  See `T.sdfm~2.5.2.1`.

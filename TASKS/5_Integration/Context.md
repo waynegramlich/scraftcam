@@ -179,3 +179,16 @@ vise.  See `T.cmt~5.3`'s `Context.md`.
 review.  The user's idea: a model's panel organized by layers (a
 global layer plus a sub-panel per layer, each with its SVG); tools
 are the dry run for the end products.  See `T.cmt~5.3`.
+
+## 2026-11-17: SolidCraft's 2D solver tested; `Profile`, `Parallel`
+
+`T.sdfm~2.5.2.1`: SolidCraft sketches were pushed hard (polygons,
+fillets, free arcs, wavy staircases, holes, 204 segments, tiny and
+huge sizes, inches, pockets, a window); it is good, but takes some
+bad outlines silently, so `scraftcam/outline.py` `Profile` checks
+them first, with messages in the user's units.  Every point and arc
+center is its own SolidCraft parameter.  `scraftcam/tooling/parallel.py`
+`Parallel` is the first `SolidModel` drawn from a `Profile`;
+`SolidCraftLink` now compares `solidcraft_values()` and rebuilds when
+the names change.  New: `T.prg~5.1.9.2` (Parametric RoundedPolygon
+GUI), Open.  Next: SVG from a `Profile`.

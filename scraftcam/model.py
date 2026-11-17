@@ -859,6 +859,33 @@ class SolidModel:
         """
         raise NotImplementedError(f"{type(self).__name__}.build()")
 
+    # Method `SolidModel.solidcraft_values()`:
+    def solidcraft_values(self, name: str) -> dict[str, str]:
+        """Return every SolidCraft parameter `build()` makes, as sent.
+
+        `SolidCraftLink` compares these with what it sent last: the
+        values that moved are sent, and new or missing names mean the
+        model must be built again.  This one gives each length
+        parameter and result as `NAME__PATH` (dots made `__`); a model
+        whose `build()` makes more parameters (such as a `Profile`'s
+        points) adds them.
+
+        Arguments:
+        * `name` (`str`): The model's name, and its parameters' prefix.
+
+        Returns:
+        * (`dict[str, str]`): SolidCraft expressions by parameter name.
+        """
+        values: dict[str, str] = {}
+        path: str
+        value: object
+        for path, value in (*self.parameters(), *self.results()):
+            if isinstance(value, Length):
+                values[f"{name}__{path.replace('.', '__')}"] = (
+                    value.solidcraft()
+                )
+        return values
+
     # Method `SolidModel.settle()`:
     def settle(self, seconds: float = SETTLE_SECONDS) -> int:
         """Repeat `update()` until no result moves.

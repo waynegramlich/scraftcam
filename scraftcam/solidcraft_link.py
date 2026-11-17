@@ -4,10 +4,12 @@ Changes go one way, from our models to SolidCraft (#15, #22):
 
 * `SolidCraftLink.add()` names a model `BASE_NNN` (#59), builds it in
   a component of its own and places it.
-* After an edit, `send()` settles the model, then sends every length
-  that changed as one `parameters.change` of plain values; a change to
-  a field marked `shape` (`meta(..., shape=True)`) deletes the model's
-  component and parameters and builds it again (#19).
+* After an edit, `send()` settles the model, then sends every value
+  that changed (`SolidModel.solidcraft_values()`) as plain values, at
+  most `outline.CHANGE_LIMIT` to a call; a change to a field marked
+  `shape` (`meta(..., shape=True)`), or to the names of the values
+  (a `Profile` with more segments), deletes the model's component and
+  parameters and builds it again (#19).
 * `place()` moves a model.  SolidCraft's `occurrence.move` is
   relative, so the link remembers where each model is and sends the
   delta (a quaternion delta, made a matrix only for the call, #45).
@@ -20,6 +22,7 @@ from dataclasses import Field, dataclass, field, fields
 from typing import Any
 
 from .model import Length, Placement, SolidModel
+from .outline import send_changes
 from .pybind.scraftpybind import JSON, PyBind
 
 # A 3x4 rigid matrix as plain rows (rotation, then translation in mm).
@@ -43,10 +46,10 @@ class LinkedModel:
     * `model` (`SolidModel`): The model.
     * `name` (`str`): Its name in SolidCraft (`jaw_plate_001`).
     * `placement` (`Placement`): Where SolidCraft has it.
-    * `lengths` (`dict[str, Length]`):
-      Each SolidCraft parameter as last sent.
     * `parameters` (`dict[str, object]`):
       Each parameter (by dotted path) as last built or sent.
+    * `values` (`dict[str, str]`):
+      Each SolidCraft parameter's expression as last sent.
 
     Constructor:
     * `LinkedModel(model, name)`
@@ -57,15 +60,15 @@ class LinkedModel:
     name: str = field()
 
     # Remaining attributes (alphabetized):
-    lengths: dict[str, Length] = field(init=False, default_factory=dict)
     parameters: dict[str, object] = field(init=False, default_factory=dict)
     placement: Placement = field(init=False, default_factory=Placement)
+    values: dict[str, str] = field(init=False, default_factory=dict)
 
     # Method `LinkedModel.remember()`:
     def remember(self) -> None:
-        """Note the model's parameters and lengths as sent."""
+        """Note the model's parameters and SolidCraft values as sent."""
         self.parameters = dict(self.model.parameters())
-        self.lengths = solidcraft_lengths(self.model, self.name)
+        self.values = self.model.solidcraft_values(self.name)
 
 
 # Class `SolidCraftLink`:
@@ -134,7 +137,7 @@ class SolidCraftLink:
 
         Returns:
         * (`str`): `unchanged`, `changed` (parameters sent) or
-          `rebuilt` (a `shape` field changed).
+          `rebuilt` (a `shape` field changed, or the values' names).
 
         Raises:
         * `ValueError`: From the model's checks; nothing is sent.
@@ -144,28 +147,24 @@ class SolidCraftLink:
         linked: LinkedModel = self.linked[name]
         linked.model.settle()
         now: dict[str, object] = dict(linked.model.parameters())
-        path: str
-        for path in shape_paths(linked.model):
-            if now.get(path) != linked.parameters.get(path):
-                self._delete(name)
-                placement: Placement = linked.placement
-                linked.placement = Placement()
-                self._build(linked)
-                self.place(name, placement)
-                return "rebuilt"
+        values: dict[str, str] = linked.model.solidcraft_values(name)
+        if values.keys() != linked.values.keys() or any(
+            now.get(path) != linked.parameters.get(path)
+            for path in shape_paths(linked.model)
+        ):
+            self._delete(name)
+            placement: Placement = linked.placement
+            linked.placement = Placement()
+            self._build(linked)
+            self.place(name, placement)
+            return "rebuilt"
 
-        # Only what changed goes out, in one call.
-        lengths: dict[str, Length] = solidcraft_lengths(linked.model, name)
-        changes: dict[str, JSON] = {
-            parameter: length.solidcraft()
-            for parameter, length in lengths.items()
-            if linked.lengths.get(parameter) != length
-        }
+        # Only what changed goes out.
+        changed: bool = values != linked.values
+        if changed:
+            send_changes(self.solidcraft, linked.values, values)
         linked.remember()
-        if not changes:
-            return "unchanged"
-        self.solidcraft.parameters.change(changes=changes)
-        return "changed"
+        return "changed" if changed else "unchanged"
 
     # Method `SolidCraftLink.place()`:
     def place(self, name: str, placement: Placement) -> None:

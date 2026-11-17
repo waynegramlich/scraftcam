@@ -38,3 +38,10 @@ kind" start.
 to date (numbered names, one component each, edits as parameter
 changes, rebuilds on `shape` fields, placements); step 11 ("See it in
 SolidCraft from its panel") will call its `send()`.  See `T.cmt~5.3`.
+
+## 2026-11-17: Outlines from `Profile`s
+
+A model may now draw its sketch from a `scraftcam/outline.py`
+`Profile` (checked lines and arcs, holes), as `Parallel` does; a GUI
+for making such outlines without Python is `T.prg~5.1.9.2`.  See
+`T.sdfm~2.5.2.1`.

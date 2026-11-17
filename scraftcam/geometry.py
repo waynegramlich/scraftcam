@@ -463,32 +463,10 @@ class RoundedPolygon:
     def _check_crossings(self) -> None:
         """Check that no two segments of the outline cross or touch.
 
-        Neighboring segments meet only at the point they share.
-
         Raises:
         * `ValueError`: If two segments cross or touch.
         """
-        segments: tuple[XYSegment, ...] = self.segments
-        count: int = len(segments)
-        first: int
-        second: int
-        for first in range(count):
-            for second in range(first + 1, count):
-                # Neighbors (and the last and first) share a point.
-                shared: list[Point] = []
-                if second == first + 1:
-                    shared.append(segments[first].end)
-                if first == 0 and second == count - 1:
-                    shared.append(segments[first].start)
-
-                # Any other meeting is a crossing.
-                point: Point
-                for point in meet(segments[first], segments[second]):
-                    if all(math.dist(point, end) > TOUCH for end in shared):
-                        raise ValueError(
-                            f"{self.name}: segments {first} and {second} "
-                            f"cross at ({point[0]:g}, {point[1]:g})"
-                        )
+        check_crossings(self.name, self.segments)
 
     # Method `RoundedPolygon._check_children()`:
     def _check_children(self) -> None:
@@ -1236,6 +1214,54 @@ def _circle_corners(
         Corner(x + radius, y + radius, radius),
         Corner(x - radius, y + radius, radius),
     )
+
+
+# Function `check_crossings()`:
+def check_crossings(
+    name: str,
+    segments: Sequence[XYSegment],
+    *,
+    per_unit: float = 1.0,
+    shown_unit: str = "",
+) -> None:
+    """Check that no two segments of a closed outline cross or touch.
+
+    Neighboring segments meet only at the point they share.
+
+    Arguments:
+    * `name` (`str`): The outline's name, for the message.
+    * `segments` (`Sequence[XYSegment]`): The closed outline, in order.
+    * `per_unit` (`float`):
+      The outline's units per unit of the message (25.4 to show
+      millimeters in inches).
+    * `shown_unit` (`str`): The message's unit, after the point.
+
+    Raises:
+    * `ValueError`: If two segments cross or touch.
+    """
+    count: int = len(segments)
+    first: int
+    second: int
+    for first in range(count):
+        for second in range(first + 1, count):
+            # Neighbors (and the last and first) share a point.
+            shared: list[Point] = []
+            if second == first + 1:
+                shared.append(segments[first].end)
+            if first == 0 and second == count - 1:
+                shared.append(segments[first].start)
+
+            # Any other meeting is a crossing.
+            point: Point
+            for point in meet(segments[first], segments[second]):
+                if all(math.dist(point, end) > TOUCH for end in shared):
+                    x: float = point[0] / per_unit
+                    y: float = point[1] / per_unit
+                    suffix: str = f" {shown_unit}" if shown_unit else ""
+                    raise ValueError(
+                        f"{name}: segments {first} and {second} "
+                        f"cross at ({x:g}, {y:g}){suffix}"
+                    )
 
 
 # Function `_box_around()`:
