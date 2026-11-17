@@ -411,3 +411,22 @@ origin, moved by 90 degrees about Z then +100 mm in X):
   one `parameters.change`, rebuilds on a `shape` field; places by
   quaternion deltas; drift check past 1e-8, #48; `_NNN` names, #59);
   then #66 the Kurt vise on `SolidModel`, retiring `tools.JawPlate`.
+
+## 2026-11-16: Where things stand (before `/clear`)
+
+* #64: the plate was built in a window (`--control 8085`, the
+  AppImage `../solidcraft/solidcraft-linux-x86_64.AppImage`); the
+  first live change tried, width 4 in, was rightly refused by
+  `update()` (20 mm counterbores on 3-7/8 in centers do not fit), and
+  the user closed the window before the 5 in retry.  To show it
+  again: start the window, raise it (KDE on X11: a KWin script via
+  `qdbus org.kde.KWin /Scripting ...loadScript`, setting
+  `workspace.activeClient` to the client whose caption has
+  "SolidCraft"), `sc.file.new()`, `JawPlate().build(sc,
+  "jaw_plate_001")`, then every 5 s one `parameters.change` (width
+  5 in; counterbore depth 5/8 in), timing each.  No `view` fit
+  command exists.  Offer it; the user decides.
+* Next: #65 `SolidCraftLink` (see the plan above), with `_NNN`
+  names (#59); then #66 the Kurt vise.  Work goes in ~3 minute
+  chunks, each ending with a numbered summary and a top 5.
+* `git`: `1eff0d4` (model.py, jaw_plate.py, tests), pushed.
