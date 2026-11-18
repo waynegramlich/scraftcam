@@ -172,3 +172,35 @@ the corner (`PullSquare.before`); add and delete remember first.
 is something to do (`OutlineEditor.show_message()`, on the scene's
 `changed`).  12 tests, coverage 98% (only `main()`), checkers clean.
 Next: Step 3, the letters table below a horizontal bar.
+
+## 2026-11-17: Step 3 done: the letters table
+
+`git`: `1cb3bf5` (steps 1 and 2), pushed.  New
+`scraftcam/gui/letters.py` (no Qt): `Letter(letter, name, default,
+help)`; `letter_problem()` (one or two letters or digits, a letter
+first; not in `RESERVED`, units and constants, `e` a guess; not used
+twice; not differing only in case); `value_problem()` (a `Length`,
+or an `Angle` ending `deg`/`rad`; a bare number refused);
+`next_letter()` (first free `A`-`Z`, then `A1`...; default `1` in
+the last length's unit).  `outline_editor.py`: `Drawing.letters`; a
+vertical `QSplitter` with the view over a `QTableWidget` (Letter,
+Name, Default, Help); [New Letter (L)]; `fill_table()`,
+`letter_edited()`, `check_letters()` (bad cells in
+`theme.colors().bad`, the problem as tooltip, the first one in the
+mode bar).  `tests/test_letters.py` (3), `test_outline_editor` (14);
+coverage 98% (only `main()`); checkers clean.  Not yet: table edits
+in undo/redo; deleting a letter.  Next: Step 4 (dimensions).
+
+## 2026-11-17: #47-#50 answered
+
+* #47 letters may be 1-3 characters (`OAL`); `RESERVED` adds
+  SolidCraft's short function names (`sin`, `cos`, `tan`, `abs`,
+  `min`, `max`, `log`, `exp`, `ln`).  Each keystroke is kept and
+  checked (`LiveDelegate`: its entry's `textEdited` calls
+  `OutlineEditor.keep()`; `setEditorData()` never overwrites a
+  modified entry, since marking a cell bad resets the entry
+  otherwise, found by the test).
+* #49 the user could not find Undo/Redo: they are at x 516-731 of an
+  843 px bar, greyed until there is a change; to ask.
+* #50 `pi` and `e` are the only constants.
+* #45 the user: commit, then Step 4 (dimension lines).

@@ -1,10 +1,24 @@
 """Tests of `scraftcam.gui.outline_editor`, chunk 1 (offscreen)."""
 
 import unittest
+from typing import TYPE_CHECKING
 
 from scraftcam.gui import outline_editor
+from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 from tests import qt_app
+
+# Only for the type: `PySide6` is on `sys.path` once `tests` is in.
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QTableWidgetItem
+
+
+# Function `cell()`:
+def cell(editor: OutlineEditor, row: int, column: int) -> "QTableWidgetItem":
+    """Return a cell of the letters' table (it must be there)."""
+    item: QTableWidgetItem | None = editor.table.item(row, column)
+    assert item is not None
+    return item
 
 
 class GridTest(unittest.TestCase):
@@ -241,6 +255,63 @@ class EditorTest(unittest.TestCase):
         self.assertEqual(len(view.history.done), 1)
         view.undo()
         self.assertEqual(view.drawing.points, first)
+
+    def test_letters_table(self) -> None:
+        """[New Letter] adds a row; edits are kept and checked."""
+        editor = self.editor
+        self.assertEqual(editor.table.rowCount(), 0)
+        self.assertEqual(editor.buttons["New Letter"].text(), "New Letter (L)")
+        editor.buttons["New Letter"].click()
+        editor.buttons["New Letter"].click()
+        self.assertEqual(editor.table.rowCount(), 2)
+        self.assertEqual(cell(editor, 1, 0).text(), "B")
+        cell(editor, 0, 1).setText("Overall width")
+        self.assertEqual(editor.drawing.letters[0].name, "Overall width")
+        cell(editor, 1, 0).setText(" a ")
+        self.assertEqual(editor.drawing.letters[1].letter, "a")
+        self.assertIn("only in case", editor.status.text())
+        self.assertIn("only in case", cell(editor, 1, 0).toolTip())
+        cell(editor, 1, 0).setText("H")
+        self.assertEqual(editor.status.text(), "")
+        cell(editor, 1, 2).setText("2")
+        self.assertIn("H: '2' is not a value", editor.status.text())
+        cell(editor, 1, 2).setText("2-1/4 in")
+        self.assertEqual(editor.status.text(), "")
+        self.assertEqual(cell(editor, 1, 2).toolTip(), "")
+
+    def test_live_typing(self) -> None:
+        """Each keystroke in a cell is kept and checked at once."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QLineEdit
+
+        editor = self.editor
+        editor.buttons["New Letter"].click()
+        editor.table.editItem(cell(editor, 0, 2))
+        qt_app.process_events()
+        entry: object = editor.table.focusWidget()
+        assert isinstance(entry, QLineEdit)
+        entry.selectAll()
+        QTest.keyClicks(entry, "6")
+        self.assertEqual(editor.drawing.letters[0].default, "6")
+        self.assertIn("is not a value", editor.status.text())
+        self.assertIn("is not a value", entry.toolTip())
+        QTest.keyClicks(entry, " in")
+        self.assertEqual(editor.drawing.letters[0].default, "6 in")
+        self.assertEqual(editor.status.text(), "")
+        self.assertEqual(entry.styleSheet(), "")
+
+    def test_given_letters(self) -> None:
+        """A drawing's letters are shown, problems marked at once."""
+        drawing: Drawing = Drawing(
+            letters=[Letter("W", "Width", "6 in"), Letter("pi", "", "x")]
+        )
+        editor: OutlineEditor = OutlineEditor(drawing)
+        self.assertEqual(cell(editor, 0, 2).text(), "6 in")
+        self.assertIn("pi: 'pi' is kept", editor.status.text())
+        editor.close()
+        editor.deleteLater()
 
     def test_paints(self) -> None:
         """The view draws, grid on and off, with no error."""

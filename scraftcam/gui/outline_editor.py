@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The 2D outline editor (`T.prg~5.1.9.2`): chunk 1.
+"""The 2D outline editor (`T.prg~5.1.9.2`).
 
 A window with X and Y axes, an origin square, a grid that gets finer
 as one zooms in (#12, #13), and an outline whose corners are pull
@@ -11,7 +11,9 @@ a keyed button for each action, no menus: [Move (M)], [Add (A)] (a
 corner after the clicked one, splitting the edge leaving it) and
 [Delete (D)] are the modes; [Grid (G)], [Snap (S)] and [Fit (F)];
 [Undo (Ctrl+Z)] and [Redo (Ctrl+Shift+Z)] (#18), a whole drag being
-one change.
+one change; [New Letter (L)].  Below the drawing, past a bar dragged
+up and down, the letters' table (#27): letter, long name, default
+value with its unit, help, each kept and checked at every keystroke.
 
 The scene is in unitless drawing steps (letters give the real sizes,
 #15), Y up.  Run alone: `python3 -m scraftcam.gui.outline_editor`.
@@ -27,7 +29,14 @@ from ..packages import require
 # `sys.path` (and fetched, the first time) before it is imported.
 require("PySide6")
 # pylint: disable=wrong-import-position,wrong-import-order
-from PySide6.QtCore import QPointF, QRect, QRectF, Qt  # noqa: E402
+from PySide6.QtCore import (  # noqa: E402
+    QModelIndex,
+    QPersistentModelIndex,
+    QPointF,
+    QRect,
+    QRectF,
+    Qt,
+)
 from PySide6.QtGui import (  # noqa: E402
     QColor,
     QPainter,
@@ -47,13 +56,25 @@ from PySide6.QtWidgets import (  # noqa: E402
     QGraphicsView,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
+    QSplitter,
+    QStyledItemDelegate,
     QStyleOptionGraphicsItem,
+    QStyleOptionViewItem,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from . import theme  # noqa: E402
+from .letters import (  # noqa: E402
+    Letter,
+    letter_problem,
+    next_letter,
+    value_problem,
+)
 from .window import make_application  # noqa: E402
 
 # pylint: enable=wrong-import-position,wrong-import-order
@@ -74,6 +95,14 @@ MAJOR_EVERY: int = 5
 # zoom's limits (pixels per drawing step).
 ZOOM_PER_NOTCH: float = 1.25
 ZOOM_LIMITS: tuple[float, float] = (1e-3, 1e5)
+
+# The letters' table: its columns, each with its `Letter` field.
+COLUMNS: tuple[tuple[str, str], ...] = (
+    ("Letter", "letter"),
+    ("Name", "name"),
+    ("Default", "default"),
+    ("Help", "help"),
+)
 
 # The modes: what a click on a pull square does.
 MOVE: str = "move"
@@ -142,15 +171,17 @@ class Drawing:
     Attributes:
     * `points` (`list[tuple[float, float]]`):
       The corners, in order, counterclockwise.
+    * `letters` (`list[Letter]`): The letters naming its sizes.
 
     Constructor:
-    * `Drawing(points)`
+    * `Drawing(points, letters)`
     """
 
     # Constructor arguments:
     points: list[tuple[float, float]] = field(
         init=True, default_factory=triangle
     )
+    letters: list[Letter] = field(init=True, default_factory=list)
 
 
 # Class `History`:
@@ -650,16 +681,82 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
             painter.drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y))
 
 
+# Class `LiveDelegate`:
+class LiveDelegate(QStyledItemDelegate):
+    """Edits the letters' cells, keeping each keystroke (#47).
+
+    Attributes:
+    * `editor` (`OutlineEditor`): The window whose table it edits.
+    """
+
+    # Method `LiveDelegate.__init__()`:
+    def __init__(self, editor: "OutlineEditor") -> None:
+        """Make the delegate of a window's table.
+
+        Arguments:
+        * `editor` (`OutlineEditor`): The window.
+        """
+        super().__init__(editor.table)
+        self.editor: OutlineEditor = editor
+
+    # Method `LiveDelegate.createEditor()`:
+    def createEditor(
+        self,
+        parent: QWidget,
+        _option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> QWidget:
+        """Return an entry that keeps and checks every keystroke."""
+        entry: QLineEdit = QLineEdit(parent)
+        row: int = index.row()
+        column: int = index.column()
+
+        # Function `typed()`:
+        def typed(text: str) -> None:
+            """Keep the text so far, check it, mark the entry."""
+            self.editor.keep(row, column, text)
+            cell: QTableWidgetItem | None = self.editor.table.item(row, column)
+            problem: str = "" if cell is None else cell.toolTip()
+            entry.setToolTip(problem)
+            entry.setStyleSheet(
+                f"background: {theme.colors().bad}" if problem else ""
+            )
+
+        entry.textEdited.connect(typed)
+        return entry
+
+    # Method `LiveDelegate.setEditorData()`:
+    def setEditorData(
+        self,
+        editor: QWidget,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> None:
+        """Fill a fresh entry; never overwrite what is being typed.
+
+        Marking a cell bad changes its data, which would otherwise put
+        the cell's old text back into the entry.
+        """
+        if isinstance(editor, QLineEdit) and editor.isModified():
+            return
+        super().setEditorData(editor, index)
+
+
 # Class `OutlineEditor`:
-class OutlineEditor(QWidget):
-    """The editor's window: the mode bar over the drawing area.
+# A window holds its parts and the letters' state.
+class OutlineEditor(  # pylint: disable=too-many-instance-attributes
+    QWidget
+):
+    """The editor's window: the mode bar, the drawing, the letters.
 
     Attributes:
     * `buttons` (`dict[str, QPushButton]`):
       The mode bar's buttons, by their word (`"Move"`, `"Grid"`, ...).
     * `drawing` (`Drawing`): The outline being drawn.
     * `modes` (`QButtonGroup`): [Move], [Add] and [Delete], one down.
+    * `problem` (`str`): The letters' first problem ("" if none).
+    * `splitter` (`QSplitter`): The drawing over the table.
     * `status` (`QLabel`): The last refusal, at the bar's end.
+    * `table` (`QTableWidget`): The letters, a row each.
     * `view` (`OutlineView`): The drawing area.
     """
 
@@ -681,7 +778,19 @@ class OutlineEditor(QWidget):
         # The mode bar: each button shows its key (#20).
         mode_bar: QHBoxLayout = QHBoxLayout()
         layout.addLayout(mode_bar)
-        layout.addWidget(self.view)
+
+        # The drawing over the letters, a bar between them (#27).
+        self.splitter: QSplitter = QSplitter(Qt.Orientation.Vertical)
+        self.splitter.addWidget(self.view)
+        self.table: QTableWidget = QTableWidget(0, len(COLUMNS))
+        self.table.setHorizontalHeaderLabels([title for title, _ in COLUMNS])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setItemDelegate(LiveDelegate(self))
+        self.splitter.addWidget(self.table)
+        self.splitter.setSizes([450, 150])
+        layout.addWidget(self.splitter)
+        self.problem: str = ""
         self.buttons: dict[str, QPushButton] = {}
         self.modes: QButtonGroup = QButtonGroup(self)
         word: str
@@ -695,6 +804,7 @@ class OutlineEditor(QWidget):
             ("Fit", "F"),
             ("Undo", "Ctrl+Z"),
             ("Redo", "Ctrl+Shift+Z"),
+            ("New Letter", "L"),
         ):
             button: QPushButton = QPushButton(f"{word} ({key})")
             button.setShortcut(key)
@@ -714,9 +824,12 @@ class OutlineEditor(QWidget):
         self.buttons["Fit"].clicked.connect(self.view.fit)
         self.buttons["Undo"].clicked.connect(self.view.undo)
         self.buttons["Redo"].clicked.connect(self.view.redo)
+        self.buttons["New Letter"].clicked.connect(self.new_letter)
         self.status: QLabel = QLabel("")
         mode_bar.addWidget(self.status, 1)
         self.view.scene().changed.connect(self.show_message)
+        self.fill_table()
+        self.table.itemChanged.connect(self.letter_edited)
         self.show_message()
         self.resize(800, 600)
 
@@ -734,6 +847,78 @@ class OutlineEditor(QWidget):
         self.view.message = ""
         self.show_message()
 
+    # Method `OutlineEditor.fill_table()`:
+    def fill_table(self) -> None:
+        """Show every letter, a row each, its problems marked."""
+        self.table.blockSignals(True)
+        self.table.setRowCount(len(self.drawing.letters))
+        row: int
+        letter: Letter
+        for row, letter in enumerate(self.drawing.letters):
+            column: int
+            attribute: str
+            for column, (_, attribute) in enumerate(COLUMNS):
+                self.table.setItem(
+                    row, column, QTableWidgetItem(getattr(letter, attribute))
+                )
+        self.table.blockSignals(False)
+        self.check_letters()
+
+    # Method `OutlineEditor.new_letter()`:
+    def new_letter(self) -> None:
+        """Add a row for the first free letter, ready to be named."""
+        self.drawing.letters.append(next_letter(self.drawing.letters))
+        self.fill_table()
+        row: int = len(self.drawing.letters) - 1
+        self.table.setCurrentCell(row, 1)
+
+    # Method `OutlineEditor.letter_edited()`:
+    def letter_edited(self, item: QTableWidgetItem) -> None:
+        """Keep a finished cell's text in its letter, then check them.
+
+        Arguments:
+        * `item` (`QTableWidgetItem`): The cell.
+        """
+        self.keep(item.row(), item.column(), item.text())
+
+    # Method `OutlineEditor.keep()`:
+    def keep(self, row: int, column: int, text: str) -> None:
+        """Keep a cell's text in its letter, then check the letters.
+
+        Arguments:
+        * `row` (`int`): The letter's row.
+        * `column` (`int`): The cell's column (see `COLUMNS`).
+        * `text` (`str`): The cell's text so far.
+        """
+        attribute: str = COLUMNS[column][1]
+        setattr(self.drawing.letters[row], attribute, text.strip())
+        self.check_letters()
+
+    # Method `OutlineEditor.check_letters()`:
+    def check_letters(self) -> None:
+        """Mark each bad letter or default, and show the first problem."""
+        self.table.blockSignals(True)
+        bad: QColor = QColor(theme.colors().bad)
+        problems: list[str] = []
+        row: int
+        letter: Letter
+        for row, letter in enumerate(self.drawing.letters):
+            found: str
+            column: int
+            for found, column in (
+                (letter_problem(self.drawing.letters, row), 0),
+                (value_problem(letter.default), 2),
+            ):
+                cell: QTableWidgetItem | None = self.table.item(row, column)
+                if cell is not None:
+                    cell.setBackground(bad if found else QColor(0, 0, 0, 0))
+                    cell.setToolTip(found)
+                if found:
+                    problems.append(f"{letter.letter}: {found}")
+        self.table.blockSignals(False)
+        self.problem = problems[0] if problems else ""
+        self.show_message()
+
     # Method `OutlineEditor.toggle_snap()`:
     def toggle_snap(self) -> None:
         """Turn snapping on or off, as [Snap] now shows."""
@@ -749,7 +934,7 @@ class OutlineEditor(QWidget):
         history: History = self.view.history
         self.buttons["Undo"].setEnabled(bool(history.done))
         self.buttons["Redo"].setEnabled(bool(history.undone))
-        self.status.setText(self.view.message)
+        self.status.setText(self.view.message or self.problem)
         self.status.setStyleSheet(f"color: {theme.colors().problem}")
 
 
