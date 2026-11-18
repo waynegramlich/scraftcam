@@ -28,6 +28,9 @@ RESERVED: frozenset[str] = frozenset(
 # The angle units, for telling an angle from a length.
 ANGLE_UNITS: tuple[str, ...] = ("deg", "rad")
 
+# An angle dimension's value must be inside these, in degrees (#58).
+ANGLE_LIMITS: tuple[float, float] = (0.1, 179.9)
+
 
 # Class `Letter`:
 @dataclass(slots=True)
@@ -73,6 +76,42 @@ def value_problem(text: str) -> str:
             f"(e.g. 6 in, 3-7/8 in, 20 mm, 59 deg; units: "
             f"{', '.join([*MM_PER, *ANGLE_UNITS])})."
         )
+    return ""
+
+
+# Function `use_problem()`:
+def use_problem(letter: str, text: str, kinds: set[str]) -> str:
+    """Return what is wrong with a default value for the dimensions
+    that use its letter ("" if nothing, or if the value itself is bad,
+    which `value_problem()` reports).
+
+    Arguments:
+    * `letter` (`str`): The letter.
+    * `text` (`str`): Its default value.
+    * `kinds` (`set[str]`): What its dimensions measure: `"length"`
+      (horizontal, vertical and slanted ones) and `"angle"`.
+
+    Returns:
+    * (`str`): The problem, as the user should read it.
+    """
+    if value_problem(text):
+        return ""
+    if {"length", "angle"} <= kinds:
+        return f"{letter} is used for both a length and an angle."
+    words: list[str] = text.split()
+    angle: bool = words[-1] in ANGLE_UNITS
+    if "length" in kinds and angle:
+        return f"{letter} measures a length: {text} is an angle."
+    if "angle" in kinds and not angle:
+        return f"{letter} measures an angle: {text} is a length."
+    if "angle" in kinds:
+        # Near 0 or 180 degrees the edges are parallel (#58).
+        degrees: float = float(Angle.parse(text).degrees)
+        if not ANGLE_LIMITS[0] < degrees < ANGLE_LIMITS[1]:
+            return (
+                f"{letter}: angles must be between {ANGLE_LIMITS[0]} and "
+                f"{ANGLE_LIMITS[1]} deg, not {text}."
+            )
     return ""
 
 

@@ -3,11 +3,15 @@
 import unittest
 
 from scraftcam.gui.dimensions import (
+    ANGLE,
     HORIZONTAL,
+    LENGTH,
     ORIGIN,
     VERTICAL,
+    Y_AXIS,
     Dimension,
     Formula,
+    _angle_way,
     solve,
 )
 
@@ -66,6 +70,60 @@ class DimensionsTest(unittest.TestCase):
         self.assertEqual(str(solution.y[5]), "H")
         solution = solve(L_BRACKET, [Dimension("Z", VERTICAL, ORIGIN, 1)])
         self.assertEqual(solution.extra, [0])
+
+    def test_length(self) -> None:
+        """A length from a known point fixes a corner known in one
+        coordinate, on the side drawn; until then it waits."""
+        triangle: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (1.0, 3.0),
+        ]
+        dimensions: list[Dimension] = [
+            Dimension("S", LENGTH, 1, 2),
+            Dimension("W", HORIZONTAL, ORIGIN, 1),
+            Dimension("P", HORIZONTAL, ORIGIN, 2),
+        ]
+        solution = solve(triangle, dimensions)
+        self.assertEqual(str(solution.x[2]), "P")
+        self.assertEqual(str(solution.y[2]), "0 + sqrt(S^2 - ((P) - (W))^2)")
+        self.assertEqual(solution.missing(3), [])
+        below = [(0.0, 0.0), (4.0, 0.0), (1.0, -3.0)]
+        self.assertIn("0 - sqrt", str(solve(below, dimensions).y[2]))
+        # Without P, corner 2 is known in neither coordinate: it waits.
+        self.assertNotIn(2, solve(triangle, dimensions[:2]).y)
+
+    def test_angle(self) -> None:
+        """Half a drill point: an angle from the Y axis directs the tip
+        edge, and the shoulder's X then gives its Y."""
+        half: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (2.0, 1.2),
+            (2.0, 8.0),
+            (0.0, 8.0),
+        ]
+        dimensions: list[Dimension] = [
+            Dimension("A", ANGLE, 0, Y_AXIS, rays=(1, 1)),
+            Dimension("R", HORIZONTAL, ORIGIN, 1),
+        ]
+        solution = solve(half, dimensions)
+        self.assertEqual(str(solution.x[1]), "R")
+        self.assertIn("tan(90 deg - A)", str(solution.y[1]))
+        self.assertIn(1, solution.y)
+        self.assertNotIn(1, solve(half, dimensions[1:]).y)
+
+        # The direction carried on to a second angle.
+        ways: dict[int, str] = {Y_AXIS: "90 deg"}
+        self.assertTrue(
+            _angle_way(Dimension("B", ANGLE, Y_AXIS, 1, rays=(-1, 1)), ways)
+        )
+        self.assertEqual(ways[1], "90 deg + B + 180 deg")
+        self.assertTrue(
+            _angle_way(Dimension("C", ANGLE, Y_AXIS, 1, rays=(1, 1)), ways)
+        )
+        self.assertFalse(
+            _angle_way(Dimension("D", ANGLE, 2, 3, rays=(1, 1)), ways)
+        )
 
     def test_extra(self) -> None:
         """A second way to the same point is one too many."""

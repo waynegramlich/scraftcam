@@ -13,7 +13,6 @@ dimension between two coordinates already tied another way is one too
 many (over-dimensioned).
 """
 
-from collections import deque
 from dataclasses import dataclass, field
 
 # The origin, as a point of a dimension (corners are 0 and up).
@@ -28,6 +27,17 @@ AXIS: dict[str, int] = {HORIZONTAL: 0, VERTICAL: 1}
 # is not in `AXIS`: alone it gives no X or Y (angles will, #S2).
 LENGTH: str = "length"
 
+# The axes, as the edges of an angle (#59, #63): the only lines other
+# than edges an angle may measure from.
+X_AXIS: int = -2
+Y_AXIS: int = -3
+AXES: tuple[int, ...] = (X_AXIS, Y_AXIS)
+
+# An angle between two edges (`start`, `end` are the corners each
+# edge leaves, or an axis); `offset` is its arc's radius, `along` the letter's
+# place along the arc.  Not in `AXIS` either.
+ANGLE: str = "angle"
+
 # What [Dim. Kind] turns each kind into.
 NEXT_KIND: dict[str, str] = {
     HORIZONTAL: LENGTH,
@@ -41,8 +51,9 @@ ON_AXIS: float = 1e-9
 
 
 # Class `Dimension`:
+# A record of everything a dimension is; each kind needs its fields.
 @dataclass(slots=True)
-class Dimension:
+class Dimension:  # pylint: disable=too-many-instance-attributes
     """A letter measuring two points along X, along Y, or straight.
 
     Attributes:
@@ -60,9 +71,14 @@ class Dimension:
     * `places` (`tuple[tuple[str, float, float], ...]`): Where the
       line and letter were (`offset`, `along`) for each other kind
       it has been, so [Dim. Kind] brings them back (#29).
+    * `rays` (`tuple[int, int]`): For an angle, each ray from the
+      edges' crossing along (`1`) or against (`-1`) its edge's
+      direction, fixed when it is made (#53); the angle is measured
+      counterclockwise from the first ray to the second.
 
     Constructor:
-    * `Dimension(letter, kind, start, end, offset, along, places)`
+    * `Dimension(letter, kind, start, end, offset, along, places,
+      rays)`
     """
 
     # Constructor arguments:
@@ -73,6 +89,7 @@ class Dimension:
     offset: float = field(init=True, default=0.0)
     along: float = field(init=True, default=0.5)
     places: tuple[tuple[str, float, float], ...] = field(init=True, default=())
+    rays: tuple[int, int] = field(init=True, default=(1, 1))
 
     # Method `Dimension.place_of()`:
     def place_of(self, kind: str) -> tuple[float, float] | None:
@@ -118,18 +135,22 @@ class Dimension:
 # Class `Formula`:
 @dataclass(frozen=True, slots=True)
 class Formula:
-    """A coordinate as a sum of letters, each added or taken away.
+    """A coordinate as an expression in the letters: a start (empty
+    for zero), then letters each added or taken away.
 
     Attributes:
     * `terms` (`tuple[tuple[int, str], ...]`):
       Each letter with its sign (`1` or `-1`); none for zero.
+    * `text` (`str`): The start, an expression (`sqrt(L^2 - W^2)`);
+      empty when it is zero.
 
     Constructor:
-    * `Formula(terms)`
+    * `Formula(terms, text)`
     """
 
     # Constructor arguments:
     terms: tuple[tuple[int, str], ...] = field(init=True, default=())
+    text: str = field(init=True, default="")
 
     # Method `Formula.plus()`:
     def plus(self, sign: int, letter: str) -> "Formula":
@@ -142,14 +163,14 @@ class Formula:
         Returns:
         * (`Formula`): The longer formula.
         """
-        return Formula((*self.terms, (sign, letter)))
+        return Formula((*self.terms, (sign, letter)), self.text)
 
     # Method `Formula.__str__()`:
     def __str__(self) -> str:
         """Write it as people would: `W - T`, `-W`, `0`."""
         if not self.terms:
-            return "0"
-        text: str = ""
+            return self.text or "0"
+        text: str = self.text
         sign: int
         letter: str
         for sign, letter in self.terms:
@@ -204,7 +225,19 @@ class Solution:
 def solve(
     points: list[tuple[float, float]], dimensions: list[Dimension]
 ) -> Solution:
-    """Find each corner's coordinates from the chains of dimensions.
+    """Find each corner's coordinates from the dimensions.
+
+    Angles give edges' directions (from an axis, or an edge already
+    directed); an edge directed and known at one end gives its other
+    end from one coordinate there.
+
+    Starting from the origin and the corners drawn on an axis, each
+    pass takes every dimension that can tell something new, until
+    none can: a horizontal (vertical) one from a point whose X (Y)
+    is known, a length from a point known in full to a corner known
+    in one coordinate (#37: the drawing picks the side).  A
+    horizontal or vertical dimension between two points already known
+    that way is one too many.
 
     Arguments:
     * `points` (`list[tuple[float, float]]`):
@@ -215,69 +248,237 @@ def solve(
     * (`Solution`): The formulas, and the extra dimensions.
     """
     solution: Solution = Solution()
-    kind: str
+    known: tuple[dict[int, Formula], dict[int, Formula]] = (
+        solution.x,
+        solution.y,
+    )
     axis: int
-    for kind, axis in AXIS.items():
-        known: dict[int, Formula] = solution.x if axis == 0 else solution.y
-        _chain(points, dimensions, kind, known, solution.extra)
-        known.pop(ORIGIN)
+    for axis in (0, 1):
+        known[axis][ORIGIN] = Formula()
+        corner: int
+        point: tuple[float, float]
+        for corner, point in enumerate(points):
+            if abs(point[axis]) <= ON_AXIS:
+                known[axis][corner] = Formula()
+
+    # Pass after pass, until nothing more is found: the dimensions,
+    # then the edges whose directions angles gave.
+    ways: dict[int, str] = {X_AXIS: "0 deg", Y_AXIS: "90 deg"}
+    used: set[int] = set()
+    found: bool = True
+    while found:
+        found = False
+        index: int
+        dimension: Dimension
+        for index, dimension in enumerate(dimensions):
+            if index in used:
+                continue
+            if dimension.kind == ANGLE:
+                done: bool = _angle_way(dimension, ways)
+            else:
+                done = _apply(points, dimension, known, solution.extra, index)
+            if done:
+                used.add(index)
+                found = True
+        edge: int
+        way: str
+        for edge, way in ways.items():
+            if edge not in AXES and _along_edge(points, edge, way, known):
+                found = True
+    for axis in (0, 1):
+        known[axis].pop(ORIGIN)
     solution.extra.sort()
     return solution
 
 
-# Function `_chain()`:
-def _chain(
+# Function `_apply()`:
+def _apply(
     points: list[tuple[float, float]],
-    dimensions: list[Dimension],
-    kind: str,
-    known: dict[int, Formula],
+    dimension: Dimension,
+    known: tuple[dict[int, Formula], dict[int, Formula]],
     extra: list[int],
-) -> None:
-    """Walk one kind's dimensions out from the origin.
+    index: int,
+) -> bool:
+    """Learn what one dimension tells, if it can tell it yet.
 
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
-    * `dimensions` (`list[Dimension]`): Every dimension.
-    * `kind` (`str`): `HORIZONTAL` or `VERTICAL`.
-    * `known` (`dict[int, Formula]`): Filled with each point reached.
-    * `extra` (`list[int]`): Given each dimension that is one too many.
+    * `dimension` (`Dimension`): The dimension.
+    * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
+      The X and Y formulas found so far, added to.
+    * `extra` (`list[int]`): Given the dimension if one too many.
+    * `index` (`int`): The dimension's index.
+
+    Returns:
+    * (`bool`): Whether it is done with (used or extra).
     """
+    if dimension.kind in AXIS:
+        axis: int = AXIS[dimension.kind]
+        if dimension.start in known[axis] and dimension.end in known[axis]:
+            extra.append(index)
+            return True
+        return _along_axis(points, dimension, known[axis], axis)
+    if dimension.kind == LENGTH:
+        return _along_length(points, dimension, known)
+    return False
 
-    axis: int = AXIS[kind]
 
-    # Function `drawn()`:
-    def drawn(point: int) -> float:
-        """Return a point's coordinate as drawn."""
-        return 0.0 if point == ORIGIN else points[point][axis]
+# Function `_drawn()`:
+def _drawn(points: list[tuple[float, float]], point: int, axis: int) -> float:
+    """Return a point's coordinate as drawn.
 
-    # Breadth first from the origin and every corner drawn on the
-    # axis across this kind (#23: a corner on the Y axis has X = 0);
-    # a dimension whose two ends are both known when it is reached
-    # ties them a second time.
-    known[ORIGIN] = Formula()
-    queue: deque[int] = deque([ORIGIN])
-    corner: int
-    for corner in range(len(points)):
-        if abs(drawn(corner)) <= ON_AXIS:
-            known[corner] = Formula()
-            queue.append(corner)
-    used: set[int] = set()
-    while queue:
-        point: int = queue.popleft()
-        index: int
-        dimension: Dimension
-        for index, dimension in enumerate(dimensions):
-            if dimension.kind != kind or index in used:
-                continue
-            if point not in (dimension.start, dimension.end):
-                continue
-            used.add(index)
-            other: int = (
-                dimension.end if point == dimension.start else dimension.start
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `point` (`int`): `ORIGIN` or a corner.
+    * `axis` (`int`): 0 for X, 1 for Y.
+
+    Returns:
+    * (`float`): The coordinate.
+    """
+    return 0.0 if point == ORIGIN else points[point][axis]
+
+
+# Function `_along_axis()`:
+def _along_axis(
+    points: list[tuple[float, float]],
+    dimension: Dimension,
+    known: dict[int, Formula],
+    axis: int,
+) -> bool:
+    """A horizontal or vertical dimension from a point known along
+    its axis gives the other point there, the sign as drawn.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `dimension` (`Dimension`): The dimension.
+    * `known` (`dict[int, Formula]`): The formulas along its axis.
+    * `axis` (`int`): 0 for X, 1 for Y.
+
+    Returns:
+    * (`bool`): Whether it gave something.
+    """
+    start: int = dimension.start
+    end: int = dimension.end
+    if end in known:
+        start, end = end, start
+    if start not in known:
+        return False
+    sign: int = (
+        1 if _drawn(points, end, axis) >= _drawn(points, start, axis) else -1
+    )
+    known[end] = known[start].plus(sign, dimension.letter)
+    return True
+
+
+# Function `_along_length()`:
+def _along_length(
+    points: list[tuple[float, float]],
+    dimension: Dimension,
+    known: tuple[dict[int, Formula], dict[int, Formula]],
+) -> bool:
+    """A length from a point known in full to a corner known in one
+    coordinate gives the other, on the side drawn (#37).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `dimension` (`Dimension`): The length.
+    * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
+      The X and Y formulas found so far, added to.
+
+    Returns:
+    * (`bool`): Whether it is done with.
+    """
+    start: int = dimension.start
+    end: int = dimension.end
+    if not all(end in table for table in known):
+        start, end = end, start
+    if not all(end in table for table in known):
+        return False
+    have: int
+    for have in (0, 1):
+        want: int = 1 - have
+        if start in known[have] and start not in known[want]:
+            side: str = (
+                "+"
+                if _drawn(points, start, want) >= _drawn(points, end, want)
+                else "-"
             )
-            if other in known:
-                extra.append(index)
-                continue
-            sign: int = 1 if drawn(other) >= drawn(point) else -1
-            known[other] = known[point].plus(sign, dimension.letter)
-            queue.append(other)
+            across: str = f"({known[have][start]}) - ({known[have][end]})"
+            known[want][start] = Formula(
+                text=f"{known[want][end]} {side} "
+                f"sqrt({dimension.letter}^2 - ({across})^2)"
+            )
+            return True
+    return all(start in table for table in known)
+
+
+# Function `_angle_way()`:
+def _angle_way(dimension: Dimension, ways: dict[int, str]) -> bool:
+    """An angle from an edge already directed gives the other edge's
+    direction (counterclockwise from its first ray to its second).
+
+    Arguments:
+    * `dimension` (`Dimension`): The angle.
+    * `ways` (`dict[int, str]`): Each edge's direction (from the
+      corner it leaves), an expression in degrees; added to.
+
+    Returns:
+    * (`bool`): Whether it is done with.
+    """
+    start: int = dimension.start
+    end: int = dimension.end
+    if start in ways and end in ways:
+        return True  # One too many: not marked yet (#33).
+
+    # A ray against its edge is half a turn from the edge's direction.
+    flips: int = (dimension.rays[0] != 1) - (dimension.rays[1] != 1)
+    if start in ways:
+        half: str = {1: " + 180 deg", -1: " - 180 deg", 0: ""}[flips]
+        ways[end] = f"{ways[start]} + {dimension.letter}{half}"
+        return True
+    if end in ways:
+        back: str = {1: " - 180 deg", -1: " + 180 deg", 0: ""}[flips]
+        ways[start] = f"{ways[end]} - {dimension.letter}{back}"
+        return True
+    return False
+
+
+# Function `_along_edge()`:
+def _along_edge(
+    points: list[tuple[float, float]],
+    edge: int,
+    way: str,
+    known: tuple[dict[int, Formula], dict[int, Formula]],
+) -> bool:
+    """A directed edge known in full at one end gives its other end
+    from one known coordinate there.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `edge` (`int`): The corner the edge leaves.
+    * `way` (`str`): Its direction, an expression in degrees.
+    * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
+      The X and Y formulas found so far, added to.
+
+    Returns:
+    * (`bool`): Whether it gave something.
+    """
+    ends: tuple[int, int] = (edge, (edge + 1) % len(points))
+    full: int
+    other: int
+    for full, other in (ends, ends[::-1]):
+        if not all(full in table for table in known):
+            continue
+        x0: Formula = known[0][full]
+        y0: Formula = known[1][full]
+        if other in known[0] and other not in known[1]:
+            known[1][other] = Formula(
+                text=f"{y0} + (({known[0][other]}) - ({x0})) * tan({way})"
+            )
+            return True
+        if other in known[1] and other not in known[0]:
+            known[0][other] = Formula(
+                text=f"{x0} + (({known[1][other]}) - ({y0})) / tan({way})"
+            )
+            return True
+    return False

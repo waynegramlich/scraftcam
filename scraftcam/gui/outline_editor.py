@@ -14,6 +14,7 @@ it is pressed, in any order (#60).
 The bar has a keyed button for each action, no menus (#11): [Grid
 (G)], [Snap (S)], [Delete (Del)], [Dimension (N)] (the two selected
 points), [Dim. Kind \u21bb (K)] (horizontal, length, vertical),
+[Angle (A)] (between the last two edges clicked),
 [Fit (F)],
 [Undo (Ctrl+Z)] and [Redo
 (Ctrl+Shift+Z)] (#18), a whole drag being one change, [New Letter
@@ -83,11 +84,15 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
+    ANGLE,
+    AXES,
     HORIZONTAL,
     LENGTH,
     NEXT_KIND,
     ORIGIN,
     VERTICAL,
+    X_AXIS,
+    Y_AXIS,
     Dimension,
     Formula,
     Solution,
@@ -97,6 +102,7 @@ from .letters import (  # noqa: E402
     Letter,
     letter_problem,
     next_letter,
+    use_problem,
     value_problem,
 )
 from .window import make_application  # noqa: E402
@@ -108,6 +114,10 @@ from .window import make_application  # noqa: E402
 # between minor grid lines.
 SQUARE_PIXELS: float = 9.0
 ARROW_PIXELS: float = 9.0
+
+# How many straight pieces draw an angle's arc.
+ARC_STEPS: int = 48
+
 THICK_PIXELS: float = 2.0
 THIN_PIXELS: float = 1.0
 GRID_PIXELS: float = 12.0
@@ -256,6 +266,29 @@ class Drawing:
             replace(dimension) for dimension in snapshot.dimensions
         ]
         self.letters[:] = [replace(letter) for letter in snapshot.letters]
+
+    # Method `Drawing.follow_angles()`:
+    def follow_angles(self) -> None:
+        """Turn each angle to the side its edges are drawn on (#68):
+        rays toward the edges' middles, measured counterclockwise from
+        the edge that makes it under 180 degrees.  Parallel edges
+        keep their rays."""
+        dimension: Dimension
+        for dimension in self.dimensions:
+            if dimension.kind != ANGLE:
+                continue
+            rays: tuple[int, int] | None = middle_rays(
+                self.points, dimension.start, dimension.end
+            )
+            if rays is None:
+                continue
+            dimension.rays = rays
+            arc: tuple[QPointF, float, float] | None = angle_arc(
+                self.points, dimension
+            )
+            if arc is not None and arc[2] > 180.0:
+                dimension.start, dimension.end = dimension.end, dimension.start
+                dimension.rays = (rays[1], rays[0])
 
     # Method `Drawing.insert()`:
     def insert(self, index: int, point: tuple[float, float]) -> None:
@@ -528,6 +561,163 @@ def arrowhead(start: QPointF, end: QPointF, length: float) -> QPainterPath:
     return path
 
 
+# Function `crossing()`:
+def crossing(
+    points: list[tuple[float, float]], first: int, second: int
+) -> QPointF | None:
+    """Return where two edges' lines cross.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `first` (`int`): The corner the first edge leaves.
+    * `second` (`int`): The corner the second edge leaves.
+
+    Returns:
+    * (`QPointF | None`): The crossing; `None` for parallel edges.
+    """
+    a0: QPointF = edge_start(points, first)
+    da: QPointF = edge_way(points, first)
+    b0: QPointF = edge_start(points, second)
+    db: QPointF = edge_way(points, second)
+    cross: float = da.x() * db.y() - da.y() * db.x()
+    if abs(cross) <= PARALLEL * max(
+        math.hypot(da.x(), da.y()) * math.hypot(db.x(), db.y()), 1e-300
+    ):
+        return None
+    gap: QPointF = b0 - a0
+    return a0 + da * ((gap.x() * db.y() - gap.y() * db.x()) / cross)
+
+
+# Function `edge_start()`:
+def edge_start(points: list[tuple[float, float]], edge: int) -> QPointF:
+    """Return the corner an edge leaves (the origin, for an axis).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `edge` (`int`): The corner the edge leaves, or an axis.
+
+    Returns:
+    * (`QPointF`): The point.
+    """
+    if edge in AXES:
+        return QPointF(0.0, 0.0)
+    return QPointF(*points[edge])
+
+
+# Function `edge_way()`:
+def edge_way(points: list[tuple[float, float]], edge: int) -> QPointF:
+    """Return an edge's direction, from the corner it leaves (+X or
+    +Y, for an axis).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `edge` (`int`): The corner the edge leaves, or an axis.
+
+    Returns:
+    * (`QPointF`): The next corner less this one.
+    """
+    if edge == X_AXIS:
+        return QPointF(1.0, 0.0)
+    if edge == Y_AXIS:
+        return QPointF(0.0, 1.0)
+    return QPointF(*points[(edge + 1) % len(points)]) - QPointF(*points[edge])
+
+
+# Function `middle_rays()`:
+def middle_rays(
+    points: list[tuple[float, float]], first: int, second: int
+) -> tuple[int, int] | None:
+    """Return the rays from two edges' crossing toward their middles,
+    each `1` along its edge's direction or `-1` against it (#53).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `first` (`int`): The corner the first edge leaves.
+    * `second` (`int`): The corner the second edge leaves.
+
+    Returns:
+    * (`tuple[int, int] | None`): The two rays; `None` for parallel
+      edges.
+    """
+    center: QPointF | None = crossing(points, first, second)
+    if center is None:
+        return None
+    signs: list[int] = []
+    edge: int
+    other: int
+    for edge, other in ((first, second), (second, first)):
+        # An axis's ray points toward the other edge's side (#65).
+        middle: QPointF = (
+            edge_start(points, other) + edge_way(points, other) / 2
+            if edge in AXES
+            else edge_start(points, edge) + edge_way(points, edge) / 2
+        )
+        toward: float = QPointF.dotProduct(
+            middle - center, edge_way(points, edge)
+        )
+        signs.append(1 if toward >= 0.0 else -1)
+    return signs[0], signs[1]
+
+
+# Function `edge_arc()`:
+def edge_arc(
+    points: list[tuple[float, float]],
+    first: int,
+    second: int,
+    rays: tuple[int, int],
+) -> tuple[QPointF, float, float] | None:
+    """Return an angle's arc: where two edges' lines cross, and the
+    turn counterclockwise from the first ray to the second.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `first` (`int`): The corner the first edge leaves.
+    * `second` (`int`): The corner the second edge leaves.
+    * `rays` (`tuple[int, int]`): Each ray along (`1`) or against
+      (`-1`) its edge's direction.
+
+    Returns:
+    * (`tuple[QPointF, float, float] | None`): The crossing, the first
+      ray's direction and the turn to the second ray (degrees, 0 to
+      360, counterclockwise); `None` for parallel edges.
+    """
+    center: QPointF | None = crossing(points, first, second)
+    if center is None:
+        return None
+    start: float = direction(edge_way(points, first) * rays[0])
+    turn: float = direction(edge_way(points, second) * rays[1]) - start
+    return center, start, turn % 360.0
+
+
+# Function `angle_arc()`:
+def angle_arc(
+    points: list[tuple[float, float]], dimension: Dimension
+) -> tuple[QPointF, float, float] | None:
+    """Return an angle dimension's arc (see `edge_arc()`).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `dimension` (`Dimension`): The angle.
+
+    Returns:
+    * (`tuple[QPointF, float, float] | None`): As `edge_arc()`.
+    """
+    return edge_arc(points, dimension.start, dimension.end, dimension.rays)
+
+
+# Function `direction()`:
+def direction(way: QPointF) -> float:
+    """Return a direction's angle from +X, in degrees.
+
+    Arguments:
+    * `way` (`QPointF`): The direction.
+
+    Returns:
+    * (`float`): Counterclockwise positive, -180 to 180.
+    """
+    return math.degrees(math.atan2(way.y(), way.x()))
+
+
 # Function `left_of()`:
 def left_of(way: QPointF) -> QPointF:
     """Return the unit vector a quarter turn counterclockwise from a
@@ -545,13 +735,18 @@ def left_of(way: QPointF) -> QPointF:
     return QPointF(-way.y() / length, way.x() / length)
 
 
+# Two edges closer to parallel than this (the sine of the angle
+# between them) have no angle (#40).
+PARALLEL: float = 1e-6
+
+
 # Class `EdgeHandle`:
 class EdgeHandle(QGraphicsEllipseItem):
     """A small hollow circle in the middle of an edge (#59).
 
     Dragged, it pulls out a new corner there, snapped as corners are,
-    the whole drag one change; a click that does not move does
-    nothing.
+    the whole drag one change; a click that does not move selects
+    the edge (for [Angle], #S2).
 
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
@@ -623,11 +818,14 @@ class EdgeHandle(QGraphicsEllipseItem):
 
     # Method `EdgeHandle.mouseReleaseEvent()`:
     def mouseReleaseEvent(self, _event: QGraphicsSceneMouseEvent) -> None:
-        """End the pull: remember it, and give the corner its square."""
+        """End the pull: remember it, and give the corner its square;
+        or, if it never moved, select the edge."""
         if self.before is not None and self.added >= 0:
             self.editor.history.remember(self.before)
             self.before = None
             self.editor.make_squares()
+        elif self.before is not None:
+            self.editor.select_edge(self.index)
         self.before = None
 
 
@@ -686,8 +884,13 @@ class DimensionHandle(QGraphicsEllipseItem):
         measure: DimensionItem = self.editor.measures[self.index]
         start: QPointF
         end: QPointF
-        _, _, start, end = measure.ends()
         measure.prepareGeometryChange()
+        if dimension.kind == ANGLE:
+            self.drag_angle(dimension, where)
+            measure.update()
+            self.place()
+            return
+        _, _, start, end = measure.ends()
         if dimension.kind == HORIZONTAL:
             dimension.offset = where.y()
             span: float = end.x() - start.x()
@@ -712,6 +915,34 @@ class DimensionHandle(QGraphicsEllipseItem):
                 dimension.along = (where.y() - start.y()) / span
         measure.update()
         self.place()
+
+    # Method `DimensionHandle.drag_angle()`:
+    def drag_angle(self, dimension: Dimension, where: QPointF) -> None:
+        """Move an angle's letter around its arc, and the arc in and
+        out (its radius).
+
+        Arguments:
+        * `dimension` (`Dimension`): The angle.
+        * `where` (`QPointF`): The pointer, in the scene.
+        """
+        arc: tuple[QPointF, float, float] | None = angle_arc(
+            self.editor.drawing.points, dimension
+        )
+        if arc is None:
+            return
+        center: QPointF
+        start: float
+        turn: float
+        center, start, turn = arc
+        out: QPointF = where - center
+        radius: float = math.hypot(out.x(), out.y())
+        if radius == 0.0 or turn == 0.0:
+            return
+        dimension.offset = radius
+        past: float = math.degrees(math.atan2(out.y(), out.x())) - start
+        past = (past - turn / 2.0 + 180.0) % 360.0 - 180.0 + turn / 2.0
+        # The letter stays on the arc, between its arrowheads (#76).
+        dimension.along = min(max(past / turn, 0.0), 1.0)
 
     # Method `DimensionHandle.mouseReleaseEvent()`:
     def mouseReleaseEvent(self, _event: QGraphicsSceneMouseEvent) -> None:
@@ -779,11 +1010,14 @@ class DimensionItem(QGraphicsItem):
         path: QPainterPath = QPainterPath()
         if self.index >= len(self.editor.drawing.dimensions):
             return path
-        start: QPointF
-        end: QPointF
-        _, _, start, end = self.ends()
-        path.moveTo(start)
-        path.lineTo(end)
+        if self.editor.drawing.dimensions[self.index].kind == ANGLE:
+            path = self.arc_path()
+        else:
+            start: QPointF
+            end: QPointF
+            _, _, start, end = self.ends()
+            path.moveTo(start)
+            path.lineTo(end)
         stroker: QPainterPathStroker = QPainterPathStroker()
         stroker.setWidth(SQUARE_PIXELS / max(self.editor.zoom(), 1e-12))
         return stroker.createStroke(path)
@@ -798,6 +1032,8 @@ class DimensionItem(QGraphicsItem):
     def at(self) -> QPointF:
         """Return the point of its line where the letter sits."""
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        if dimension.kind == ANGLE:
+            return self.arc_point(dimension.along)
         start: QPointF
         end: QPointF
         _, _, start, end = self.ends()
@@ -810,10 +1046,18 @@ class DimensionItem(QGraphicsItem):
         # already gone (an undo).
         if self.index >= len(self.editor.drawing.dimensions):
             return QRectF()
+        margin: float = 40.0 / max(self.editor.zoom(), 1e-12)
+        if self.editor.drawing.dimensions[self.index].kind == ANGLE:
+            # Its arc, and the extension lines out to it.
+            return (
+                self.arc_path()
+                .boundingRect()
+                .united(self.reach_path().boundingRect())
+                .adjusted(-margin, -margin, margin, margin)
+            )
         corners: tuple[QPointF, QPointF, QPointF, QPointF] = self.ends()
         xs: list[float] = [corner.x() for corner in corners]
         ys: list[float] = [corner.y() for corner in corners]
-        margin: float = 40.0 / max(self.editor.zoom(), 1e-12)
         return QRectF(
             min(xs) - margin,
             min(ys) - margin,
@@ -842,6 +1086,9 @@ class DimensionItem(QGraphicsItem):
         painter.setBrush(ink)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         scale: float = max(abs(painter.worldTransform().m11()), 1e-12)
+        if self.editor.drawing.dimensions[self.index].kind == ANGLE:
+            self.paint_angle(painter, scale)
+            return
         first: QPointF
         second: QPointF
         start: QPointF
@@ -868,6 +1115,103 @@ class DimensionItem(QGraphicsItem):
         painter.drawPath(arrowhead(start, end, arrow))
 
         self.draw_letter(painter, start, end)
+
+    # Method `DimensionItem.arc_point()`:
+    def arc_point(self, share: float) -> QPointF:
+        """Return a point of an angle's arc (the crossing, for
+        parallel edges).
+
+        Arguments:
+        * `share` (`float`): How far along the arc, 0 at the first
+          edge, 1 at the second.
+
+        Returns:
+        * (`QPointF`): The point.
+        """
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        arc: tuple[QPointF, float, float] | None = angle_arc(
+            self.editor.drawing.points, dimension
+        )
+        if arc is None:
+            return edge_start(self.editor.drawing.points, dimension.start)
+        center: QPointF
+        start: float
+        turn: float
+        center, start, turn = arc
+        angle: float = math.radians(start + turn * share)
+        return center + QPointF(math.cos(angle), math.sin(angle)) * (
+            dimension.offset
+        )
+
+    # Method `DimensionItem.arc_path()`:
+    def arc_path(self) -> QPainterPath:
+        """Return an angle's arc as a path (empty for parallel edges)."""
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        path: QPainterPath = QPainterPath()
+        if angle_arc(self.editor.drawing.points, dimension) is None:
+            return path
+        path.moveTo(self.arc_point(0.0))
+        step: int
+        for step in range(1, ARC_STEPS + 1):
+            path.lineTo(self.arc_point(step / ARC_STEPS))
+        return path
+
+    # Method `DimensionItem.reach_path()`:
+    def reach_path(self) -> QPainterPath:
+        """Return an angle's extension lines: along each edge's line,
+        from the edge's far end out to the arc, where the arc is past
+        it."""
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        points: list[tuple[float, float]] = self.editor.drawing.points
+        path: QPainterPath = QPainterPath()
+        arc: tuple[QPointF, float, float] | None = angle_arc(points, dimension)
+        if arc is None:
+            return path
+        center: QPointF = arc[0]
+        edge: int
+        share: float
+        for edge, share in ((dimension.start, 0.0), (dimension.end, 1.0)):
+            if edge in AXES:
+                continue  # Drawn right across the window already.
+            tip: QPointF = self.arc_point(share)
+            ray: QPointF = tip - center
+            ends: list[QPointF] = [
+                QPointF(*points[edge]),
+                QPointF(*points[(edge + 1) % len(points)]),
+            ]
+            reach: float = max(
+                QPointF.dotProduct(end - center, ray) for end in ends
+            ) / max(QPointF.dotProduct(ray, ray), 1e-24)
+            if reach < 1.0:
+                path.moveTo(center + ray * max(reach, 0.0))
+                path.lineTo(tip)
+        return path
+
+    # Method `DimensionItem.paint_angle()`:
+    def paint_angle(self, painter: QPainter, scale: float) -> None:
+        """Draw an angle: its arc with an arrowhead at each end, the
+        extension lines out to it, and its letter.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, pen and brush set.
+        * `scale` (`float`): Pixels per drawing step.
+        """
+        arc: QPainterPath = self.arc_path()
+        if arc.isEmpty():
+            return
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(arc)
+        painter.drawPath(self.reach_path())
+        painter.setBrush(painter.pen().color())
+        arrow: float = ARROW_PIXELS / scale
+        near: float = 1.0 / ARC_STEPS
+        painter.drawPath(
+            arrowhead(self.arc_point(near), self.arc_point(0.0), arrow)
+        )
+        painter.drawPath(
+            arrowhead(self.arc_point(1.0 - near), self.arc_point(1.0), arrow)
+        )
+        self.draw_letter(painter, self.at(), self.at())
 
     # Method `DimensionItem.draw_reach()`:
     def draw_reach(
@@ -934,6 +1278,15 @@ class DimensionItem(QGraphicsItem):
         if dimension.kind == HORIZONTAL:
             below: bool = dimension.offset < (min(ys) + max(ys)) / 2.0
             return QPointF(0.0, 1.0 if below else -1.0)
+        if dimension.kind == ANGLE:
+            arc: tuple[QPointF, float, float] | None = angle_arc(
+                self.editor.drawing.points, dimension
+            )
+            if arc is None:
+                return QPointF(0.0, 0.0)
+            out_of: QPointF = world.map(self.at()) - world.map(arc[0])
+            length: float = math.hypot(out_of.x(), out_of.y())
+            return out_of / length if length > 0.0 else out_of
         if dimension.kind == LENGTH:
             way: QPointF = world.map(
                 self.editor.point(dimension.end)
@@ -961,6 +1314,8 @@ class OutlineView(QGraphicsView):
     * `chosen_points` (`list[int]`):
       The selected points (`ORIGIN` or corners), in the order clicked.
     * `chosen_dimensions` (`list[int]`): The selected dimensions.
+    * `chosen_edges` (`list[int]`): The selected edges (by the corner
+      each leaves), in the order clicked.
     * `wanted` (`bool`): Whether [Dimension] waits for points.
     * `pan_from` (`QPoint | None`):
       Where the pointer was, while empty space is dragged.
@@ -991,6 +1346,7 @@ class OutlineView(QGraphicsView):
         self.message: str = ""
         self.chosen_points: list[int] = []
         self.chosen_dimensions: list[int] = []
+        self.chosen_edges: list[int] = []
         self.wanted: bool = False
         self.letters_changed: Callable[[], None] = self.update
         self.snap_on: bool = True
@@ -1048,6 +1404,7 @@ class OutlineView(QGraphicsView):
         """
         self.chosen_points = []
         self.chosen_dimensions = []
+        self.chosen_edges = []
         square: PullSquare
         for square in self.squares:
             self.scene().removeItem(square)
@@ -1131,30 +1488,49 @@ class OutlineView(QGraphicsView):
         self.message = ""
         self.restyle()
 
+    # Method `OutlineView.select_edge()`:
+    def select_edge(self, index: int) -> None:
+        """Add an edge to the selection (as the latest, if it was in).
+
+        Arguments:
+        * `index` (`int`): The corner the edge leaves.
+        """
+        if index in self.chosen_edges:
+            self.chosen_edges.remove(index)
+        self.chosen_edges.append(index)
+        self.message = ""
+        self.restyle()
+
     # Method `OutlineView.clear_selection()`:
     def clear_selection(self) -> None:
         """Select nothing, and stop waiting for points to dimension."""
         self.chosen_points = []
         self.chosen_dimensions = []
+        self.chosen_edges = []
         self.wanted = False
         self.restyle()
 
     # Method `OutlineView.dimension_between()`:
-    def dimension_between(self, first: int, second: int) -> None:
+    def dimension_between(
+        self, first: int, second: int, kind: str = ""
+    ) -> None:
         """Add a dimension with a new letter between two points.
 
-        It is horizontal when the points are further apart in X than
-        in Y, else vertical; its line sits two grid steps past them.
+        Unless given, it is horizontal when the points are further
+        apart in X than in Y, else vertical; its line sits two grid
+        steps past them.
 
         Arguments:
         * `first` (`int`): `ORIGIN` or a corner's index.
         * `second` (`int`): The other point.
+        * `kind` (`str`): `HORIZONTAL` or `VERTICAL`; empty to choose.
         """
         start: QPointF = self.point(first)
         end: QPointF = self.point(second)
         across: float = abs(end.x() - start.x())
         up: float = abs(end.y() - start.y())
-        kind: str = HORIZONTAL if across >= up else VERTICAL
+        if not kind:
+            kind = HORIZONTAL if across >= up else VERTICAL
         letter: Letter = next_letter(self.drawing.letters)
         self.history.remember(self.drawing.snapshot())
         self.drawing.letters.append(letter)
@@ -1220,6 +1596,8 @@ class OutlineView(QGraphicsView):
         index: int
         for index in self.chosen_dimensions:
             dimension: Dimension = self.drawing.dimensions[index]
+            if dimension.kind == ANGLE:
+                continue  # Its four arcs: not yet.
             self.measures[index].prepareGeometryChange()
             kind: str = NEXT_KIND[dimension.kind]
             dimension.become(
@@ -1240,12 +1618,33 @@ class OutlineView(QGraphicsView):
             event.button() == Qt.MouseButton.LeftButton
             and self.scene().mouseGrabberItem() is None
         ):
+            axis: int = self.axis_at(event.position().toPoint())
             if self.origin in self.items(event.position().toPoint()):
                 self.select_point(ORIGIN)
+            elif axis in AXES:
+                self.select_edge(axis)
             else:
                 self.clear_selection()
             self.pan_from = event.position().toPoint()
             self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    # Method `OutlineView.axis_at()`:
+    def axis_at(self, where: QPoint) -> int:
+        """Return the axis a click is on, within half a square.
+
+        Arguments:
+        * `where` (`QPoint`): The click, in the view.
+
+        Returns:
+        * (`int`): `X_AXIS`, `Y_AXIS`, or `ORIGIN` for neither.
+        """
+        point: QPointF = self.mapToScene(where)
+        near: float = SQUARE_PIXELS / 2.0 / max(self.zoom(), 1e-12)
+        if abs(point.y()) <= near:
+            return X_AXIS
+        if abs(point.x()) <= near:
+            return Y_AXIS
+        return ORIGIN
 
     # Method `OutlineView.mouseMoveEvent()`:
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
@@ -1292,6 +1691,8 @@ class OutlineView(QGraphicsView):
         measure: DimensionItem
         for measure in self.measures:
             measure.prepareGeometryChange()
+        self.drawing.follow_angles()
+        for measure in self.measures:
             measure.update()
         self.place_handles()
         self.restyle()
@@ -1394,8 +1795,22 @@ class OutlineView(QGraphicsView):
     def dimension_selected(self) -> None:
         """Dimension the last two points clicked, in that order.
 
-        With fewer, wait for the rest: the next clicks make it.
+        With fewer, wait for the rest: the next clicks make it.  An
+        axis and a corner (#80): a dimension from the axis, that is,
+        from the origin across it (vertical from the X axis).
         """
+        axes: list[int] = [edge for edge in self.chosen_edges if edge in AXES]
+        corners: list[int] = [
+            point for point in self.chosen_points if point != ORIGIN
+        ]
+        if axes and corners and len(self.chosen_points) < 2:
+            self.wanted = False
+            self.dimension_between(
+                ORIGIN,
+                corners[-1],
+                VERTICAL if axes[-1] == X_AXIS else HORIZONTAL,
+            )
+            return
         if len(self.chosen_points) < 2:
             self.wanted = True
             self.message = (
@@ -1414,6 +1829,73 @@ class OutlineView(QGraphicsView):
             self.scene().update()
             return
         self.dimension_between(first, second)
+
+    # Method `OutlineView.angle_selected()`:
+    def angle_selected(self) -> None:
+        """[Angle]: an angle between the last two edges clicked, its
+        letter's default the angle as drawn, to a whole degree."""
+        if len(self.chosen_edges) < 2:
+            self.message = "Click two edges' circles for an angle."
+            self.scene().update()
+            return
+        first: int
+        second: int
+        first, second = self.chosen_edges[-2:]
+        if first in AXES and second in AXES:
+            self.message = "The axes are 90 deg apart: pick an edge."
+            self.scene().update()
+            return
+        rays: tuple[int, int] | None = middle_rays(
+            self.drawing.points, first, second
+        )
+        if rays is None:
+            self.message = "Those edges are parallel: no angle."
+            self.scene().update()
+            return
+
+        # The rays toward the edges' middles fix the sector (#53);
+        # measured counterclockwise from the edge that makes it under
+        # 180 degrees, so the value is positive (#57).
+        arc: tuple[QPointF, float, float] | None = edge_arc(
+            self.drawing.points, first, second, rays
+        )
+        assert arc is not None  # Not parallel: `rays` were found.
+        turn: float = arc[2]
+        if turn > 180.0:
+            first, second = second, first
+            rays = (rays[1], rays[0])
+            turn = 360.0 - turn
+        # The arc halfway to the nearer edge's middle.
+        reach: float = min(
+            math.hypot(middle.x(), middle.y())
+            for middle in (
+                edge_start(self.drawing.points, edge)
+                + edge_way(self.drawing.points, edge) / 2.0
+                - arc[0]
+                for edge in (first, second)
+                if edge not in AXES
+            )
+        )
+        letter: Letter = replace(
+            next_letter(self.drawing.letters), default=f"{round(turn)} deg"
+        )
+        self.history.remember(self.drawing.snapshot())
+        self.drawing.letters.append(letter)
+        self.drawing.dimensions.append(
+            Dimension(
+                letter.letter,
+                ANGLE,
+                first,
+                second,
+                max(reach / 2.0, 2.0 * self.step()),
+                rays=rays,
+            )
+        )
+        self.message = ""
+        self.make_squares()
+        self.chosen_dimensions = [len(self.drawing.dimensions) - 1]
+        self.restyle()
+        self.letters_changed()
 
     # Method `OutlineView.undo()`:
     def undo(self) -> None:
@@ -1472,7 +1954,9 @@ class OutlineView(QGraphicsView):
         ring.setCosmetic(True)
         handle: EdgeHandle
         for handle in self.handles:
-            handle.setPen(ring)
+            handle.setPen(
+                chosen if handle.index in self.chosen_edges else ring
+            )
         circle: DimensionHandle
         for circle in self.circles:
             circle.setPen(
@@ -1556,12 +2040,23 @@ class OutlineView(QGraphicsView):
 
         # The axes, through the origin, past the window's edges: X
         # light red, Y light green, apart from the grid.
-        pen.setColor(QColor(scheme.x_axis))
-        painter.setPen(pen)
-        painter.drawLine(QPointF(rect.left(), 0.0), QPointF(rect.right(), 0.0))
-        pen.setColor(QColor(scheme.y_axis))
-        painter.setPen(pen)
-        painter.drawLine(QPointF(0.0, rect.top()), QPointF(0.0, rect.bottom()))
+        # A selected axis (#63) in the highlight color, thicker.
+        lit: QColor = self.palette().highlight().color()
+        axis: int
+        color: str
+        for axis, color in ((X_AXIS, scheme.x_axis), (Y_AXIS, scheme.y_axis)):
+            chosen: bool = axis in self.chosen_edges
+            pen.setColor(lit if chosen else QColor(color))
+            pen.setWidthF(3.0 if chosen else THIN_PIXELS)
+            painter.setPen(pen)
+            if axis == X_AXIS:
+                painter.drawLine(
+                    QPointF(rect.left(), 0.0), QPointF(rect.right(), 0.0)
+                )
+            else:
+                painter.drawLine(
+                    QPointF(0.0, rect.top()), QPointF(0.0, rect.bottom())
+                )
 
     # Method `OutlineView.draw_grid()`:
     def draw_grid(self, painter: QPainter, rect: QRectF, pen: QPen) -> None:
@@ -1719,6 +2214,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             ("Delete", "Del"),
             ("Dimension", "N"),
             ("Dim. Kind", "K"),
+            ("Angle", "A"),
             ("Fit", "F"),
             ("Undo", "Ctrl+Z"),
             ("Redo", "Ctrl+Shift+Z"),
@@ -1745,6 +2241,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             "Delete": self.view.delete_selected,
             "Dimension": self.view.dimension_selected,
             "Dim. Kind": self.view.cycle_kind,
+            "Angle": self.view.angle_selected,
             "Undo": self.view.undo,
             "Redo": self.view.redo,
             "New Letter": self.new_letter,
@@ -1817,11 +2314,20 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         row: int
         letter: Letter
         for row, letter in enumerate(self.drawing.letters):
+            kinds: set[str] = {
+                "angle" if dimension.kind == ANGLE else "length"
+                for dimension in self.drawing.dimensions
+                if dimension.letter == letter.letter
+            }
             found: str
             column: int
             for found, column in (
                 (letter_problem(self.drawing.letters, row), 0),
-                (value_problem(letter.default), 2),
+                (
+                    value_problem(letter.default)
+                    or use_problem(letter.letter, letter.default, kinds),
+                    2,
+                ),
             ):
                 cell: QTableWidgetItem | None = self.table.item(row, column)
                 if cell is not None:

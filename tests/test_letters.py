@@ -6,6 +6,7 @@ from scraftcam.gui.letters import (
     Letter,
     letter_problem,
     next_letter,
+    use_problem,
     value_problem,
 )
 
@@ -20,6 +21,21 @@ class LettersTest(unittest.TestCase):
             self.assertEqual(value_problem(text), "", text)
         for text in ("6", "", "six in", "3 furlongs", "x deg"):
             self.assertIn("is not a value with a unit", value_problem(text))
+
+    def test_use_problem(self) -> None:
+        """A value must fit what its dimensions measure (#58, #62)."""
+        self.assertEqual(use_problem("W", "2 in", {"length"}), "")
+        self.assertEqual(use_problem("W", "2 in", set()), "")
+        self.assertEqual(use_problem("W", "30 deg", set()), "")
+        self.assertEqual(use_problem("W", "2", {"length"}), "")
+        self.assertIn("is an angle", use_problem("W", "30 deg", {"length"}))
+        self.assertIn("is a length", use_problem("A", "118 mm", {"angle"}))
+        self.assertIn("both", use_problem("A", "118 deg", {"angle", "length"}))
+        self.assertEqual(use_problem("A", "118 deg", {"angle"}), "")
+        self.assertEqual(use_problem("A", "1 rad", {"angle"}), "")
+        self.assertIn("between", use_problem("A", "0.1 deg", {"angle"}))
+        self.assertIn("between", use_problem("A", "180 deg", {"angle"}))
+        self.assertIn("between", use_problem("A", "-30 deg", {"angle"}))
 
     def test_letter_problem(self) -> None:
         """Bad shapes, kept names, repeats and case clashes."""

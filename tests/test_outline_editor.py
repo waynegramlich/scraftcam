@@ -4,7 +4,16 @@ import unittest
 from typing import TYPE_CHECKING
 
 from scraftcam.gui import outline_editor
-from scraftcam.gui.dimensions import HORIZONTAL, LENGTH, VERTICAL, Dimension
+from scraftcam.gui.dimensions import (
+    ANGLE,
+    HORIZONTAL,
+    LENGTH,
+    ORIGIN,
+    VERTICAL,
+    X_AXIS,
+    Y_AXIS,
+    Dimension,
+)
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 from tests import qt_app
@@ -344,6 +353,175 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(
             outline_editor.left_of(QPointF(0.0, 0.0)), QPointF(0.0, 0.0)
         )
+
+    def test_select_edge(self) -> None:
+        """A click on an edge's circle selects the edge, lit; a drag
+        does not; empty space clears it."""
+        from PySide6.QtCore import QPoint, Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+
+        view = self.editor.view
+        port = view.viewport()
+        ring = view.handles[1].pen().color()
+        at: QPoint = view.mapFromScene(view.handles[1].scenePos())
+        QTest.mouseClick(port, Qt.MouseButton.LeftButton, pos=at)
+        self.assertEqual(view.chosen_edges, [1])
+        self.assertNotEqual(view.handles[1].pen().color(), ring)
+        view.select_edge(2)
+        view.select_edge(1)
+        self.assertEqual(view.chosen_edges, [2, 1])
+        view.clear_selection()
+        self.assertEqual(view.chosen_edges, [])
+        self.assertEqual(view.handles[1].pen().color(), ring)
+
+    def test_angle(self) -> None:
+        """[Angle] between two edges: an arc, its letter in degrees;
+        refused for too few edges or parallel ones."""
+        from PySide6.QtCore import QPointF  # pylint: disable=C0415
+
+        view = self.editor.view
+        button = self.editor.buttons["Angle"]
+        button.click()
+        self.assertIn("two edges", view.message)
+        view.select_edge(0)
+        view.select_edge(1)
+        button.click()
+        self.assertEqual(len(view.drawing.dimensions), 1)
+        self.assertEqual(view.drawing.dimensions[0].kind, ANGLE)
+        self.assertTrue(view.drawing.letters[-1].default.endswith(" deg"))
+        self.assertFalse(view.grab().isNull())
+        self.assertFalse(view.measures[0].shape().isEmpty())
+        self.assertFalse(view.measures[0].boundingRect().isEmpty())
+        circle = view.circles[0]
+        circle.drag_angle(view.drawing.dimensions[0], QPointF(9.0, 9.0))
+        self.assertGreater(view.drawing.dimensions[0].offset, 0.0)
+        self.editor.buttons["Dim. Kind"].click()
+        self.assertEqual(view.drawing.dimensions[0].kind, ANGLE)
+        view.drawing.points[:] = [(0, 0), (4, 0), (4, 2), (0, 2)]
+        view.make_squares()
+        view.select_edge(0)
+        view.select_edge(2)
+        button.click()
+        self.assertIn("parallel", view.message)
+        self.assertFalse(view.grab().isNull())
+        corners = [(0.0, 0.0), (4.0, 0.0), (0.0, 4.0)]
+        self.assertEqual(outline_editor.middle_rays(corners, 0, 2), (1, -1))
+        arc = outline_editor.edge_arc(corners, 0, 2, (1, -1))
+        assert arc is not None
+        self.assertAlmostEqual(arc[2], 90.0)
+        self.assertIsNone(
+            outline_editor.middle_rays(view.drawing.points, 0, 2)
+        )
+
+    def test_angle_sector_fixed(self) -> None:
+        """An angle is positive whichever edge is clicked first, and
+        stays under 180 degrees as corners move (#57, #68)."""
+        view = self.editor.view
+        tip = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (-2.0, 8.0), (-2.0, 1.2)]
+        for first, second in ((4, 0), (0, 4)):
+            view.drawing.points[:] = tip
+            view.drawing.dimensions.clear()
+            view.drawing.letters.clear()
+            view.make_squares()
+            view.select_edge(first)
+            view.select_edge(second)
+            self.editor.buttons["Angle"].click()
+            self.assertEqual(view.drawing.letters[-1].default, "118 deg")
+
+        # A corner swung around (#68): the arc follows the drawing,
+        # always on the side under 180 degrees.
+        dimension = view.drawing.dimensions[0]
+        x: float
+        for x in (3.0, 1.0, -3.0, -1.0):
+            view.drawing.points[0] = (x, 3.0 if x > 0.0 else -3.0)
+            view.follow()
+            arc = outline_editor.angle_arc(view.drawing.points, dimension)
+            assert arc is not None
+            self.assertLess(arc[2], 180.0)
+            self.assertFalse(view.grab().isNull())
+
+    def test_angle_edges_change(self) -> None:
+        """An angle keeps to its edges as corners come and go (#45)."""
+        drawing: Drawing = Drawing()
+        drawing.points[:] = [(0, 0), (4, 0), (4, 4), (0, 4), (-2, 2)]
+        drawing.dimensions.append(Dimension("A", ANGLE, 0, 2))
+
+        # A corner splitting an edge before the second: it shifts.
+        drawing.insert(2, (4, 2))
+        self.assertEqual(
+            (drawing.dimensions[0].start, drawing.dimensions[0].end), (0, 3)
+        )
+
+        # The first edge's far corner gone: the edge reaches on.
+        drawing.remove(1)
+        self.assertEqual(
+            (drawing.dimensions[0].start, drawing.dimensions[0].end), (0, 2)
+        )
+
+        # A corner an edge leaves gone: the angle goes with it.
+        drawing.remove(2)
+        self.assertEqual(drawing.dimensions, [])
+
+    def test_letter_uses(self) -> None:
+        """A letter whose value does not fit its dimension is red."""
+        view = self.editor.view
+        view.select_edge(0)
+        view.select_edge(1)
+        self.editor.buttons["Angle"].click()
+        self.editor.check_letters()
+        self.assertEqual(self.editor.problem, "")
+        view.drawing.letters[0].default = "2 in"
+        self.editor.check_letters()
+        self.assertIn("measures an angle", self.editor.problem)
+
+    def test_axis_angle(self) -> None:
+        """A click on an axis selects it; an angle from it to an edge:
+        half a drill point (#59, #63, #65); the arc keeps its letter
+        (#76)."""
+        from PySide6.QtCore import QPoint, QPointF, Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+
+        view = self.editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (-1, 8)]
+        view.make_squares()
+        view.fit()
+        port = view.viewport()
+        at: QPoint = view.mapFromScene(QPointF(0.0, 4.0))
+        QTest.mouseClick(port, Qt.MouseButton.LeftButton, pos=at)
+        self.assertEqual(view.chosen_edges, [Y_AXIS])
+        self.assertFalse(view.grab().isNull())
+        view.select_edge(0)
+        self.editor.buttons["Angle"].click()
+        self.assertEqual(view.drawing.letters[-1].default, "59 deg")
+        self.assertFalse(view.grab().isNull())
+        dimension = view.drawing.dimensions[0]
+        view.circles[0].drag_angle(dimension, QPointF(9.0, -9.0))
+        self.assertTrue(0.0 <= dimension.along <= 1.0)
+        view.select_edge(X_AXIS)
+        view.select_edge(Y_AXIS)
+        self.editor.buttons["Angle"].click()
+        self.assertIn("pick an edge", view.message)
+        view.clear_selection()
+        far: QPoint = view.mapFromScene(QPointF(5.0, 5.0))
+        self.assertEqual(view.axis_at(far), ORIGIN)
+
+    def test_dimension_from_axis(self) -> None:
+        """An axis and a corner, then [Dimension]: measured across the
+        axis from the origin (#80)."""
+        view = self.editor.view
+        view.select_edge(X_AXIS)
+        view.select_point(2)
+        self.editor.buttons["Dimension"].click()
+        dimension = view.drawing.dimensions[-1]
+        self.assertEqual(
+            (dimension.kind, dimension.start, dimension.end),
+            (VERTICAL, ORIGIN, 2),
+        )
+        view.clear_selection()
+        view.select_point(1)
+        view.select_edge(Y_AXIS)
+        self.editor.buttons["Dimension"].click()
+        self.assertEqual(view.drawing.dimensions[-1].kind, HORIZONTAL)
 
     def test_undo_redo(self) -> None:
         """Undo and redo go back and forth; a new change ends redo."""

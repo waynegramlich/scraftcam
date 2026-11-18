@@ -475,3 +475,208 @@ transcript: `~/.scraftcam/transcripts/2026-11-18_T.prg_5.1.9.2.md`.
   marks and two-solution handling per #37), #S3 [Revolve], #S4
   TOML, #S5 SVG, #S6 radii, #S7 GUI tree, #S8 extruding class.
 * Transcript: `~/.scraftcam/transcripts/2026-11-18_T.prg_5.1.9.2.md`.
+
+## 2026-11-18: #S2 chunk 1: edges selected
+
+`git`: `5cf2a11` (committed by Claude at the user's request with the
+suggested message), pushed.  The user: finish #S2 before #S3, in ~3
+minute chunks.  A click (no drag) on an edge's circle selects the
+edge (`OutlineView.chosen_edges`, `select_edge()`), its circle lit;
+cleared with the rest.  `test_select_edge`; 25 editor tests pass.
+Next: [Angle (A)] between the two last selected edges, drawn as an
+arc with its letter (default `deg`).
+
+## 2026-11-18: #S2 chunk 2: [Angle (A)]
+
+* The user: #38 edge selection works; #39 [Angle] after [Dim.
+  Kind]; few angles expected, mostly drill tips; #40 any two edges,
+  crossing of their lines as the center, parallel refused; #41 the
+  default comes from the drawing (the closed outline is the start);
+  #42 a selected edge is only for [Angle].
+* `dimensions.ANGLE` (`start`, `end` the edges' corners; `offset`
+  the arc's radius; `along` the letter on the arc).
+  `outline_editor.edge_arc()` (crossing, first ray's direction, turn
+  to the second, rays toward each edge's middle; `None` if parallel
+  within `PARALLEL` 1e-6), `direction()`; `DimensionItem.arc_point()`,
+  `arc_path()` (`ARC_STEPS` 48), `reach_path()` (extension lines
+  past an edge's end), `paint_angle()`; `letter_side()` radial;
+  `DimensionHandle.drag_angle()` (around: `along`; in/out: radius).
+  `OutlineView.angle_selected()`: letter default the drawn angle to
+  a whole degree (`118 deg` on a drill tip, picture checked);
+  `cycle_kind()` skips angles (four arcs not yet).
+* `test_angle`; 30 tests pass; checkers clean.  Not yet: angles in
+  `solve()` (formulas), the four arcs by [Dim. Kind], deleting a
+  corner leaves angles on its other edge pointing at shifted edges
+  (to check).
+
+## 2026-11-18: #45 checked; #48 angles past 180 degrees
+
+* #43 [Angle] works; #44 a parallel angle just vanishing is OK.
+* #45: `Drawing.insert()`/`remove()` keep an angle on its edges (by
+  the corner each leaves): a split before shifts it; deleting an
+  edge's far corner lets the edge reach on (merged); deleting the
+  corner an edge leaves deletes the angle.  `test_angle_edges_change`
+  pins it; no code change.
+* #48 (the user): angles may pass 180 degrees; an angle needs a
+  start edge and a direction (CW or CCW), so there is one answer.
+  Proposal in the conversation; not coded.
+
+## 2026-11-18: #48-#51 answered; design review before coding
+
+* #48 (the user): no CW/CCW flag: angles are always CCW from the
+  start edge, a negative value for CW.  #49 the other two arcs are
+  dropped.  #50 default under 180 degrees, but the user is torn (it
+  may come out negative).  #51 a direction arrowhead: yes.
+* The user asked for the problems the proposals bring (and avoid)
+  before coding; Claude's list is #53-#62 in the conversation
+  (stored ray directions, `K` on angles, value redundancy 118 vs
+  -242, near-180 values, angles to the axes for revolved tips,
+  shared letters with signs, arrowhead only on screen, letter unit
+  checks).  `Angle`/`parse_number()` take `-118` already.
+
+## 2026-11-18: #53, #57, #59, #61 answered
+
+* The user: angles are always measured CCW (negative for CW); an
+  experiment, to be changed when something nasty shows up.
+* #59 yes: angles between an edge and the X or Y axis; a revolved
+  outline's tip angle doubled.  #57 yes: a new angle's start edge is
+  the one that makes it positive and under 180 degrees.  #53 yes:
+  each ray's direction (with or against its edge) stored at
+  creation, never recomputed.  #61 the direction arrowhead on screen
+  and in the SVG: the two must mean the same (someone re-entering
+  the SVG with the same values gets the same outline).
+* Open: #56 `K` on angles, #58 near-parallel values, #60 mirrored
+  angles sharing a letter, #62 letter unit checks, #63 selecting an
+  axis.
+
+## 2026-11-18: #56 angles as people draw them
+
+* The user rethought #48: an angle is what the person drawing it
+  would write, e.g. a drill point is always positive, under 180
+  degrees, its arc across the body.  #58 agreed (refuse near 0 and
+  180); #62 yes (letters checked against their use); #60 decide
+  when met.
+* Claude's proposal (#64): the value is a plain positive magnitude,
+  under 180 degrees; which of the four sectors is meant is set once,
+  at creation, by the rays toward the edges' middles (#53, stored);
+  no signs, no direction arrowhead (an arc in its sector is complete,
+  as in drafting, so screen and SVG mean the same, #61).  Mirrored
+  tips can share a letter (#60).  Lost: angles over 180 degrees.
+
+## 2026-11-18: Angle design agreed
+
+The user agreed: #48, #49, #53, #56, #57, #58, #59, #60, #62, #64
+(positive values under 180 degrees, sector fixed at creation by the
+stored rays, no direction arrowhead), #65 (an axis ray toward the
+edge's side), #66 (no angles over 180 degrees).  #62 (letter unit
+against its use) explained again; then coding starts (#67: stored
+rays, then the letter checks; axis angles the chunk after).
+
+## 2026-11-18: Angle chunk 1: rays stored (#53, #57)
+
+* #62 the user: the table must require units (it does: a bare
+  number is refused); the diagram shows letters only.
+* `Dimension.rays` (each ray along `1` or against `-1` its edge's
+  direction); `outline_editor.crossing()`, `edge_way()`,
+  `middle_rays()` (toward the edges' middles, at creation only),
+  `edge_arc(points, first, second, rays)` (turn counterclockwise,
+  0-360), `angle_arc(points, dimension)` for the items.
+  `angle_selected()` swaps the edges when the turn is over 180, so a
+  new angle is positive and under 180 whichever edge is clicked
+  first.  `test_angle_sector_fixed` (118 deg both orders; a tip
+  pushed past its shoulders turns the long way, no sector jump).
+  32 tests pass; checkers clean.  Next: chunk 2, the letter checks
+  (#58, #62).
+
+## 2026-11-18: #68 angles follow the drawing
+
+* #68 (the user): swinging the triangle's top corner around an angle
+  at the lower right corner gave arcs over 180 degrees: unexpected.
+  The rays fixed at creation (#53) were the cause.  Now
+  `Drawing.follow_angles()` (called from `OutlineView.follow()` on
+  every change) sets the rays toward the edges' middles and swaps the
+  edges so the turn is under 180.  A full 360 degree swing: largest
+  arc 179.5.  `test_angle_sector_fixed` reworked.  32 tests pass.
+* So #53 now holds only between changes: when formulas drive the
+  drawing (later), the last rays are what keep the sector (#70).
+* #69: deal with issues as they come.  #62: the user still does not
+  see the issue; explained again with a different example.
+
+## 2026-11-18: Angle chunk 2: letter checks (#58, #62)
+
+* #71 the user's triangle swing works; #72 no angles of 270 degrees
+  (always the side under 180).
+* `letters.use_problem(letter, text, kinds)` (`kinds`: `length`,
+  `angle`, from the dimensions using the letter): both kinds
+  refused; a length letter holding an angle and the reverse
+  refused; an angle outside `ANGLE_LIMITS` (0.1, 179.9) degrees
+  refused (also negatives).  `OutlineEditor.check_letters()` shows
+  it in the Default cell, as `value_problem()`'s.  `test_use_problem`,
+  `test_letter_uses`; 37 tests (`test_outline_editor`,
+  `test_dimensions`, `test_letters`) pass; checkers clean.
+* Next: chunk 3, selecting an axis and angles to an axis (#59, #63,
+  #65).
+
+## 2026-11-18: Angle chunk 3: angles to an axis (#59, #63, #65, #76)
+
+* #58: the user found no way to set table values: a double click on
+  a cell edits it (the window's button keys take plain keystrokes).
+* #76 (the user): an angle's circle dragged past its arc left the
+  arc behind; now `drag_angle()` keeps `along` in 0..1 (on the arc).
+* `dimensions.X_AXIS` -2, `Y_AXIS` -3, `AXES`: an angle's `start` or
+  `end` may be an axis.  `edge_start()`, `edge_way()` know the axes
+  (origin, +X/+Y); `middle_rays()` points an axis's ray toward the
+  other edge's middle (#65); `reach_path()` skips axes.
+  `OutlineView.axis_at()`: a click within half a square of an axis
+  (not the origin) selects it (`select_edge()`), drawn thick in the
+  highlight color.  Two axes refused.  A new arc's radius is half the
+  distance to the nearer edge's middle.  Half a drill point (edge
+  and Y axis): `59 deg`, picture checked.  Doubling for [Revolve]
+  waits for #S3 (#74).
+* `test_axis_angle`; 38 tests pass; checkers clean.  Next: #S2's
+  last chunk, the formulas (#75).
+
+## 2026-11-18: #S2 formulas, chunk A: `solve()` by passes; lengths
+
+* #77, #73, #78 tried, fine.  #79 commit once #S2 is done.
+* `dimensions.solve()` now passes over the dimensions until none
+  tells anything new (`_apply()`, `_along_axis()`,
+  `_along_length()`, `_drawn()`); seeds: the origin and corners on
+  an axis.  A length from a point known in full to a corner known in
+  one coordinate gives the other: `Y0 +/- sqrt(L^2 - (dx)^2)`, the
+  sign from the drawing (#37).  `Formula.text` holds such a start.
+  `test_length`; 35 tests pass; checkers clean.
+* Next, chunk B: angles give edge directions (from an axis or an
+  edge already directed); a directed edge from a known corner gives
+  the other corner from one coordinate or a length.
+
+## 2026-11-18: #S2 formulas, chunk B: angles; #80; #S2 done
+
+* #80 (the user): no way to dimension from an axis to a corner.  Now
+  an axis plus one corner, then [Dimension], gives a dimension from
+  the origin across the axis (vertical from the X axis, horizontal
+  from the Y axis): `dimension_between(..., kind)`.
+  `test_dimension_from_axis`.  #81 tooltips seen; tidying formulas
+  later.  #83 two lengths at a corner: left out.
+* `dimensions.solve()`: `ways` (each directed edge's direction, an
+  expression in degrees; axes `0 deg`, `90 deg`); `_angle_way()`
+  (an angle from a directed edge directs the other, `+ 180 deg`
+  for a ray against its edge); `_along_edge()` (a directed edge
+  known in full at one end gives the other end from one coordinate:
+  `y0 + (x - x0) * tan(way)` or `x0 + (y - y0) / tan(way)`).  Half
+  a drill point (angle to the Y axis plus a horizontal from the
+  origin) checked numerically, both sides: 1.202 against 1.2 drawn.
+  `test_angle`; 42 tests (`test_dimensions`, `test_outline_editor`,
+  `test_letters`) pass; checkers clean.
+* Not done (#84): a length along a directed edge (cos/sin); two
+  lengths at a corner (#83); an angle one too many is not red (#33).
+
+## 2026-11-18: Where things stand (before `git commit`)
+
+* #S1 and #S2 are done.  Next: #S3 [Revolve] (doubled diameters and
+  tip angles, #74; sharp-tip retest, #7), then #S4 TOML, #S5 SVG
+  (semantically the same as the screen, #61), #S6 radii, #S7 GUI
+  tree, #S8 extruding class.
+* Open: #7, #8, #9, #81 (formula tidying), #83, #84.  Numbers sticky
+  this session (up to #84).
+* Transcript: `~/.scraftcam/transcripts/2026-11-18_T.prg_5.1.9.2.md`.
