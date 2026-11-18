@@ -124,3 +124,51 @@ a dimension is placed, #31 where files go.
 * The session transcript (for the user's friend) is regenerated
   each round into `~/.scraftcam/transcripts/` by its
   `transcript.py`; not under version control.
+
+## 2026-11-17: Chunk 1 done
+
+`scraftcam/gui/outline_editor.py` (`python3 -m
+scraftcam.gui.outline_editor`): `OutlineView(QGraphicsView)` Y up,
+a scene of unitless drawing steps; `grid_step()` (1, 2, 5 x 10^k, at
+least `GRID_PIXELS` 12 apart, every 5th darker) and `snap()`;
+`PullSquare`s (fixed size on screen) drag a corner, snapped unless
+Shift; `OutlineItem` thick cosmetic edges with an arrowhead at the
+end of each; the origin square pans with empty space
+(`ScrollHandDrag`); the wheel zooms about the pointer
+(`ZOOM_PER_NOTCH` 1.25, `ZOOM_LIMITS`); `F` fits, `G` grid; colors
+from `theme.colors()`, `theme.follow()` in `main()`.  `Drawing`
+holds the points (`TRIANGLE`, counterclockwise).
+`tests/test_outline_editor.py`: 7 tests, 0.05 s, coverage 97%
+(`uvx --python /usr/bin/python3 coverage run ...`; only `main()`
+missed).  Checkers clean.  Found: something sorts imports (ruff
+`I001`), so PySide6 imports in tests go inside the test methods, and
+modules call `require("PySide6")` first, as `theme.py` does.
+Waiting for the user's run.  Next: chunk 2 (mode bar, keys,
+Move/Add/Delete, undo).
+
+## 2026-11-17: Step 2, chunk 1 (the user says "Step" for #38's items)
+
+Mode bar in `OutlineEditor`: [Move (M)] [Add (A)] [Delete (D)] (a
+`QButtonGroup`, one down) [Grid (G)] [Snap (S)] [Fit (F)], keys by
+`setShortcut`, buttons never take focus; a red status label for
+refusals.  `OutlineView.mode`, `snap_on`, `make_squares()`,
+`add_after()` (the exact middle of the edge leaving the corner, not
+snapped), `delete()` (refused below `LEAST_CORNERS` 3).  A
+`PullSquare` is placed before it sends moves, so making squares never
+snaps a corner (a bug found by the tests).  The view's own key
+handling is gone (the buttons have the keys).  10 tests pass.  Next:
+chunk 2, undo and redo.
+
+## 2026-11-17: Step 2, chunk 2: undo and redo; Step 2 done
+
+The user: #40 OK for now (more features before suggestions); #41
+arrowheads as they are; #42 1, 2, 5, 10 (people do not think in
+binary); #44 the unsnapped middle corner assumed OK.
+`History` (`done`, `undone`: the corners before each change;
+`remember()`, `undo()`, `redo()`); `OutlineView.undo()`, `redo()`,
+`show_points()`; a drag is remembered on release only if it moved
+the corner (`PullSquare.before`); add and delete remember first.
+[Undo (Ctrl+Z)] and [Redo (Ctrl+Shift+Z)] enabled only when there
+is something to do (`OutlineEditor.show_message()`, on the scene's
+`changed`).  12 tests, coverage 98% (only `main()`), checkers clean.
+Next: Step 3, the letters table below a horizontal bar.
