@@ -27,8 +27,9 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 
 
 # Class `Colors`:
+# One attribute per color the GUI sets; more colors, more attributes.
 @dataclass(frozen=True, slots=True)
-class Colors:
+class Colors:  # pylint: disable=too-many-instance-attributes
     """The colors the GUI sets itself, for one scheme.
 
     Attributes:
@@ -40,9 +41,14 @@ class Colors:
     * `ink` (`str`): A sketch's lines and letters.
     * `tool` (`str`): A sketch's solid parts.
     * `pocket` (`str`): A sketch's pocket floors and tapped holes.
+    * `warning` (`str`): A mark of something not finished yet (a
+      corner not yet dimensioned).
+    * `x_axis` (`str`): The X axis of a drawing (light red).
+    * `y_axis` (`str`): The Y axis of a drawing (light green).
 
     Constructor:
-    * `Colors(problem, bad, quiet, paper, ink, tool, pocket)`
+    * `Colors(problem, bad, quiet, paper, ink, tool, pocket,
+      warning, x_axis, y_axis)`
     """
 
     # Constructor arguments:
@@ -53,6 +59,9 @@ class Colors:
     ink: str = field(init=True)
     tool: str = field(init=True)
     pocket: str = field(init=True)
+    warning: str = field(init=True)
+    x_axis: str = field(init=True)
+    y_axis: str = field(init=True)
 
 
 # The two schemes.  `LIGHT`'s sketch colors are those the sketches are
@@ -65,6 +74,9 @@ LIGHT: Colors = Colors(
     ink="#222222",
     tool="#dfe4e8",
     pocket="#aab4bd",
+    warning="#f2c200",
+    x_axis="#e87070",
+    y_axis="#5cb85c",
 )
 DARK: Colors = Colors(
     problem="#ff6b6b",
@@ -74,6 +86,9 @@ DARK: Colors = Colors(
     ink="#e4e4e4",
     tool="#454b53",
     pocket="#7a858f",
+    warning="#d9b300",
+    x_axis="#d46a6a",
+    y_axis="#6abf6a",
 )
 
 # What the windows do when the scheme changes, set by `follow()`.

@@ -4,7 +4,7 @@ import unittest
 from typing import TYPE_CHECKING
 
 from scraftcam.gui import outline_editor
-from scraftcam.gui.dimensions import HORIZONTAL, Dimension
+from scraftcam.gui.dimensions import HORIZONTAL, LENGTH, VERTICAL, Dimension
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 from tests import qt_app
@@ -57,7 +57,8 @@ class GridTest(unittest.TestCase):
         self.assertTrue(dot.isEmpty())
 
 
-class EditorTest(unittest.TestCase):
+# Each test is a public method, and the editor has many features.
+class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     """The window: squares, dragging, zoom, keys, drawing."""
 
     def setUp(self) -> None:
@@ -228,6 +229,121 @@ class EditorTest(unittest.TestCase):
         view.undo()
         self.assertEqual(len(view.drawing.dimensions), 2)
         self.assertEqual(self.editor.table.rowCount(), 2)
+
+    def test_delete_after_drag(self) -> None:
+        """A dimension dragged by its circle, then deleted, is gone
+        from the scene's index too (a segmentation fault once)."""
+        from PySide6.QtCore import QPoint, Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+
+        view = self.editor.view
+        view.dimension_between(-1, 1)
+        qt_app.process_events()
+        view.grab()
+        port = view.viewport()
+        start: QPoint = view.mapFromScene(view.circles[0].scenePos())
+        end: QPoint = start + QPoint(20, 30)
+        QTest.mousePress(port, Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(port, start + QPoint(10, 15))
+        QTest.mouseMove(port, end)
+        QTest.mouseRelease(port, Qt.MouseButton.LeftButton, pos=end)
+        qt_app.process_events()
+        view.grab()
+        self.assertEqual(view.chosen_dimensions, [0])
+        self.editor.buttons["Delete"].click()
+        self.assertEqual(view.drawing.dimensions, [])
+        qt_app.process_events()
+        self.assertFalse(view.grab().isNull())
+        QTest.mouseClick(port, Qt.MouseButton.LeftButton, pos=end)
+
+    def test_corner_tips(self) -> None:
+        """Each square tells its formulas; a chosen circle is lit."""
+        view = self.editor.view
+        self.assertEqual(view.squares[1].toolTip(), "(X-Floating, Y-Floating)")
+        view.dimension_between(-1, 1)
+        tip: str = view.squares[1].toolTip()
+        letter: str = view.drawing.dimensions[0].letter
+        self.assertIn(letter, tip)
+        self.assertEqual(tip.count("Floating"), 1)
+        self.assertIn("(0, 0)", view.origin.toolTip())
+        view.clear_selection()
+        ring = view.circles[0].pen().color()
+        view.select_dimension(0)
+        self.assertNotEqual(view.circles[0].pen().color(), ring)
+        self.assertEqual(
+            view.circles[0].pen().color(), view.palette().highlight().color()
+        )
+
+    def test_cycle_kind(self) -> None:
+        """[Dim. Kind] turns the selected dimensions horizontal <->
+        vertical, as one change, keeping them selected."""
+        view = self.editor.view
+        button = self.editor.buttons["Dim. Kind"]
+        self.assertIn("\u21bb", button.text())
+        button.click()
+        self.assertIn("Select dimensions", view.message)
+        view.dimension_between(-1, 1)
+        self.assertEqual(view.chosen_dimensions, [0])
+        kind: str = view.drawing.dimensions[0].kind
+        seen: list[str] = [kind]
+        for _ in range(3):
+            button.click()
+            seen.append(view.drawing.dimensions[0].kind)
+            self.assertEqual(view.chosen_dimensions, [0])
+            self.assertFalse(view.grab().isNull())
+        self.assertEqual(set(seen), {HORIZONTAL, LENGTH, VERTICAL})
+        self.assertEqual(seen[3], kind)
+
+        # Each kind keeps its own place (#29).
+        dimension = view.drawing.dimensions[0]
+        dimension.offset, dimension.along = -7.0, 0.25
+        button.click()
+        dimension = view.drawing.dimensions[0]
+        dimension.offset, dimension.along = 3.0, 0.75
+        for _ in range(3):
+            button.click()
+        dimension = view.drawing.dimensions[0]
+        self.assertEqual((dimension.offset, dimension.along), (3.0, 0.75))
+        for _ in range(2):
+            button.click()
+        dimension = view.drawing.dimensions[0]
+        self.assertEqual((dimension.offset, dimension.along), (-7.0, 0.25))
+        for _ in range(6):
+            view.undo()
+        view.undo()
+        self.assertEqual(view.drawing.dimensions[0].kind, seen[2])
+
+    def test_length(self) -> None:
+        """A length runs beside its points, the circle moving it."""
+        from PySide6.QtCore import QPoint, QPointF, Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+
+        view = self.editor.view
+        view.dimension_between(0, 1)
+        dimension = view.drawing.dimensions[0]
+        dimension.kind = LENGTH
+        dimension.offset = 2.0
+        view.make_squares()
+        first, second, start, end = view.measures[0].ends()
+        self.assertAlmostEqual(
+            QPointF.dotProduct(end - start, start - first), 0.0
+        )
+        self.assertEqual(end - start, second - first)
+        self.assertFalse(view.grab().isNull())
+        port = view.viewport()
+        at: QPoint = view.mapFromScene(view.circles[0].scenePos())
+        QTest.mousePress(port, Qt.MouseButton.LeftButton, pos=at)
+        QTest.mouseMove(port, at + QPoint(30, 40))
+        QTest.mouseRelease(
+            port, Qt.MouseButton.LeftButton, pos=at + QPoint(30, 40)
+        )
+        self.assertNotEqual(dimension.offset, 2.0)
+        self.assertEqual(len(view.history.done), 2)
+        dimension.offset = view.offset_for(LENGTH, 0, 1)
+        self.assertNotEqual(dimension.offset, 0.0)
+        self.assertEqual(
+            outline_editor.left_of(QPointF(0.0, 0.0)), QPointF(0.0, 0.0)
+        )
 
     def test_undo_redo(self) -> None:
         """Undo and redo go back and forth; a new change ends redo."""

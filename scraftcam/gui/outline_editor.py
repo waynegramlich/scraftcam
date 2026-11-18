@@ -13,7 +13,9 @@ selection (empty space clears it), and the bar's buttons act on it.
 it is pressed, in any order (#60).
 The bar has a keyed button for each action, no menus (#11): [Grid
 (G)], [Snap (S)], [Delete (Del)], [Dimension (N)] (the two selected
-points), [Fit (F)], [Undo (Ctrl+Z)] and [Redo
+points), [Dim. Kind \u21bb (K)] (horizontal, length, vertical),
+[Fit (F)],
+[Undo (Ctrl+Z)] and [Redo
 (Ctrl+Shift+Z)] (#18), a whole drag being one change, [New Letter
 (L)].  Below the drawing, past a bar dragged up and down, the
 letters' table (#27): letter, long name, default value with its
@@ -54,6 +56,7 @@ from PySide6.QtGui import (  # noqa: E402
     QPen,
     QPolygonF,
     QShortcut,
+    QTransform,
     QWheelEvent,
 )
 from PySide6.QtWidgets import (  # noqa: E402
@@ -81,9 +84,12 @@ from PySide6.QtWidgets import (  # noqa: E402
 from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
     HORIZONTAL,
+    LENGTH,
+    NEXT_KIND,
     ORIGIN,
     VERTICAL,
     Dimension,
+    Formula,
     Solution,
     solve,
 )
@@ -522,6 +528,23 @@ def arrowhead(start: QPointF, end: QPointF, length: float) -> QPainterPath:
     return path
 
 
+# Function `left_of()`:
+def left_of(way: QPointF) -> QPointF:
+    """Return the unit vector a quarter turn counterclockwise from a
+    direction (`(0, 0)` for none).
+
+    Arguments:
+    * `way` (`QPointF`): The direction.
+
+    Returns:
+    * (`QPointF`): One unit long, to its left (Y up).
+    """
+    length: float = (way.x() ** 2 + way.y() ** 2) ** 0.5
+    if length == 0.0:
+        return QPointF(0.0, 0.0)
+    return QPointF(-way.y() / length, way.x() / length)
+
+
 # Class `EdgeHandle`:
 class EdgeHandle(QGraphicsEllipseItem):
     """A small hollow circle in the middle of an edge (#59).
@@ -670,6 +693,18 @@ class DimensionHandle(QGraphicsEllipseItem):
             span: float = end.x() - start.x()
             if span != 0.0:
                 dimension.along = (where.x() - start.x()) / span
+        elif dimension.kind == LENGTH:
+            # Along the slant moves the letter; across it, the line.
+            first: QPointF = self.editor.point(dimension.start)
+            way: QPointF = self.editor.point(dimension.end) - first
+            square: float = QPointF.dotProduct(way, way)
+            if square != 0.0:
+                dimension.along = (
+                    QPointF.dotProduct(where - first, way) / square
+                )
+                dimension.offset = QPointF.dotProduct(
+                    where - first, left_of(way)
+                )
         else:
             dimension.offset = where.x()
             span = end.y() - start.y()
@@ -719,6 +754,10 @@ class DimensionItem(QGraphicsItem):
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
         first: QPointF = self.editor.point(dimension.start)
         second: QPointF = self.editor.point(dimension.end)
+        if dimension.kind == LENGTH:
+            # Parallel to the line between the points, `offset` aside.
+            aside: QPointF = left_of(second - first) * dimension.offset
+            return first, second, first + aside, second + aside
         if dimension.kind == HORIZONTAL:
             return (
                 first,
@@ -851,9 +890,8 @@ class DimensionItem(QGraphicsItem):
     def draw_letter(
         self, painter: QPainter, start: QPointF, end: QPointF
     ) -> None:
-        """Draw the letter, upright, beside its point of the line.
-
-        It goes on the side away from the outline's middle.
+        """Draw the letter, upright, beside its point of the line, on
+        the side `letter_side()` gives.
 
         Arguments:
         * `painter` (`QPainter`): What draws, in scene coordinates.
@@ -861,8 +899,10 @@ class DimensionItem(QGraphicsItem):
         * `end` (`QPointF`): The other end.
         """
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        middle: QPointF = painter.worldTransform().map(
-            start + (end - start) * dimension.along
+        world: QTransform = painter.worldTransform()
+        middle: QPointF = world.map(start + (end - start) * dimension.along)
+        side: QPointF = self.letter_side(world) * (
+            LETTER_POINTS + LETTER_GAP_PIXELS
         )
         painter.save()
         painter.resetTransform()
@@ -870,20 +910,40 @@ class DimensionItem(QGraphicsItem):
         font.setBold(True)
         painter.setFont(font)
         box: QRectF = QRectF(middle.x() - 50.0, middle.y() - 40.0, 100.0, 80.0)
-        flags: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignCenter
-        # On the side of the line away from the outline's middle, so
-        # the letter stays off the outline (the screen's Y is down).
+        box.translate(side)
+        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, dimension.letter)
+        painter.restore()
+
+    # Method `DimensionItem.letter_side()`:
+    def letter_side(self, world: QTransform) -> QPointF:
+        """Return which way, on screen, the letter sits from its line.
+
+        Horizontal and vertical ones go away from the outline's
+        middle, so the letter stays off the outline; a length goes on
+        the side its line was moved to.
+
+        Arguments:
+        * `world` (`QTransform`): The scene to screen transform.
+
+        Returns:
+        * (`QPointF`): A unit vector in screen pixels (Y down).
+        """
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
         xs: list[float] = [x for x, _ in self.editor.drawing.points]
         ys: list[float] = [y for _, y in self.editor.drawing.points]
-        gap: float = LETTER_POINTS + LETTER_GAP_PIXELS
         if dimension.kind == HORIZONTAL:
             below: bool = dimension.offset < (min(ys) + max(ys)) / 2.0
-            box.translate(0.0, gap if below else -gap)
-        else:
-            left: bool = dimension.offset < (min(xs) + max(xs)) / 2.0
-            box.translate(-gap if left else gap, 0.0)
-        painter.drawText(box, flags, dimension.letter)
-        painter.restore()
+            return QPointF(0.0, 1.0 if below else -1.0)
+        if dimension.kind == LENGTH:
+            way: QPointF = world.map(
+                self.editor.point(dimension.end)
+            ) - world.map(self.editor.point(dimension.start))
+            # The screen's Y is down: flip, turn left, flip back.
+            out: QPointF = left_of(QPointF(way.x(), -way.y()))
+            sign: float = 1.0 if dimension.offset >= 0.0 else -1.0
+            return QPointF(out.x(), -out.y()) * sign
+        left: bool = dimension.offset < (min(xs) + max(xs)) / 2.0
+        return QPointF(-1.0 if left else 1.0, 0.0)
 
 
 # Class `OutlineView`:
@@ -936,6 +996,11 @@ class OutlineView(QGraphicsView):
         self.snap_on: bool = True
         scene: QGraphicsScene = QGraphicsScene(self)
         scene.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
+        # No spatial index: a deletion changes the boxes of the items
+        # it removes, so an index loses them and keeps a dangling
+        # pointer (a segmentation fault after a dimension's drag).  A
+        # drawing has only a few dozen items.
+        scene.setItemIndexMethod(QGraphicsScene.ItemIndexMethod.NoIndex)
         self.setScene(scene)
 
         # Y up; zoom about the pointer; drag empty space to pan.
@@ -1089,31 +1154,82 @@ class OutlineView(QGraphicsView):
         end: QPointF = self.point(second)
         across: float = abs(end.x() - start.x())
         up: float = abs(end.y() - start.y())
-        gap: float = 2.0 * self.step()
+        kind: str = HORIZONTAL if across >= up else VERTICAL
         letter: Letter = next_letter(self.drawing.letters)
         self.history.remember(self.drawing.snapshot())
         self.drawing.letters.append(letter)
-        dimension: Dimension
-        if across >= up:
-            dimension = Dimension(
+        self.drawing.dimensions.append(
+            Dimension(
                 letter.letter,
-                HORIZONTAL,
+                kind,
                 first,
                 second,
-                min(start.y(), end.y()) - gap,
+                self.offset_for(kind, first, second),
             )
-        else:
-            dimension = Dimension(
-                letter.letter,
-                VERTICAL,
-                first,
-                second,
-                max(start.x(), end.x()) + gap,
-            )
-        self.drawing.dimensions.append(dimension)
+        )
         self.message = ""
         self.make_squares()
+        # Selected, so [Dim. Kind] acts on it straight away.
+        self.chosen_dimensions = [len(self.drawing.dimensions) - 1]
+        self.restyle()
         self.letters_changed()
+
+    # Method `OutlineView.offset_for()`:
+    def offset_for(self, kind: str, first: int, second: int) -> float:
+        """Return where a new dimension's line goes: two grid steps
+        below its points (horizontal), right of them (vertical), or
+        aside from them, away from the outline (length).
+
+        Arguments:
+        * `kind` (`str`): `HORIZONTAL`, `VERTICAL` or `LENGTH`.
+        * `first` (`int`): `ORIGIN` or a corner's index.
+        * `second` (`int`): The other point.
+
+        Returns:
+        * (`float`): The line's Y (horizontal) or X (vertical).
+        """
+        start: QPointF = self.point(first)
+        end: QPointF = self.point(second)
+        gap: float = 2.0 * self.step()
+        if kind == HORIZONTAL:
+            return min(start.y(), end.y()) - gap
+        if kind == LENGTH:
+            # On the side away from the outline's middle.
+            xs: list[float] = [x for x, _ in self.drawing.points]
+            ys: list[float] = [y for _, y in self.drawing.points]
+            middle: QPointF = QPointF(
+                (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0
+            )
+            away: QPointF = (start + end) / 2.0 - middle
+            left: float = QPointF.dotProduct(away, left_of(end - start))
+            return gap if left >= 0.0 else -gap
+        return max(start.x(), end.x()) + gap
+
+    # Method `OutlineView.cycle_kind()`:
+    def cycle_kind(self) -> None:
+        """[Dim. Kind]: turn each selected dimension to its next kind
+        (horizontal, length, vertical, then horizontal again), as one
+        change.  Each kind keeps its own place: the line and letter go
+        back to where they were last time it was that kind, or the
+        first time to where a new one would go (#29)."""
+        if not self.chosen_dimensions:
+            self.message = "Select dimensions to change their kind."
+            self.scene().update()
+            return
+        self.history.remember(self.drawing.snapshot())
+        index: int
+        for index in self.chosen_dimensions:
+            dimension: Dimension = self.drawing.dimensions[index]
+            self.measures[index].prepareGeometryChange()
+            kind: str = NEXT_KIND[dimension.kind]
+            dimension.become(
+                kind, self.offset_for(kind, dimension.start, dimension.end)
+            )
+        self.message = ""
+        chosen: list[int] = list(self.chosen_dimensions)
+        self.make_squares()
+        self.chosen_dimensions = chosen
+        self.restyle()
 
     # Method `OutlineView.mousePressEvent()`:
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -1124,11 +1240,11 @@ class OutlineView(QGraphicsView):
             event.button() == Qt.MouseButton.LeftButton
             and self.scene().mouseGrabberItem() is None
         ):
-            if self.origin in self.items(event.pos()):
+            if self.origin in self.items(event.position().toPoint()):
                 self.select_point(ORIGIN)
             else:
                 self.clear_selection()
-            self.pan_from = event.pos()
+            self.pan_from = event.position().toPoint()
             self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
 
     # Method `OutlineView.mouseMoveEvent()`:
@@ -1137,8 +1253,8 @@ class OutlineView(QGraphicsView):
         if self.pan_from is None:
             super().mouseMoveEvent(event)
             return
-        moved: QPoint = event.pos() - self.pan_from
-        self.pan_from = event.pos()
+        moved: QPoint = event.position().toPoint() - self.pan_from
+        self.pan_from = event.position().toPoint()
         horizontal = self.horizontalScrollBar()
         vertical = self.verticalScrollBar()
         horizontal.setValue(horizontal.value() - moved.x())
@@ -1333,8 +1449,8 @@ class OutlineView(QGraphicsView):
         chosen.setCosmetic(True)
         self.origin.setPen(chosen if ORIGIN in self.chosen_points else pen)
         self.origin.setBrush(QColor(scheme.ink))
-        # A square is red while its corner is not dimensioned yet (once
-        # there are dimensions at all).
+        # A square is yellow (a warning) while its corner is not
+        # dimensioned yet (once there are dimensions at all).
         missing: set[int] = {
             corner
             for corner, _ in self.solution.missing(len(self.drawing.points))
@@ -1347,8 +1463,11 @@ class OutlineView(QGraphicsView):
             loose: bool = bool(self.drawing.dimensions) and (
                 square.index in missing
             )
-            square.setBrush(QColor(scheme.problem if loose else scheme.paper))
-        # Hollow, so the edge shows through (#60), in ink to be seen.
+            square.setBrush(QColor(scheme.warning if loose else scheme.paper))
+            square.setToolTip(self.corner_tip(square.index))
+        self.origin.setToolTip("The origin: (0, 0)")
+        # Hollow, so the edge shows through (#60), in ink to be seen; a
+        # selected dimension's circle as a selected square.
         ring: QPen = QPen(QColor(scheme.ink), 1.5)
         ring.setCosmetic(True)
         handle: EdgeHandle
@@ -1356,8 +1475,30 @@ class OutlineView(QGraphicsView):
             handle.setPen(ring)
         circle: DimensionHandle
         for circle in self.circles:
-            circle.setPen(ring)
+            circle.setPen(
+                chosen if circle.index in self.chosen_dimensions else ring
+            )
         self.viewport().update()
+
+    # Method `OutlineView.corner_tip()`:
+    def corner_tip(self, index: int) -> str:
+        """Return a corner's tooltip: its formulas, `(W - T, H)`.
+
+        A coordinate not reached by a chain of dimensions from the
+        origin is under-constrained, shown as `X-Floating` or
+        `Y-Floating`.
+
+        Arguments:
+        * `index` (`int`): The corner.
+
+        Returns:
+        * (`str`): The tooltip's text.
+        """
+        x: Formula | None = self.solution.x.get(index)
+        y: Formula | None = self.solution.y.get(index)
+        x_text: str = "X-Floating" if x is None else str(x)
+        y_text: str = "Y-Floating" if y is None else str(y)
+        return f"({x_text}, {y_text})"
 
     # Method `OutlineView.zoom()`:
     def zoom(self) -> float:
@@ -1413,10 +1554,13 @@ class OutlineView(QGraphicsView):
         if self.grid_shown:
             self.draw_grid(painter, rect, pen)
 
-        # The axes, through the origin, past the window's edges.
-        pen.setColor(QColor(scheme.ink))
+        # The axes, through the origin, past the window's edges: X
+        # light red, Y light green, apart from the grid.
+        pen.setColor(QColor(scheme.x_axis))
         painter.setPen(pen)
         painter.drawLine(QPointF(rect.left(), 0.0), QPointF(rect.right(), 0.0))
+        pen.setColor(QColor(scheme.y_axis))
+        painter.setPen(pen)
         painter.drawLine(QPointF(0.0, rect.top()), QPointF(0.0, rect.bottom()))
 
     # Method `OutlineView.draw_grid()`:
@@ -1574,12 +1718,15 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             ("Snap", "S"),
             ("Delete", "Del"),
             ("Dimension", "N"),
+            ("Dim. Kind", "K"),
             ("Fit", "F"),
             ("Undo", "Ctrl+Z"),
             ("Redo", "Ctrl+Shift+Z"),
             ("New Letter", "L"),
         ):
-            button: QPushButton = QPushButton(f"{word} ({key})")
+            # [Dim. Kind] cycles, so it shows a cycle arrow (U+21BB).
+            cycle: str = " \u21bb" if word == "Dim. Kind" else ""
+            button: QPushButton = QPushButton(f"{word}{cycle} ({key})")
             # A button's own shortcut never fired; a `QShortcut` does.
             shortcut: QShortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(button.click)
@@ -1590,14 +1737,21 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         for word in ("Grid", "Snap"):
             self.buttons[word].setCheckable(True)
             self.buttons[word].setChecked(True)
-        self.buttons["Grid"].clicked.connect(self.view.toggle_grid)
-        self.buttons["Snap"].clicked.connect(self.toggle_snap)
-        self.buttons["Fit"].clicked.connect(self.view.fit)
-        self.buttons["Delete"].clicked.connect(self.view.delete_selected)
-        self.buttons["Dimension"].clicked.connect(self.view.dimension_selected)
-        self.buttons["Undo"].clicked.connect(self.view.undo)
-        self.buttons["Redo"].clicked.connect(self.view.redo)
-        self.buttons["New Letter"].clicked.connect(self.new_letter)
+        # What each button does.
+        does: dict[str, Callable[[], None]] = {
+            "Grid": self.view.toggle_grid,
+            "Snap": self.toggle_snap,
+            "Fit": self.view.fit,
+            "Delete": self.view.delete_selected,
+            "Dimension": self.view.dimension_selected,
+            "Dim. Kind": self.view.cycle_kind,
+            "Undo": self.view.undo,
+            "Redo": self.view.redo,
+            "New Letter": self.new_letter,
+        }
+        action: Callable[[], None]
+        for word, action in does.items():
+            self.buttons[word].clicked.connect(action)
         self.status: QLabel = QLabel("")
         mode_bar.addWidget(self.status, 1)
         self.view.scene().changed.connect(self.show_message)

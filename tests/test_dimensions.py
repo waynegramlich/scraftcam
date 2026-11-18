@@ -50,10 +50,22 @@ class DimensionsTest(unittest.TestCase):
         self.assertEqual(str(solution.y[2]), "T")
         self.assertEqual(str(solution.y[4]), "T + H")
         missing = solution.missing(len(L_BRACKET))
-        self.assertIn((0, "x"), missing)
-        self.assertIn((0, "y"), missing)
         self.assertIn((2, "x"), missing)
         self.assertNotIn((3, "x"), missing)
+
+    def test_on_axis(self) -> None:
+        """A corner on an axis has that coordinate 0 (the one at the
+        origin both), and a dimension to it is one too many."""
+        solution = solve(L_BRACKET, [Dimension("H", VERTICAL, ORIGIN, 5)])
+        self.assertEqual(str(solution.x[0]), "0")
+        self.assertEqual(str(solution.y[0]), "0")
+        self.assertEqual(str(solution.y[1]), "0")
+        self.assertEqual(str(solution.x[5]), "0")
+        self.assertNotIn(1, solution.x)
+        self.assertEqual(solution.extra, [])
+        self.assertEqual(str(solution.y[5]), "H")
+        solution = solve(L_BRACKET, [Dimension("Z", VERTICAL, ORIGIN, 1)])
+        self.assertEqual(solution.extra, [0])
 
     def test_extra(self) -> None:
         """A second way to the same point is one too many."""

@@ -333,3 +333,145 @@ clean.  Awaiting the user's run; commit after.
 * Work rule: ~3 minute chunks with a progress note at each mark;
   the transcript for the user's friend is regenerated each round
   (`~/.scraftcam/transcripts/transcript.py`).
+
+## 2026-11-18: Renumbered for this session
+
+The user asked for fresh numbers (sticky this session): steps #S1
+finish Step 4 (#57 tooltips), #S2 Step 5 angles and slanted lengths,
+#S3 Step 6 [Revolve], #S4 Step 7 TOML, #S5 Step 8 SVG, #S6 Step 9
+radii, #S7 Step 10 GUI tree, #S8 Step 11 extruding class.  Issues:
+#1 = old #57, #2 = #60, #3 = #63, #4 the letter side, #5 = #62,
+#6 = #56a, #7 = #34, #8 = #39, #9 = #28, #10 = #49.  This session's
+transcript: `~/.scraftcam/transcripts/2026-11-18_T.prg_5.1.9.2.md`.
+
+## 2026-11-18: The user's answers; a segmentation fault fixed
+
+* #2 all three dimensioning orders work; #3 the circles (new corner,
+  moving dimensions) are natural; deleting corners works; #4 the
+  letter side is right; #5 an empty-space click clears the
+  selection: kept.  #1 tooltips: build them and see; the user doubts
+  end users care about formulas, and suggests showing them from the
+  letters table instead.  The user wants `#N:` only, never `1. #1:`.
+* Segmentation fault deleting a dimension after dragging its circle
+  (reproduced offscreen every time; not without the drag): the
+  scene's spatial index had the item under its old box, and a
+  deletion changes the box before removal, so the index kept a
+  dangling pointer.  Fixed by `setItemIndexMethod(NoIndex)` in
+  `OutlineView.__init__()`; `test_delete_after_drag` added.  21 tests
+  in `test_outline_editor` pass, checkers clean.
+
+## 2026-11-18: #1 tooltips, #13 lit circles
+
+* The user: #11 tooltips only for now (formulas may be dropped
+  entirely: "option c"); #12 deleting dimensions no longer crashes;
+  #6 dropped; #10 Undo/Redo work great.
+* #1: `OutlineView.corner_tip()`: each square's tooltip is its
+  formulas, `(W - T, H)`, `?` with "x not dimensioned yet" for a
+  coordinate no chain reaches; the origin says "(0, 0)"; set in
+  `restyle()`.  #13 (the user): a clicked dimension circle is lit in
+  the highlight color, as a clicked square is.  `test_corner_tips`;
+  22 editor tests pass, checkers clean.  Not acted on:
+  `QMouseEvent.pos()` is deprecated (PySide6 warns in the tests).
+* Next: the user tries #1 and #13; then #S1 is done and #S2 (angles
+  and slanted lengths) starts.
+
+## 2026-11-18: #15-#19 answered; #19 done
+
+* #15 tooltips are all `?` until dimensions exist.  #16 angles: two
+  edges, then [Angle (A)], default like `118 deg`.  #17 the user:
+  a dimension between two points is ambiguous (horizontal, vertical
+  or the slanted length); no right-click menus ever; a dimension has
+  (at least) three states and a button cycles them.  #18 the #S2
+  chunk order agreed (slanted length, edge angle, formulas with
+  `sin`/`tan`/`sqrt`, red marks).  #19 `event.pos()` ->
+  `event.position().toPoint()`, no more warnings.
+* Work in ~3 minute increments (the user tracks tokens).
+
+## 2026-11-18: #15, #17, #20 done; #22, #23 open
+
+* #15 tooltips: `(W, Y-Floating)`, `X-Floating` for a coordinate no
+  chain reaches (the user: "Under-constrained" is exact, "Floating"
+  gets it across).
+* #17 [Dim. Kind ↻ (K)] (U+21BB, the user's name) right of
+  [Dimension]: `OutlineView.cycle_kind()` turns the selected
+  dimensions horizontal <-> vertical, one change, line moved to
+  `offset_for()` (shared with `dimension_between()`); the slanted
+  length (third state) comes with #S2.
+* #20 a corner not yet dimensioned is yellow (`theme.Colors.warning`
+  `#f2c200` light, `#d9b300` dark), not red; extra dimensions stay
+  red.  Button actions are one table (pylint's statement limit).
+* #22 the user: overload [Dim. Kind] for angles too.  #23 (the
+  user's): a point on the X or Y axis removes one degree of freedom.
+* `test_cycle_kind`; 23 editor tests, `test_gui_theme` pass; checkers
+  clean.
+
+## 2026-11-18: #23 corners on an axis; #28 axis colors
+
+* #27 (the user): corners on an axis showed as floating.  #23 done:
+  `dimensions._chain()` seeds every corner drawn within `ON_AXIS`
+  (1e-9) of the axis across the kind as `0` (on the Y axis: X = 0;
+  at the origin both); a dimension to such a corner is extra (red).
+  `test_on_axis`.
+* #28 (the user): X axis light red (`theme.Colors.x_axis` `#e87070`,
+  dark `#d46a6a`), Y axis light green (`y_axis` `#5cb85c`, dark
+  `#6abf6a`), in `OutlineView.drawBackground()`.
+* #24/#29 the user: not ready to move on; [Dim. Kind] must cycle all
+  three kinds (horizontal, length, vertical) first.  Next chunk.
+* 30 tests (`test_outline_editor`, `test_dimensions`,
+  `test_gui_theme`) pass; checkers clean.
+
+## 2026-11-18: #29 length (slanted) dimensions
+
+* `dimensions.LENGTH`, `NEXT_KIND` (horizontal -> length -> vertical
+  -> horizontal); `solve()` ignores lengths (not in `AXIS`), so a
+  corner with only a length stays yellow until angles (#S2).
+* `outline_editor.left_of()` (unit vector a quarter turn left);
+  `DimensionItem.ends()` for a length: parallel to its points,
+  `offset` aside (left of start -> end positive);
+  `DimensionHandle` drags a length's `along` and `offset` by
+  projection; `OutlineView.offset_for(LENGTH)` puts it away from the
+  outline's middle; `DimensionItem.letter_side()` (split out of
+  `draw_letter()`; it had read the painter's transform after
+  `resetTransform()`).  `cycle_kind()` uses `NEXT_KIND`.
+* An offscreen picture of the triangle with three lengths looked
+  right.  `test_length`, `test_cycle_kind` (all three kinds); 28
+  tests (`test_outline_editor`, `test_dimensions`) pass; checkers
+  clean.  New dimensions still start horizontal or vertical.
+
+## 2026-11-18: #29 each kind keeps its place; #30 new dimension selected
+
+* #29 (the user): no surprise moves; each of the three kinds keeps
+  its own line and letter place.  `Dimension.places` (kind, offset,
+  along; a tuple so `replace()` snapshots stay apart),
+  `place_of()`, `become()`; `cycle_kind()` uses `become()`.  Places
+  are kept when corners move (to confirm, #36).
+* #30 the user could not get a slanted dimension from +X axis to +Y
+  axis corners; likely cause: a new dimension was not selected, so
+  [Dim. Kind] said "Select dimensions".  Now `dimension_between()`
+  selects it.  Not confirmed by the user.
+* #31, #33 OK.  #35: the user expects lengths to bring grief (two
+  solutions); Claude's answer below in the conversation.
+* 28 tests pass; checkers clean.
+
+## 2026-11-18: Where things stand (before `git commit`)
+
+* Answered: #30 the slanted dimension from +X to +Y axis corners
+  works (a new dimension starts selected); #34 each kind's place is
+  "sticky", works; #36 no: horizontal and vertical places stay fixed
+  when corners move (keep it simple); #37 lengths (and later angles)
+  with two solutions: the drawing picks the side, as it picks signs
+  now, and defaults with no solution (L shorter than dx) show red
+  with the reason; #26 angles wait until after this commit.
+* Done today: #S1 (Step 4) is finished: corner tooltips
+  (`(W, Y-Floating)`), yellow for corners not yet dimensioned,
+  corners on an axis count as 0 there, colored axes, a segmentation
+  fault fixed (`NoIndex`), [Dim. Kind ↻ (K)] cycling horizontal,
+  length (slanted), vertical, each kind keeping its place, selected
+  circles lit.  The first chunk of #S2 (slanted lengths drawn) is in.
+* Open, numbers sticky this session: #7 sharp-tip revolve (#S3), #8
+  flutes and assemblies (`T.cett2e~5.1.9.2.1`), #9 break-line box
+  (later).  Steps left: #S2 (angles [Angle (A)] with [Dim. Kind]
+  cycling the four arcs; formulas with `sin`/`tan`/`sqrt`; red
+  marks and two-solution handling per #37), #S3 [Revolve], #S4
+  TOML, #S5 SVG, #S6 radii, #S7 GUI tree, #S8 extruding class.
+* Transcript: `~/.scraftcam/transcripts/2026-11-18_T.prg_5.1.9.2.md`.

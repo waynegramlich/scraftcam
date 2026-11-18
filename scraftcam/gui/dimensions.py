@@ -7,7 +7,8 @@ origin by a chain of horizontal dimensions, and its Y by a chain of
 vertical ones; each step adds or takes away its letter, as the
 drawing shows (a corner drawn left of the one it is measured from
 takes it away).  So each coordinate is a formula in the letters, with
-no solver.  A coordinate with no chain is not dimensioned yet, and a
+no solver.  A corner drawn on an axis has that coordinate 0 already,
+as the origin does.  A coordinate with no chain is not dimensioned yet, and a
 dimension between two coordinates already tied another way is one too
 many (over-dimensioned).
 """
@@ -23,25 +24,45 @@ HORIZONTAL: str = "horizontal"
 VERTICAL: str = "vertical"
 AXIS: dict[str, int] = {HORIZONTAL: 0, VERTICAL: 1}
 
+# A slanted dimension: the straight distance between its points.  It
+# is not in `AXIS`: alone it gives no X or Y (angles will, #S2).
+LENGTH: str = "length"
+
+# What [Dim. Kind] turns each kind into.
+NEXT_KIND: dict[str, str] = {
+    HORIZONTAL: LENGTH,
+    LENGTH: VERTICAL,
+    VERTICAL: HORIZONTAL,
+}
+
+# A corner drawn this close to an axis is on it (snapped corners are
+# exactly on it), so that coordinate is 0 (#23).
+ON_AXIS: float = 1e-9
+
 
 # Class `Dimension`:
 @dataclass(slots=True)
 class Dimension:
-    """A letter measuring two points along X or Y.
+    """A letter measuring two points along X, along Y, or straight.
 
     Attributes:
     * `letter` (`str`): The letter (`W`).
-    * `kind` (`str`): `HORIZONTAL` or `VERTICAL`.
+    * `kind` (`str`): `HORIZONTAL`, `VERTICAL` or `LENGTH`.
     * `start` (`int`): The first point (`ORIGIN` or a corner index).
     * `end` (`int`): The second point.
     * `offset` (`float`): Where its line sits, in drawing steps: for a
-      horizontal one its Y, for a vertical one its X.
+      horizontal one its Y, for a vertical one its X, for a length its
+      distance from the line between its points (left of `start` to
+      `end` is positive).
     * `along` (`float`): Where its letter sits along the line, as a
       share of it from the `start` end (below 0 or above 1: past the
       arrowheads, for a short dimension).
+    * `places` (`tuple[tuple[str, float, float], ...]`): Where the
+      line and letter were (`offset`, `along`) for each other kind
+      it has been, so [Dim. Kind] brings them back (#29).
 
     Constructor:
-    * `Dimension(letter, kind, start, end, offset, along)`
+    * `Dimension(letter, kind, start, end, offset, along, places)`
     """
 
     # Constructor arguments:
@@ -51,6 +72,47 @@ class Dimension:
     end: int = field(init=True)
     offset: float = field(init=True, default=0.0)
     along: float = field(init=True, default=0.5)
+    places: tuple[tuple[str, float, float], ...] = field(init=True, default=())
+
+    # Method `Dimension.place_of()`:
+    def place_of(self, kind: str) -> tuple[float, float] | None:
+        """Return where the line and letter were for a kind, if it
+        has been that kind.
+
+        Arguments:
+        * `kind` (`str`): `HORIZONTAL`, `VERTICAL` or `LENGTH`.
+
+        Returns:
+        * (`tuple[float, float] | None`): `offset` and `along`.
+        """
+        was: str
+        offset: float
+        along: float
+        for was, offset, along in self.places:
+            if was == kind:
+                return offset, along
+        return None
+
+    # Method `Dimension.become()`:
+    def become(self, kind: str, offset: float) -> None:
+        """Turn into another kind, keeping this kind's place; the new
+        kind goes back to its own place, or to `offset` the first
+        time.
+
+        Arguments:
+        * `kind` (`str`): The new kind.
+        * `offset` (`float`): Where the line goes the first time.
+        """
+        self.places = (
+            *(place for place in self.places if place[0] != self.kind),
+            (self.kind, self.offset, self.along),
+        )
+        place: tuple[float, float] | None = self.place_of(kind)
+        self.kind = kind
+        if place is None:
+            self.offset = offset
+        else:
+            self.offset, self.along = place
 
 
 # Class `Formula`:
@@ -188,11 +250,18 @@ def _chain(
         """Return a point's coordinate as drawn."""
         return 0.0 if point == ORIGIN else points[point][axis]
 
-    # Breadth first from the origin; a dimension whose two ends are
-    # both known when it is reached ties them a second time.
+    # Breadth first from the origin and every corner drawn on the
+    # axis across this kind (#23: a corner on the Y axis has X = 0);
+    # a dimension whose two ends are both known when it is reached
+    # ties them a second time.
     known[ORIGIN] = Formula()
-    used: set[int] = set()
     queue: deque[int] = deque([ORIGIN])
+    corner: int
+    for corner in range(len(points)):
+        if abs(drawn(corner)) <= ON_AXIS:
+            known[corner] = Formula()
+            queue.append(corner)
+    used: set[int] = set()
     while queue:
         point: int = queue.popleft()
         index: int
