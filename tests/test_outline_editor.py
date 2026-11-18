@@ -4,6 +4,7 @@ import unittest
 from typing import TYPE_CHECKING
 
 from scraftcam.gui import outline_editor
+from scraftcam.gui.dimensions import HORIZONTAL, Dimension
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 from tests import qt_app
@@ -105,6 +106,7 @@ class EditorTest(unittest.TestCase):
         # pylint: disable=import-outside-toplevel
         from PySide6.QtCore import QPoint, QPointF, Qt
         from PySide6.QtGui import QWheelEvent
+        from PySide6.QtTest import QTest
 
         view = self.editor.view
         view.fit()
@@ -137,8 +139,16 @@ class EditorTest(unittest.TestCase):
         self.assertFalse(view.grid_shown)
         buttons["Grid"].click()
         self.assertTrue(view.grid_shown)
-        self.assertEqual(buttons["Move"].text(), "Move (M)")
-        self.assertEqual(buttons["Snap"].shortcut().toString(), "S")
+        self.assertEqual(buttons["Delete"].text(), "Delete (Del)")
+        self.assertEqual(self.editor.keys["Snap"].key().toString(), "S")
+
+        # The keys work (`G` hides the grid, then shows it again).
+        self.editor.activateWindow()
+        qt_app.process_events()
+        QTest.keyClick(view, Qt.Key.Key_G)
+        self.assertFalse(view.grid_shown)
+        QTest.keyClick(view, Qt.Key.Key_G)
+        self.assertTrue(view.grid_shown)
 
     def test_snap_off(self) -> None:
         """With [Snap] off, a square goes exactly where it is put."""
@@ -154,17 +164,12 @@ class EditorTest(unittest.TestCase):
         self.assertAlmostEqual(square.pos().x(), 4.123)
 
     def test_add_and_delete(self) -> None:
-        """[Add] splits the edge after a corner; [Delete] stops at 3."""
+        """Adding splits the edge after a corner; deleting stops at 3."""
         view = self.editor.view
-        buttons = self.editor.buttons
-        buttons["Add"].click()
-        self.assertEqual(view.mode, outline_editor.ADD)
         view.add_after(2)
         self.assertEqual(view.drawing.points[3], (-2.0, 0.5))
         self.assertEqual(len(view.squares), 4)
         self.assertEqual(view.squares[3].index, 3)
-        buttons["Delete"].click()
-        self.assertEqual(view.mode, outline_editor.DELETE)
         view.delete(0)
         self.assertEqual(view.drawing.points[0], (4.0, -3.0))
         view.delete(0)
@@ -172,35 +177,57 @@ class EditorTest(unittest.TestCase):
         self.assertEqual(len(view.drawing.points), 3)
         qt_app.process_events()
         self.assertIn("at least 3", self.editor.status.text())
-        buttons["Move"].click()
-        self.assertEqual(view.mode, outline_editor.MOVE)
-        self.assertEqual(self.editor.status.text(), "")
 
-    def test_clicks(self) -> None:
-        """A click on a square adds or deletes, as the mode says."""
+    def test_selection(self) -> None:
+        """Each click adds to the selection; empty space clears it."""
         # (`PySide6` is on `sys.path` only once `tests` is imported.)
         # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtCore import QPointF, Qt
         from PySide6.QtTest import QTest
 
         view = self.editor.view
 
-        def click(index: int) -> None:
-            """Click the middle of a corner's square."""
-            where: QPoint = view.mapFromScene(view.squares[index].pos())
+        def click(where: QPointF) -> None:
+            """Click the view at a scene point."""
             QTest.mouseClick(
-                view.viewport(), Qt.MouseButton.LeftButton, pos=where
+                view.viewport(),
+                Qt.MouseButton.LeftButton,
+                pos=view.mapFromScene(where),
             )
+            QTest.qWait(1)
 
-        self.editor.buttons["Add"].click()
-        click(0)
-        self.assertEqual(len(view.drawing.points), 4)
-        self.editor.buttons["Delete"].click()
-        click(1)
+        click(view.squares[0].pos())
+        self.assertEqual(view.chosen_points, [0])
+        click(view.squares[1].pos())
+        click(view.origin.pos())
+        click(view.squares[1].pos())
+        self.assertEqual(view.chosen_points, [0, -1, 1])
+        click(QPointF(3.0, 3.0))
+        self.assertEqual(view.chosen_points, [])
+
+    def test_delete_selected(self) -> None:
+        """[Delete] removes the selection, letters too, as one change."""
+        view = self.editor.view
+        buttons = self.editor.buttons
+        buttons["Delete"].click()
+        self.assertIn("Select corners", view.message)
+        view.select_point(0)
+        buttons["Delete"].click()
+        self.assertIn("at least 3", view.message)
+        view.add_after(2)
+        view.dimension_between(-1, 1)
+        view.dimension_between(-1, 3)
+        self.assertEqual(len(view.drawing.letters), 2)
+        view.select_dimension(0)
+        view.select_point(3)
+        buttons["Delete"].click()
+        self.assertEqual(view.drawing.dimensions, [])
+        self.assertEqual(view.drawing.letters, [])
         self.assertEqual(len(view.drawing.points), 3)
-        self.editor.buttons["Move"].click()
-        click(0)
-        self.assertEqual(len(view.drawing.points), 3)
+        self.assertEqual(self.editor.table.rowCount(), 0)
+        view.undo()
+        self.assertEqual(len(view.drawing.dimensions), 2)
+        self.assertEqual(self.editor.table.rowCount(), 2)
 
     def test_undo_redo(self) -> None:
         """Undo and redo go back and forth; a new change ends redo."""
@@ -302,6 +329,125 @@ class EditorTest(unittest.TestCase):
         self.assertEqual(editor.status.text(), "")
         self.assertEqual(entry.styleSheet(), "")
 
+    def test_dimension_selected(self) -> None:
+        """[Dimension] with two points clicked before, around or after."""
+        editor = self.editor
+        view = editor.view
+        dimension = editor.buttons["Dimension"]
+
+        # C1, C2, D.
+        view.select_point(0)
+        view.select_point(1)
+        dimension.click()
+        first = view.drawing.dimensions[0]
+        self.assertEqual((first.letter, first.kind), ("A", "horizontal"))
+        self.assertEqual(cell(editor, 0, 0).text(), "A")
+        self.assertNotIn(1, view.solution.x)  # Not tied to the origin.
+
+        # D, C1, C2.
+        dimension.click()
+        qt_app.process_events()
+        self.assertIn("Click two points", editor.status.text())
+        view.select_point(-1)
+        self.assertIn("second point", view.message)
+        view.select_point(2)
+        second = view.drawing.dimensions[1]
+        self.assertEqual((second.letter, second.kind), ("B", "vertical"))
+        self.assertEqual(str(view.solution.y[2]), "B")
+        self.assertFalse(view.grab().isNull())
+
+        # C1, D, C2; then empty space stops the waiting.
+        view.add_after(2)
+        view.select_point(-1)
+        dimension.click()
+        self.assertTrue(view.wanted)
+        view.select_point(3)
+        self.assertEqual(len(view.drawing.dimensions), 3)
+        dimension.click()
+        view.clear_selection()
+        view.select_point(0)
+        self.assertEqual(len(view.drawing.dimensions), 3)
+
+        # Two points in one place are refused.
+        view.drawing.points[1] = view.drawing.points[0]
+        view.select_point(0)
+        view.select_point(1)
+        dimension.click()
+        self.assertIn("same place", view.message)
+
+    def test_drag_dimension(self) -> None:
+        """The circle moves letter and line; a line click selects."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtTest import QTest
+
+        view = self.editor.view
+        view.add_dimension(Dimension("W", HORIZONTAL, 0, 1, -5.0))
+        circle = view.circles[0]
+        self.assertEqual((circle.pos().x(), circle.pos().y()), (0.0, -5.0))
+        grab: QPoint = view.mapFromScene(circle.pos())
+        target: QPoint = view.mapFromScene(QPointF(6.1, -7.1))
+        QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=grab)
+        QTest.mouseMove(view.viewport(), grab + QPoint(5, 5))
+        QTest.mouseMove(view.viewport(), target)
+        QTest.mouseRelease(
+            view.viewport(), Qt.MouseButton.LeftButton, pos=target
+        )
+        dimension = view.drawing.dimensions[0]
+        steps: float = dimension.offset / view.step()
+        self.assertAlmostEqual(steps, round(steps))
+        self.assertLess(dimension.offset, -6.0)
+        self.assertGreater(dimension.along, 1.0)  # Past the arrowhead.
+        self.assertFalse(view.grab().isNull())
+        self.assertEqual(len(view.history.done), 2)
+        view.undo()
+        self.assertEqual(view.drawing.dimensions[0].offset, -5.0)
+        self.assertEqual(view.drawing.dimensions[0].along, 0.5)
+        line: QPoint = view.mapFromScene(QPointF(-2.0, -5.0))
+        QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=line)
+        self.assertEqual(view.chosen_dimensions, [0])
+        self.assertEqual(view.drawing.dimensions[0].offset, -5.0)
+        self.assertTrue(view.measures[0].shape().contains(QPointF(1.0, -5.0)))
+
+    def test_edge_handles(self) -> None:
+        """A handle's drag pulls out a snapped corner; a click does not."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+
+        view = self.editor.view
+        self.assertEqual(len(view.handles), 3)
+        handle = view.handles[0]
+        self.assertEqual((handle.pos().x(), handle.pos().y()), (0.0, -3.0))
+        self.assertTrue(handle.isVisible())
+        where: QPoint = view.mapFromScene(handle.pos())
+        QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=where)
+        self.assertEqual(len(view.drawing.points), 3)
+        QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=where)
+        QTest.mouseMove(view.viewport(), where + QPoint(0, 30))
+        QTest.mouseMove(view.viewport(), where + QPoint(0, 60))
+        QTest.mouseRelease(
+            view.viewport(),
+            Qt.MouseButton.LeftButton,
+            pos=where + QPoint(0, 60),
+        )
+        self.assertEqual(len(view.drawing.points), 4)
+        x: float
+        y: float
+        x, y = view.drawing.points[1]
+        self.assertLess(y, -3.0)
+        self.assertAlmostEqual(y / view.step(), round(y / view.step()))
+        self.assertEqual(len(view.handles), 4)
+        view.undo()
+        self.assertEqual(len(view.drawing.points), 3)
+        # Zoomed far out, the edges are too short for handles.
+        view.scale(1e-3, 1e-3)
+        view.place_handles()
+        self.assertFalse(view.handles[0].isVisible())
+        self.assertEqual(x, 0.0)
+
     def test_given_letters(self) -> None:
         """A drawing's letters are shown, problems marked at once."""
         drawing: Drawing = Drawing(
@@ -312,6 +458,31 @@ class EditorTest(unittest.TestCase):
         self.assertIn("pi: 'pi' is kept", editor.status.text())
         editor.close()
         editor.deleteLater()
+
+    def test_pan(self) -> None:
+        """Dragging empty space pans; the pointer is an arrow after."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtTest import QTest
+
+        view = self.editor.view
+        empty: QPoint = view.mapFromScene(QPointF(3.0, 3.0))
+        before: QPointF = view.mapToScene(empty)
+        QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=empty)
+        self.assertEqual(
+            view.viewport().cursor().shape(), Qt.CursorShape.ClosedHandCursor
+        )
+        QTest.mouseMove(view.viewport(), empty + QPoint(40, 0))
+        QTest.mouseRelease(
+            view.viewport(),
+            Qt.MouseButton.LeftButton,
+            pos=empty + QPoint(40, 0),
+        )
+        self.assertLess(view.mapToScene(empty).x(), before.x())
+        self.assertEqual(
+            view.viewport().cursor().shape(), Qt.CursorShape.ArrowCursor
+        )
 
     def test_paints(self) -> None:
         """The view draws, grid on and off, with no error."""

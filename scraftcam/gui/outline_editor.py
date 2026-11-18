@@ -6,14 +6,18 @@ as one zooms in (#12, #13), and an outline whose corners are pull
 squares, dragged and snapped to the grid (Shift drags freely).  Each
 edge ends in a small arrowhead showing the winding, counterclockwise
 (#4).  The wheel zooms about the pointer (#3); dragging the origin or
-empty space pans the view (#6).  A mode bar across the top (#11) has
-a keyed button for each action, no menus: [Move (M)], [Add (A)] (a
-corner after the clicked one, splitting the edge leaving it) and
-[Delete (D)] are the modes; [Grid (G)], [Snap (S)] and [Fit (F)];
-[Undo (Ctrl+Z)] and [Redo (Ctrl+Shift+Z)] (#18), a whole drag being
-one change; [New Letter (L)].  Below the drawing, past a bar dragged
-up and down, the letters' table (#27): letter, long name, default
-value with its unit, help, each kept and checked at every keystroke.
+empty space pans the view (#6).  There are no modes (#58): dragging
+moves (a corner, a dimension's line); each click adds to the
+selection (empty space clears it), and the bar's buttons act on it.
+[Dimension (N)] takes the last two points clicked, before or after
+it is pressed, in any order (#60).
+The bar has a keyed button for each action, no menus (#11): [Grid
+(G)], [Snap (S)], [Delete (Del)], [Dimension (N)] (the two selected
+points), [Fit (F)], [Undo (Ctrl+Z)] and [Redo
+(Ctrl+Shift+Z)] (#18), a whole drag being one change, [New Letter
+(L)].  Below the drawing, past a bar dragged up and down, the
+letters' table (#27): letter, long name, default value with its
+unit, help, each kept and checked at every keystroke.
 
 The scene is in unitless drawing steps (letters give the real sizes,
 #15), Y up.  Run alone: `python3 -m scraftcam.gui.outline_editor`.
@@ -21,7 +25,8 @@ The scene is in unitless drawing steps (letters give the real sizes,
 
 import math
 import sys
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 
 from ..packages import require
 
@@ -32,6 +37,7 @@ require("PySide6")
 from PySide6.QtCore import (  # noqa: E402
     QModelIndex,
     QPersistentModelIndex,
+    QPoint,
     QPointF,
     QRect,
     QRectF,
@@ -39,16 +45,20 @@ from PySide6.QtCore import (  # noqa: E402
 )
 from PySide6.QtGui import (  # noqa: E402
     QColor,
+    QFont,
+    QKeySequence,
+    QMouseEvent,
     QPainter,
     QPainterPath,
+    QPainterPathStroker,
     QPen,
     QPolygonF,
+    QShortcut,
     QWheelEvent,
 )
 from PySide6.QtWidgets import (  # noqa: E402
-    QAbstractButton,
     QApplication,
-    QButtonGroup,
+    QGraphicsEllipseItem,
     QGraphicsItem,
     QGraphicsRectItem,
     QGraphicsScene,
@@ -69,6 +79,14 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from . import theme  # noqa: E402
+from .dimensions import (  # noqa: E402
+    HORIZONTAL,
+    ORIGIN,
+    VERTICAL,
+    Dimension,
+    Solution,
+    solve,
+)
 from .letters import (  # noqa: E402
     Letter,
     letter_problem,
@@ -104,10 +122,16 @@ COLUMNS: tuple[tuple[str, str], ...] = (
     ("Help", "help"),
 )
 
-# The modes: what a click on a pull square does.
-MOVE: str = "move"
-ADD: str = "add"
-DELETE: str = "delete"
+# A dimension's extension lines run this far past its line, and its
+# letter sits this far from it (pixels); the letters' size (points).
+OVERSHOOT_PIXELS: float = 4.0
+LETTER_GAP_PIXELS: float = 4.0
+LETTER_POINTS: int = 11
+
+# An edge handle's size, and the least length on screen of an edge
+# that shows one (pixels).
+HANDLE_PIXELS: float = 9.0
+HANDLE_EDGE_PIXELS: float = 3.0 * SQUARE_PIXELS
 
 # An outline has at least this many corners.
 LEAST_CORNERS: int = 3
@@ -163,6 +187,26 @@ def triangle() -> list[tuple[float, float]]:
     return list(TRIANGLE)
 
 
+# Class `Snapshot`:
+@dataclass(frozen=True, slots=True)
+class Snapshot:
+    """A drawing's corners and dimensions at one time, for undo.
+
+    Attributes:
+    * `points` (`tuple[tuple[float, float], ...]`): The corners.
+    * `dimensions` (`tuple[Dimension, ...]`): Copies of the dimensions.
+    * `letters` (`tuple[Letter, ...]`): Copies of the letters.
+
+    Constructor:
+    * `Snapshot(points, dimensions, letters)`
+    """
+
+    # Constructor arguments:
+    points: tuple[tuple[float, float], ...] = field(init=True)
+    dimensions: tuple[Dimension, ...] = field(init=True)
+    letters: tuple[Letter, ...] = field(init=True)
+
+
 # Class `Drawing`:
 @dataclass(slots=True)
 class Drawing:
@@ -172,9 +216,10 @@ class Drawing:
     * `points` (`list[tuple[float, float]]`):
       The corners, in order, counterclockwise.
     * `letters` (`list[Letter]`): The letters naming its sizes.
+    * `dimensions` (`list[Dimension]`): The dimensions, by letter.
 
     Constructor:
-    * `Drawing(points, letters)`
+    * `Drawing(points, letters, dimensions)`
     """
 
     # Constructor arguments:
@@ -182,76 +227,125 @@ class Drawing:
         init=True, default_factory=triangle
     )
     letters: list[Letter] = field(init=True, default_factory=list)
+    dimensions: list[Dimension] = field(init=True, default_factory=list)
+
+    # Method `Drawing.snapshot()`:
+    def snapshot(self) -> Snapshot:
+        """Return the corners and dimensions as they are now."""
+        return Snapshot(
+            tuple(self.points),
+            tuple(replace(dimension) for dimension in self.dimensions),
+            tuple(replace(letter) for letter in self.letters),
+        )
+
+    # Method `Drawing.restore()`:
+    def restore(self, snapshot: Snapshot) -> None:
+        """Go back to a snapshot's corners and dimensions.
+
+        Arguments:
+        * `snapshot` (`Snapshot`): What to go back to.
+        """
+        self.points[:] = snapshot.points
+        self.dimensions[:] = [
+            replace(dimension) for dimension in snapshot.dimensions
+        ]
+        self.letters[:] = [replace(letter) for letter in snapshot.letters]
+
+    # Method `Drawing.insert()`:
+    def insert(self, index: int, point: tuple[float, float]) -> None:
+        """Insert a corner; the dimensions keep to their corners.
+
+        Arguments:
+        * `index` (`int`): Where the new corner goes.
+        * `point` (`tuple[float, float]`): The new corner.
+        """
+        self.points.insert(index, point)
+        dimension: Dimension
+        for dimension in self.dimensions:
+            if dimension.start >= index:
+                dimension.start += 1
+            if dimension.end >= index:
+                dimension.end += 1
+
+    # Method `Drawing.remove()`:
+    def remove(self, index: int) -> None:
+        """Remove a corner, with the dimensions that measure it.
+
+        Arguments:
+        * `index` (`int`): The corner.
+        """
+        del self.points[index]
+        self.dimensions[:] = [
+            dimension
+            for dimension in self.dimensions
+            if index not in (dimension.start, dimension.end)
+        ]
+        dimension: Dimension
+        for dimension in self.dimensions:
+            if dimension.start > index:
+                dimension.start -= 1
+            if dimension.end > index:
+                dimension.end -= 1
 
 
 # Class `History`:
 @dataclass(slots=True)
 class History:
-    """The corners before each change, for undo and redo (#18).
+    """The drawing before each change, for undo and redo (#18).
 
     Attributes (alphabetized):
-    * `done` (`list[list[tuple[float, float]]]`):
-      The corners before each change done, the latest last.
-    * `undone` (`list[list[tuple[float, float]]]`):
-      The corners before each change undone, the latest last.
+    * `done` (`list[Snapshot]`):
+      The drawing before each change done, the latest last.
+    * `undone` (`list[Snapshot]`):
+      The drawing before each change undone, the latest last.
 
     Constructor:
     * `History()`
     """
 
     # Remaining attributes (alphabetized):
-    done: list[list[tuple[float, float]]] = field(
-        init=False, default_factory=list
-    )
-    undone: list[list[tuple[float, float]]] = field(
-        init=False, default_factory=list
-    )
+    done: list[Snapshot] = field(init=False, default_factory=list)
+    undone: list[Snapshot] = field(init=False, default_factory=list)
 
     # Method `History.remember()`:
-    def remember(self, before: list[tuple[float, float]]) -> None:
-        """Keep the corners from before a change; nothing to redo now.
+    def remember(self, before: Snapshot) -> None:
+        """Keep the drawing from before a change; nothing to redo now.
 
         Arguments:
-        * `before` (`list[tuple[float, float]]`): The corners.
+        * `before` (`Snapshot`): The drawing.
         """
-        self.done.append(list(before))
+        self.done.append(before)
         self.undone.clear()
 
     # Method `History.undo()`:
-    def undo(
-        self, now: list[tuple[float, float]]
-    ) -> list[tuple[float, float]] | None:
-        """Return the corners before the last change (`None`: none).
+    def undo(self, now: Snapshot) -> Snapshot | None:
+        """Return the drawing before the last change (`None`: none).
 
         Arguments:
-        * `now` (`list[tuple[float, float]]`): The corners now, kept
-          for redo.
+        * `now` (`Snapshot`): The drawing now, kept for redo.
 
         Returns:
-        * (`list[tuple[float, float]] | None`): The corners to show.
+        * (`Snapshot | None`): The drawing to show.
         """
         if not self.done:
             return None
-        self.undone.append(list(now))
+        self.undone.append(now)
         return self.done.pop()
 
     # Method `History.redo()`:
-    def redo(
-        self, now: list[tuple[float, float]]
-    ) -> list[tuple[float, float]] | None:
-        """Return the corners after the last undone change.
+    def redo(self, now: Snapshot) -> Snapshot | None:
+        """Return the drawing after the last undone change.
 
         Arguments:
-        * `now` (`list[tuple[float, float]]`): The corners now, kept
-          for undo.
+        * `now` (`Snapshot`): The drawing now, kept for undo.
 
         Returns:
-        * (`list[tuple[float, float]] | None`):
-          The corners to show (`None`: nothing to redo).
+        * (`Snapshot | None`):
+          The drawing to show (`None`: nothing to redo).
         """
         if not self.undone:
             return None
-        self.done.append(list(now))
+        self.done.append(now)
         return self.undone.pop()
 
 
@@ -266,8 +360,8 @@ class PullSquare(QGraphicsRectItem):
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
     * `index` (`int`): Its corner's index in the drawing.
-    * `before` (`list[tuple[float, float]]`):
-      The corners when a drag began (empty between drags).
+    * `before` (`Snapshot | None`):
+      The drawing when a drag began (`None` between drags).
     """
 
     # Method `PullSquare.__init__()`:
@@ -282,7 +376,7 @@ class PullSquare(QGraphicsRectItem):
         super().__init__(-half, -half, SQUARE_PIXELS, SQUARE_PIXELS)
         self.editor: OutlineView = editor
         self.index: int = index
-        self.before: list[tuple[float, float]] = []
+        self.before: Snapshot | None = None
 
         # Placed before it sends its moves, so placing it never snaps
         # its corner.
@@ -297,24 +391,20 @@ class PullSquare(QGraphicsRectItem):
 
     # Method `PullSquare.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-        """Add or delete in those modes; else start a drag."""
-        if self.editor.mode == ADD:
-            self.editor.add_after(self.index)
-            event.accept()
-        elif self.editor.mode == DELETE:
-            self.editor.delete(self.index)
-            event.accept()
-        else:
-            self.before = list(self.editor.drawing.points)
-            super().mousePressEvent(event)
+        """Select its corner, then start a drag."""
+        self.editor.select_point(self.index)
+        self.before = self.editor.drawing.snapshot()
+        super().mousePressEvent(event)
 
     # Method `PullSquare.mouseReleaseEvent()`:
     def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         """End a drag: remember it, if it moved the corner."""
         super().mouseReleaseEvent(event)
-        if self.before and self.before != self.editor.drawing.points:
+        if self.before is not None and self.before.points != tuple(
+            self.editor.drawing.points
+        ):
             self.editor.history.remember(self.before)
-        self.before = []
+        self.before = None
 
     # Method `PullSquare.itemChange()`:
     def itemChange(
@@ -332,6 +422,7 @@ class PullSquare(QGraphicsRectItem):
             moved: QPointF = value if free else snap(value, self.editor.step())
             self.editor.drawing.points[self.index] = (moved.x(), moved.y())
             self.editor.outline.refresh()
+            self.editor.follow()
             return moved
         return super().itemChange(change, value)
 
@@ -431,11 +522,375 @@ def arrowhead(start: QPointF, end: QPointF, length: float) -> QPainterPath:
     return path
 
 
+# Class `EdgeHandle`:
+class EdgeHandle(QGraphicsEllipseItem):
+    """A small hollow circle in the middle of an edge (#59).
+
+    Dragged, it pulls out a new corner there, snapped as corners are,
+    the whole drag one change; a click that does not move does
+    nothing.
+
+    Attributes:
+    * `editor` (`OutlineView`): The view it is drawn in.
+    * `index` (`int`): The corner its edge leaves.
+    * `before` (`Snapshot | None`): The drawing when a drag began.
+    * `added` (`int`): The new corner's index during a drag (`-1`
+      before the pointer moves).
+    """
+
+    # Method `EdgeHandle.__init__()`:
+    def __init__(self, editor: "OutlineView", index: int) -> None:
+        """Make the handle of one edge.
+
+        Arguments:
+        * `editor` (`OutlineView`): The view it is drawn in.
+        * `index` (`int`): The corner its edge leaves.
+        """
+        half: float = HANDLE_PIXELS / 2.0
+        super().__init__(-half, -half, HANDLE_PIXELS, HANDLE_PIXELS)
+        self.editor: OutlineView = editor
+        self.index: int = index
+        self.before: Snapshot | None = None
+        self.added: int = -1
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.setZValue(1.5)
+
+    # Method `EdgeHandle.place()`:
+    def place(self) -> None:
+        """Sit in the middle of its edge; hidden if the edge is short."""
+        points: list[tuple[float, float]] = self.editor.drawing.points
+        x0: float
+        y0: float
+        x1: float
+        y1: float
+        x0, y0 = points[self.index]
+        x1, y1 = points[(self.index + 1) % len(points)]
+        self.setPos((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+        length: float = (
+            (x1 - x0) ** 2 + (y1 - y0) ** 2
+        ) ** 0.5 * self.editor.zoom()
+        self.setVisible(length >= HANDLE_EDGE_PIXELS)
+
+    # Method `EdgeHandle.mousePressEvent()`:
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Get ready to pull out a corner."""
+        self.before = self.editor.drawing.snapshot()
+        self.added = -1
+        event.accept()
+
+    # Method `EdgeHandle.mouseMoveEvent()`:
+    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Pull out the new corner (made at the first move)."""
+        where: QPointF = event.scenePos()
+        free: bool = not self.editor.snap_on or bool(
+            event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        )
+        if not free:
+            where = snap(where, self.editor.step())
+        if self.added < 0:
+            self.added = self.index + 1
+            self.editor.drawing.insert(self.added, (where.x(), where.y()))
+        self.editor.drawing.points[self.added] = (where.x(), where.y())
+        self.setPos(where)
+        self.editor.outline.refresh()
+        measure: DimensionItem
+        for measure in self.editor.measures:
+            measure.prepareGeometryChange()
+            measure.update()
+
+    # Method `EdgeHandle.mouseReleaseEvent()`:
+    def mouseReleaseEvent(self, _event: QGraphicsSceneMouseEvent) -> None:
+        """End the pull: remember it, and give the corner its square."""
+        if self.before is not None and self.added >= 0:
+            self.editor.history.remember(self.before)
+            self.before = None
+            self.editor.make_squares()
+        self.before = None
+
+
+# Class `DimensionHandle`:
+class DimensionHandle(QGraphicsEllipseItem):
+    """A dimension's small hollow circle, beside its letter (#63).
+
+    Dragged along the line it moves the letter (past the arrowheads
+    too); across the line it moves the line; snapped as corners are,
+    the whole drag one change.
+
+    Attributes:
+    * `editor` (`OutlineView`): The view it is drawn in.
+    * `index` (`int`): Its dimension's index in the drawing.
+    * `before` (`Snapshot | None`): The drawing when a drag began.
+    """
+
+    # Method `DimensionHandle.__init__()`:
+    def __init__(self, editor: "OutlineView", index: int) -> None:
+        """Make the circle of one dimension.
+
+        Arguments:
+        * `editor` (`OutlineView`): The view it is drawn in.
+        * `index` (`int`): Its dimension's index in the drawing.
+        """
+        half: float = HANDLE_PIXELS / 2.0
+        super().__init__(-half, -half, HANDLE_PIXELS, HANDLE_PIXELS)
+        self.editor: OutlineView = editor
+        self.index: int = index
+        self.before: Snapshot | None = None
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.setZValue(1.5)
+
+    # Method `DimensionHandle.place()`:
+    def place(self) -> None:
+        """Sit on the line, where the letter is."""
+        self.setPos(self.editor.measures[self.index].at())
+
+    # Method `DimensionHandle.mousePressEvent()`:
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Select the dimension; get ready to move it."""
+        self.editor.select_dimension(self.index)
+        self.before = self.editor.drawing.snapshot()
+        event.accept()
+
+    # Method `DimensionHandle.mouseMoveEvent()`:
+    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Move the letter along the line, and the line across."""
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        where: QPointF = event.scenePos()
+        free: bool = not self.editor.snap_on or bool(
+            event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+        )
+        if not free:
+            where = snap(where, self.editor.step())
+        measure: DimensionItem = self.editor.measures[self.index]
+        start: QPointF
+        end: QPointF
+        _, _, start, end = measure.ends()
+        measure.prepareGeometryChange()
+        if dimension.kind == HORIZONTAL:
+            dimension.offset = where.y()
+            span: float = end.x() - start.x()
+            if span != 0.0:
+                dimension.along = (where.x() - start.x()) / span
+        else:
+            dimension.offset = where.x()
+            span = end.y() - start.y()
+            if span != 0.0:
+                dimension.along = (where.y() - start.y()) / span
+        measure.update()
+        self.place()
+
+    # Method `DimensionHandle.mouseReleaseEvent()`:
+    def mouseReleaseEvent(self, _event: QGraphicsSceneMouseEvent) -> None:
+        """End a drag: remember it, if it moved the dimension."""
+        if self.before is not None and self.before.dimensions != tuple(
+            self.editor.drawing.dimensions
+        ):
+            self.editor.history.remember(self.before)
+        self.before = None
+
+
+# Class `DimensionItem`:
+class DimensionItem(QGraphicsItem):
+    """A dimension: thin extension lines, a line with an arrowhead at
+    each end, and its letter (#26).
+
+    Attributes:
+    * `editor` (`OutlineView`): The view it is drawn in.
+    * `index` (`int`): Its dimension's index in the drawing.
+
+    A click on its line selects it; its `DimensionHandle` moves it.
+    """
+
+    # Method `DimensionItem.__init__()`:
+    def __init__(self, editor: "OutlineView", index: int) -> None:
+        """Make the item of one dimension.
+
+        Arguments:
+        * `editor` (`OutlineView`): The view it is drawn in.
+        * `index` (`int`): Its dimension's index in the drawing.
+        """
+        super().__init__()
+        self.editor: OutlineView = editor
+        self.index: int = index
+        self.setZValue(0.5)
+
+    # Method `DimensionItem.ends()`:
+    def ends(self) -> tuple[QPointF, QPointF, QPointF, QPointF]:
+        """Return its two points, then its line's two ends."""
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        first: QPointF = self.editor.point(dimension.start)
+        second: QPointF = self.editor.point(dimension.end)
+        if dimension.kind == HORIZONTAL:
+            return (
+                first,
+                second,
+                QPointF(first.x(), dimension.offset),
+                QPointF(second.x(), dimension.offset),
+            )
+        return (
+            first,
+            second,
+            QPointF(dimension.offset, first.y()),
+            QPointF(dimension.offset, second.y()),
+        )
+
+    # Method `DimensionItem.shape()`:
+    def shape(self) -> QPainterPath:
+        """Return a band along its line, `SQUARE_PIXELS` wide, so only
+        a click near the line grabs it."""
+        path: QPainterPath = QPainterPath()
+        if self.index >= len(self.editor.drawing.dimensions):
+            return path
+        start: QPointF
+        end: QPointF
+        _, _, start, end = self.ends()
+        path.moveTo(start)
+        path.lineTo(end)
+        stroker: QPainterPathStroker = QPainterPathStroker()
+        stroker.setWidth(SQUARE_PIXELS / max(self.editor.zoom(), 1e-12))
+        return stroker.createStroke(path)
+
+    # Method `DimensionItem.mousePressEvent()`:
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Select the dimension (its circle moves it, #64)."""
+        self.editor.select_dimension(self.index)
+        event.accept()
+
+    # Method `DimensionItem.at()`:
+    def at(self) -> QPointF:
+        """Return the point of its line where the letter sits."""
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        start: QPointF
+        end: QPointF
+        _, _, start, end = self.ends()
+        return start + (end - start) * dimension.along
+
+    # Method `DimensionItem.boundingRect()`:
+    def boundingRect(self) -> QRectF:
+        """Return a box around its lines, with room for the letter."""
+        # Qt may ask while the item is being removed, its dimension
+        # already gone (an undo).
+        if self.index >= len(self.editor.drawing.dimensions):
+            return QRectF()
+        corners: tuple[QPointF, QPointF, QPointF, QPointF] = self.ends()
+        xs: list[float] = [corner.x() for corner in corners]
+        ys: list[float] = [corner.y() for corner in corners]
+        margin: float = 40.0 / max(self.editor.zoom(), 1e-12)
+        return QRectF(
+            min(xs) - margin,
+            min(ys) - margin,
+            max(xs) - min(xs) + 2.0 * margin,
+            max(ys) - min(ys) + 2.0 * margin,
+        )
+
+    # Method `DimensionItem.paint()`:
+    def paint(
+        self,
+        painter: QPainter,
+        _option: QStyleOptionGraphicsItem,
+        _widget: QWidget | None = None,
+    ) -> None:
+        """Draw the extension lines, the line, its arrows and letter."""
+        # Thin cosmetic lines, red for a dimension one too many.
+        extra: bool = self.index in self.editor.solution.extra
+        ink: QColor = QColor(
+            theme.colors().problem if extra else theme.colors().ink
+        )
+        if self.index in self.editor.chosen_dimensions:
+            ink = self.editor.palette().highlight().color()
+        pen: QPen = QPen(ink, THIN_PIXELS)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(ink)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        scale: float = max(abs(painter.worldTransform().m11()), 1e-12)
+        first: QPointF
+        second: QPointF
+        start: QPointF
+        end: QPointF
+        first, second, start, end = self.ends()
+
+        # Each extension line runs from its point a little past the
+        # dimension line.
+        point: QPointF
+        foot: QPointF
+        for point, foot in ((first, start), (second, end)):
+            past: QPointF = foot - point
+            length: float = (past.x() ** 2 + past.y() ** 2) ** 0.5
+            if length > 0.0:
+                past = past * (OVERSHOOT_PIXELS / scale / length)
+            painter.drawLine(point, foot + past)
+
+        # The line, an arrowhead at each end pointing out to its
+        # extension line.
+        painter.drawLine(start, end)
+        self.draw_reach(painter, start, end)
+        arrow: float = ARROW_PIXELS / scale
+        painter.drawPath(arrowhead(end, start, arrow))
+        painter.drawPath(arrowhead(start, end, arrow))
+
+        self.draw_letter(painter, start, end)
+
+    # Method `DimensionItem.draw_reach()`:
+    def draw_reach(
+        self, painter: QPainter, start: QPointF, end: QPointF
+    ) -> None:
+        """Draw the line on past an arrowhead, out to a letter there.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, in scene coordinates.
+        * `start` (`QPointF`): One end of the dimension line.
+        * `end` (`QPointF`): The other end.
+        """
+        along: float = self.editor.drawing.dimensions[self.index].along
+        if along < 0.0:
+            painter.drawLine(start, self.at())
+        elif along > 1.0:
+            painter.drawLine(end, self.at())
+
+    # Method `DimensionItem.draw_letter()`:
+    def draw_letter(
+        self, painter: QPainter, start: QPointF, end: QPointF
+    ) -> None:
+        """Draw the letter, upright, beside its point of the line.
+
+        It goes on the side away from the outline's middle.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, in scene coordinates.
+        * `start` (`QPointF`): One end of the dimension line.
+        * `end` (`QPointF`): The other end.
+        """
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        middle: QPointF = painter.worldTransform().map(
+            start + (end - start) * dimension.along
+        )
+        painter.save()
+        painter.resetTransform()
+        font: QFont = QFont("sans-serif", LETTER_POINTS)
+        font.setBold(True)
+        painter.setFont(font)
+        box: QRectF = QRectF(middle.x() - 50.0, middle.y() - 40.0, 100.0, 80.0)
+        flags: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignCenter
+        # On the side of the line away from the outline's middle, so
+        # the letter stays off the outline (the screen's Y is down).
+        xs: list[float] = [x for x, _ in self.editor.drawing.points]
+        ys: list[float] = [y for _, y in self.editor.drawing.points]
+        gap: float = LETTER_POINTS + LETTER_GAP_PIXELS
+        if dimension.kind == HORIZONTAL:
+            below: bool = dimension.offset < (min(ys) + max(ys)) / 2.0
+            box.translate(0.0, gap if below else -gap)
+        else:
+            left: bool = dimension.offset < (min(xs) + max(xs)) / 2.0
+            box.translate(-gap if left else gap, 0.0)
+        painter.drawText(box, flags, dimension.letter)
+        painter.restore()
+
+
 # Class `OutlineView`:
-# A view holds the drawing's state as well as its items.
-class OutlineView(  # pylint: disable=too-many-instance-attributes
-    QGraphicsView
-):
+# A view holds the drawing's state as well as its items, and Qt's
+# event handlers count as public methods.
+# pylint: disable-next=too-many-instance-attributes,too-many-public-methods
+class OutlineView(QGraphicsView):
     """The drawing area: grid, axes, origin, outline and squares.
 
     Attributes:
@@ -443,11 +898,23 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
     * `grid_shown` (`bool`): Whether the grid is drawn.
     * `history` (`History`): What undo and redo go back and forth in.
     * `message` (`str`): The last refusal, for the mode bar.
-    * `mode` (`str`): `MOVE`, `ADD` or `DELETE`.
+    * `chosen_points` (`list[int]`):
+      The selected points (`ORIGIN` or corners), in the order clicked.
+    * `chosen_dimensions` (`list[int]`): The selected dimensions.
+    * `wanted` (`bool`): Whether [Dimension] waits for points.
+    * `pan_from` (`QPoint | None`):
+      Where the pointer was, while empty space is dragged.
+    * `letters_changed` (`Callable[[], None]`):
+      Called after a new dimension adds a letter (the window sets it).
     * `origin` (`QGraphicsRectItem`): The origin's square.
     * `outline` (`OutlineItem`): The outline.
     * `snap_on` (`bool`): Whether drags snap to the grid.
     * `squares` (`list[PullSquare]`): The corners' squares.
+    * `measures` (`list[DimensionItem]`): The dimensions' items.
+    * `handles` (`list[EdgeHandle]`): The edges' handles.
+    * `circles` (`list[DimensionHandle]`): The dimensions' circles.
+    * `solution` (`Solution`): The corners' formulas, and what is
+      amiss.
     """
 
     # Method `OutlineView.__init__()`:
@@ -462,7 +929,10 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
         self.grid_shown: bool = True
         self.history: History = History()
         self.message: str = ""
-        self.mode: str = MOVE
+        self.chosen_points: list[int] = []
+        self.chosen_dimensions: list[int] = []
+        self.wanted: bool = False
+        self.letters_changed: Callable[[], None] = self.update
         self.snap_on: bool = True
         scene: QGraphicsScene = QGraphicsScene(self)
         scene.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
@@ -474,7 +944,9 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
             QGraphicsView.ViewportAnchor.AnchorUnderMouse
         )
         self.setTransformationAnchor(anchor)
-        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        # Panned by hand (`pan_from`), so the pointer stays an arrow
+        # for aiming; a closed hand only while panning (#55).
+        self.pan_from: QPoint | None = None
         self.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
@@ -495,13 +967,22 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
         self.outline: OutlineItem = OutlineItem(drawing)
         scene.addItem(self.outline)
         self.squares: list[PullSquare] = []
+        self.handles: list[EdgeHandle] = []
+        self.circles: list[DimensionHandle] = []
+        self.measures: list[DimensionItem] = []
+        self.solution: Solution = solve(drawing.points, drawing.dimensions)
         self.make_squares()
         self.resize(800, 600)
         self.fit()
 
     # Method `OutlineView.make_squares()`:
     def make_squares(self) -> None:
-        """Put a square on each corner, in place of any there were."""
+        """Put a square on each corner, in place of any there were.
+
+        The selection is cleared, as the indices may have changed.
+        """
+        self.chosen_points = []
+        self.chosen_dimensions = []
         square: PullSquare
         for square in self.squares:
             self.scene().removeItem(square)
@@ -511,8 +992,203 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
             square = PullSquare(self, index)
             self.scene().addItem(square)
             self.squares.append(square)
+        handle: EdgeHandle
+        for handle in self.handles:
+            self.scene().removeItem(handle)
+        self.handles = [
+            EdgeHandle(self, index)
+            for index in range(len(self.drawing.points))
+        ]
+        for handle in self.handles:
+            self.scene().addItem(handle)
+        measure: DimensionItem
+        for measure in self.measures:
+            self.scene().removeItem(measure)
+        self.measures = [
+            DimensionItem(self, index)
+            for index in range(len(self.drawing.dimensions))
+        ]
+        for measure in self.measures:
+            self.scene().addItem(measure)
+        circle: DimensionHandle
+        for circle in self.circles:
+            self.scene().removeItem(circle)
+        self.circles = [
+            DimensionHandle(self, index)
+            for index in range(len(self.drawing.dimensions))
+        ]
+        for circle in self.circles:
+            self.scene().addItem(circle)
         self.outline.refresh()
+        self.follow()
+
+    # Method `OutlineView.point()`:
+    def point(self, which: int) -> QPointF:
+        """Return a point of a dimension, as drawn.
+
+        Arguments:
+        * `which` (`int`): `ORIGIN` or a corner's index.
+
+        Returns:
+        * (`QPointF`): Where it is.
+        """
+        if which == ORIGIN:
+            return QPointF(0.0, 0.0)
+        return QPointF(*self.drawing.points[which])
+
+    # Method `OutlineView.select_point()`:
+    def select_point(self, which: int) -> None:
+        """Add a point to the selection (as the latest, if it was in).
+
+        When [Dimension] is waiting for points and two are now
+        selected, the dimension is made.
+
+        Arguments:
+        * `which` (`int`): `ORIGIN` or a corner's index.
+        """
+        if which in self.chosen_points:
+            self.chosen_points.remove(which)
+        self.chosen_points.append(which)
+        self.message = ""
+        if self.wanted:
+            self.dimension_selected()
         self.restyle()
+
+    # Method `OutlineView.select_dimension()`:
+    def select_dimension(self, index: int) -> None:
+        """Add a dimension to the selection.
+
+        Arguments:
+        * `index` (`int`): The dimension.
+        """
+        if index not in self.chosen_dimensions:
+            self.chosen_dimensions.append(index)
+        self.message = ""
+        self.restyle()
+
+    # Method `OutlineView.clear_selection()`:
+    def clear_selection(self) -> None:
+        """Select nothing, and stop waiting for points to dimension."""
+        self.chosen_points = []
+        self.chosen_dimensions = []
+        self.wanted = False
+        self.restyle()
+
+    # Method `OutlineView.dimension_between()`:
+    def dimension_between(self, first: int, second: int) -> None:
+        """Add a dimension with a new letter between two points.
+
+        It is horizontal when the points are further apart in X than
+        in Y, else vertical; its line sits two grid steps past them.
+
+        Arguments:
+        * `first` (`int`): `ORIGIN` or a corner's index.
+        * `second` (`int`): The other point.
+        """
+        start: QPointF = self.point(first)
+        end: QPointF = self.point(second)
+        across: float = abs(end.x() - start.x())
+        up: float = abs(end.y() - start.y())
+        gap: float = 2.0 * self.step()
+        letter: Letter = next_letter(self.drawing.letters)
+        self.history.remember(self.drawing.snapshot())
+        self.drawing.letters.append(letter)
+        dimension: Dimension
+        if across >= up:
+            dimension = Dimension(
+                letter.letter,
+                HORIZONTAL,
+                first,
+                second,
+                min(start.y(), end.y()) - gap,
+            )
+        else:
+            dimension = Dimension(
+                letter.letter,
+                VERTICAL,
+                first,
+                second,
+                max(start.x(), end.x()) + gap,
+            )
+        self.drawing.dimensions.append(dimension)
+        self.message = ""
+        self.make_squares()
+        self.letters_changed()
+
+    # Method `OutlineView.mousePressEvent()`:
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """Select the origin or clear the selection, then pan, when
+        no corner or dimension takes the press."""
+        super().mousePressEvent(event)
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self.scene().mouseGrabberItem() is None
+        ):
+            if self.origin in self.items(event.pos()):
+                self.select_point(ORIGIN)
+            else:
+                self.clear_selection()
+            self.pan_from = event.pos()
+            self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    # Method `OutlineView.mouseMoveEvent()`:
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        """While panning, move the view with the pointer."""
+        if self.pan_from is None:
+            super().mouseMoveEvent(event)
+            return
+        moved: QPoint = event.pos() - self.pan_from
+        self.pan_from = event.pos()
+        horizontal = self.horizontalScrollBar()
+        vertical = self.verticalScrollBar()
+        horizontal.setValue(horizontal.value() - moved.x())
+        vertical.setValue(vertical.value() - moved.y())
+
+    # Method `OutlineView.mouseReleaseEvent()`:
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        """End a pan (the pointer an arrow again), or pass it on."""
+        if self.pan_from is not None:
+            self.pan_from = None
+            self.viewport().unsetCursor()
+            return
+        super().mouseReleaseEvent(event)
+
+    # Method `OutlineView.mouseDoubleClickEvent()`:
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        """Take a quick second click as a click, so none is lost."""
+        self.mousePressEvent(event)
+
+    # Method `OutlineView.add_dimension()`:
+    def add_dimension(self, dimension: Dimension) -> None:
+        """Add a dimension (undone as one change).
+
+        Arguments:
+        * `dimension` (`Dimension`): The new dimension.
+        """
+        self.history.remember(self.drawing.snapshot())
+        self.drawing.dimensions.append(dimension)
+        self.make_squares()
+
+    # Method `OutlineView.follow()`:
+    def follow(self) -> None:
+        """Solve again, then draw the dimensions and squares to match."""
+        self.solution = solve(self.drawing.points, self.drawing.dimensions)
+        measure: DimensionItem
+        for measure in self.measures:
+            measure.prepareGeometryChange()
+            measure.update()
+        self.place_handles()
+        self.restyle()
+
+    # Method `OutlineView.place_handles()`:
+    def place_handles(self) -> None:
+        """Put each edge's handle in its middle (shown if long enough)."""
+        handle: EdgeHandle
+        for handle in self.handles:
+            handle.place()
+        circle: DimensionHandle
+        for circle in self.circles:
+            circle.place()
 
     # Method `OutlineView.add_after()`:
     def add_after(self, index: int) -> None:
@@ -528,8 +1204,8 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
         y1: float
         x0, y0 = points[index]
         x1, y1 = points[(index + 1) % len(points)]
-        self.history.remember(points)
-        points.insert(index + 1, ((x0 + x1) / 2.0, (y0 + y1) / 2.0))
+        self.history.remember(self.drawing.snapshot())
+        self.drawing.insert(index + 1, ((x0 + x1) / 2.0, (y0 + y1) / 2.0))
         self.message = ""
         self.make_squares()
 
@@ -545,32 +1221,106 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
                 f"An outline needs at least {LEAST_CORNERS} corners."
             )
             return
-        self.history.remember(self.drawing.points)
-        del self.drawing.points[index]
+        self.history.remember(self.drawing.snapshot())
+        self.drawing.remove(index)
         self.message = ""
         self.make_squares()
+
+    # Method `OutlineView.delete_selected()`:
+    def delete_selected(self) -> None:
+        """Delete the selected corners and dimensions, as one change.
+
+        A letter goes with its dimension, unless another one still
+        uses it.  An outline keeps at least `LEAST_CORNERS` corners.
+        """
+        corners: list[int] = sorted(
+            (point for point in self.chosen_points if point != ORIGIN),
+            reverse=True,
+        )
+        if not corners and not self.chosen_dimensions:
+            self.message = "Select corners or dimensions to delete."
+            self.scene().update()
+            return
+        if len(self.drawing.points) - len(corners) < LEAST_CORNERS:
+            self.message = (
+                f"An outline needs at least {LEAST_CORNERS} corners."
+            )
+            self.scene().update()
+            return
+        self.history.remember(self.drawing.snapshot())
+        gone: set[str] = {
+            self.drawing.dimensions[index].letter
+            for index in self.chosen_dimensions
+        }
+        index: int
+        for index in sorted(self.chosen_dimensions, reverse=True):
+            del self.drawing.dimensions[index]
+        for index in corners:
+            gone |= {
+                dimension.letter
+                for dimension in self.drawing.dimensions
+                if index in (dimension.start, dimension.end)
+            }
+            self.drawing.remove(index)
+        used: set[str] = {
+            dimension.letter for dimension in self.drawing.dimensions
+        }
+        self.drawing.letters[:] = [
+            letter
+            for letter in self.drawing.letters
+            if letter.letter not in gone or letter.letter in used
+        ]
+        self.message = ""
+        self.make_squares()
+        self.letters_changed()
+
+    # Method `OutlineView.dimension_selected()`:
+    def dimension_selected(self) -> None:
+        """Dimension the last two points clicked, in that order.
+
+        With fewer, wait for the rest: the next clicks make it.
+        """
+        if len(self.chosen_points) < 2:
+            self.wanted = True
+            self.message = (
+                "Click a second point."
+                if self.chosen_points
+                else "Click two points to dimension."
+            )
+            self.scene().update()
+            return
+        self.wanted = False
+        first: int
+        second: int
+        first, second = self.chosen_points[-2:]
+        if self.point(first) == self.point(second):
+            self.message = "Those two points are in the same place."
+            self.scene().update()
+            return
+        self.dimension_between(first, second)
 
     # Method `OutlineView.undo()`:
     def undo(self) -> None:
         """Go back to the corners before the last change, if any."""
-        self.show_points(self.history.undo(self.drawing.points))
+        self.show_snapshot(self.history.undo(self.drawing.snapshot()))
 
     # Method `OutlineView.redo()`:
     def redo(self) -> None:
         """Do the last undone change again, if any."""
-        self.show_points(self.history.redo(self.drawing.points))
+        self.show_snapshot(self.history.redo(self.drawing.snapshot()))
 
-    # Method `OutlineView.show_points()`:
-    def show_points(self, points: list[tuple[float, float]] | None) -> None:
-        """Show these corners (`None`: leave things as they are).
+    # Method `OutlineView.show_snapshot()`:
+    def show_snapshot(self, snapshot: Snapshot | None) -> None:
+        """Show a snapshot (`None`: leave things as they are).
 
         Arguments:
-        * `points` (`list[tuple[float, float]] | None`): The corners.
+        * `snapshot` (`Snapshot | None`): The drawing to show.
         """
-        if points is not None:
-            self.drawing.points[:] = points
+        if snapshot is not None:
+            self.drawing.restore(snapshot)
             self.message = ""
             self.make_squares()
+            self.letters_changed()
 
     # Method `OutlineView.restyle()`:
     def restyle(self) -> None:
@@ -579,12 +1329,34 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
         self.setBackgroundBrush(QColor(scheme.paper))
         pen: QPen = QPen(QColor(scheme.ink), THIN_PIXELS)
         pen.setCosmetic(True)
-        self.origin.setPen(pen)
+        chosen: QPen = QPen(self.palette().highlight().color(), 3.0)
+        chosen.setCosmetic(True)
+        self.origin.setPen(chosen if ORIGIN in self.chosen_points else pen)
         self.origin.setBrush(QColor(scheme.ink))
+        # A square is red while its corner is not dimensioned yet (once
+        # there are dimensions at all).
+        missing: set[int] = {
+            corner
+            for corner, _ in self.solution.missing(len(self.drawing.points))
+        }
         square: PullSquare
         for square in self.squares:
-            square.setPen(pen)
-            square.setBrush(QColor(scheme.paper))
+            square.setPen(
+                chosen if square.index in self.chosen_points else pen
+            )
+            loose: bool = bool(self.drawing.dimensions) and (
+                square.index in missing
+            )
+            square.setBrush(QColor(scheme.problem if loose else scheme.paper))
+        # Hollow, so the edge shows through (#60), in ink to be seen.
+        ring: QPen = QPen(QColor(scheme.ink), 1.5)
+        ring.setCosmetic(True)
+        handle: EdgeHandle
+        for handle in self.handles:
+            handle.setPen(ring)
+        circle: DimensionHandle
+        for circle in self.circles:
+            circle.setPen(ring)
         self.viewport().update()
 
     # Method `OutlineView.zoom()`:
@@ -604,6 +1376,7 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
             QRectF(-1.0, -1.0, 2.0, 2.0)
         )
         self.fitInView(box, Qt.AspectRatioMode.KeepAspectRatio)
+        self.place_handles()
 
     # Method `OutlineView.wheelEvent()`:
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -616,6 +1389,7 @@ class OutlineView(  # pylint: disable=too-many-instance-attributes
         wanted: float = min(max(self.zoom() * factor, low), high)
         factor = wanted / self.zoom()
         self.scale(factor, factor)
+        self.place_handles()
         event.accept()
 
     # Method `OutlineView.toggle_grid()`:
@@ -750,9 +1524,9 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
 
     Attributes:
     * `buttons` (`dict[str, QPushButton]`):
-      The mode bar's buttons, by their word (`"Move"`, `"Grid"`, ...).
+      The mode bar's buttons, by their word (`"Grid"`, `"Fit"`, ...).
+    * `keys` (`dict[str, QShortcut]`): Each button's key, by its word.
     * `drawing` (`Drawing`): The outline being drawn.
-    * `modes` (`QButtonGroup`): [Move], [Add] and [Delete], one down.
     * `problem` (`str`): The letters' first problem ("" if none).
     * `splitter` (`QSplitter`): The drawing over the table.
     * `status` (`QLabel`): The last refusal, at the bar's end.
@@ -792,60 +1566,46 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         layout.addWidget(self.splitter)
         self.problem: str = ""
         self.buttons: dict[str, QPushButton] = {}
-        self.modes: QButtonGroup = QButtonGroup(self)
+        self.keys: dict[str, QShortcut] = {}
         word: str
         key: str
         for word, key in (
-            ("Move", "M"),
-            ("Add", "A"),
-            ("Delete", "D"),
             ("Grid", "G"),
             ("Snap", "S"),
+            ("Delete", "Del"),
+            ("Dimension", "N"),
             ("Fit", "F"),
             ("Undo", "Ctrl+Z"),
             ("Redo", "Ctrl+Shift+Z"),
             ("New Letter", "L"),
         ):
             button: QPushButton = QPushButton(f"{word} ({key})")
-            button.setShortcut(key)
+            # A button's own shortcut never fired; a `QShortcut` does.
+            shortcut: QShortcut = QShortcut(QKeySequence(key), self)
+            shortcut.activated.connect(button.click)
+            self.keys[word] = shortcut
             button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             mode_bar.addWidget(button)
             self.buttons[word] = button
-        for word in ("Move", "Add", "Delete"):
-            self.buttons[word].setCheckable(True)
-            self.modes.addButton(self.buttons[word])
-        self.buttons["Move"].setChecked(True)
-        self.modes.buttonClicked.connect(self.choose_mode)
         for word in ("Grid", "Snap"):
             self.buttons[word].setCheckable(True)
             self.buttons[word].setChecked(True)
         self.buttons["Grid"].clicked.connect(self.view.toggle_grid)
         self.buttons["Snap"].clicked.connect(self.toggle_snap)
         self.buttons["Fit"].clicked.connect(self.view.fit)
+        self.buttons["Delete"].clicked.connect(self.view.delete_selected)
+        self.buttons["Dimension"].clicked.connect(self.view.dimension_selected)
         self.buttons["Undo"].clicked.connect(self.view.undo)
         self.buttons["Redo"].clicked.connect(self.view.redo)
         self.buttons["New Letter"].clicked.connect(self.new_letter)
         self.status: QLabel = QLabel("")
         mode_bar.addWidget(self.status, 1)
         self.view.scene().changed.connect(self.show_message)
+        self.view.letters_changed = self.fill_table
         self.fill_table()
         self.table.itemChanged.connect(self.letter_edited)
         self.show_message()
         self.resize(800, 600)
-
-    # Method `OutlineEditor.choose_mode()`:
-    def choose_mode(self, button: QAbstractButton) -> None:
-        """Make the clicked mode button's mode the view's.
-
-        Arguments:
-        * `button` (`QAbstractButton`): [Move], [Add] or [Delete].
-        """
-        word: str
-        for word, mode in (("Move", MOVE), ("Add", ADD), ("Delete", DELETE)):
-            if button is self.buttons[word]:
-                self.view.mode = mode
-        self.view.message = ""
-        self.show_message()
 
     # Method `OutlineEditor.fill_table()`:
     def fill_table(self) -> None:

@@ -204,3 +204,132 @@ in undo/redo; deleting a letter.  Next: Step 4 (dimensions).
   843 px bar, greyed until there is a change; to ask.
 * #50 `pi` and `e` are the only constants.
 * #45 the user: commit, then Step 4 (dimension lines).
+
+## 2026-11-17: Step 4, chunks 1-2
+
+`git`: `e8b985e` (Step 3), pushed.  `scraftcam/gui/dimensions.py`
+(no Qt): `Dimension(letter, kind, start, end, offset)` (`ORIGIN` -1
+or a corner index; `offset` the line's Y or X), `Formula` (`W - T`),
+`Solution` (`x`, `y`, `extra`, `missing()`), `solve()` (breadth
+first from the origin per kind; signs from the drawing; a dimension
+reaching a known point is extra).  `tests/test_dimensions.py` (3).
+`outline_editor.py`: `Snapshot` (points, dimension copies) for
+`History`; `Drawing.dimensions`, `snapshot()`, `restore()`,
+`insert()`, `remove()` (dimensions keep to their corners; removing
+a corner drops its dimensions); `DimensionItem` (thin extension
+lines past the line, arrowheads at both ends, bold upright letter;
+red when extra); `OutlineView.point()`, `add_dimension()`,
+`follow()` (solve, redraw; squares red while not dimensioned, once
+any dimension exists).  The user stopped a 6 minute run: one chunk
+per turn, then stop.  Next: the [Dimension (N)] mode (#52).
+
+## 2026-11-17: Step 4, chunk 3-4: the [Dimension (N)] mode
+
+`MEASURE` mode: click a point (a corner square or the origin), then a
+second (`OutlineView.pick()`); horizontal if further apart in X than
+Y, else vertical; the line two grid steps past the points; the next
+free letter added to the table (`letters_changed`, set to
+`fill_table`).  Bugs found by the test: two quick clicks are a double
+click, so `mouseDoubleClickEvent()` picks the origin too;
+`DimensionItem`s take no mouse buttons; Qt asks a removed item's
+`boundingRect()` during an undo (guarded).  21 tests pass, checkers
+clean.  The user uses Ctrl+/ and Ctrl+? for undo and redo (#54, not
+yet acted on).  Next: the user tries it.
+
+## 2026-11-17: Step 4, chunk 5: dragging dimension lines
+
+The user's run: horizontal/vertical dimensions "work great".  #54
+stay with Qt's keys (Ctrl+Z, Ctrl+Shift+Z).  `DimensionItem` in
+[Move]: `shape()` a band `SQUARE_PIXELS` wide along the line (only
+it grabs), drag moves `offset` (Y for horizontal, X for vertical),
+snapped unless Shift or [Snap] off, remembered on release as one
+change; other modes let the click pass.  22 tests pass.
+
+## 2026-11-17: Step 4, chunk 6: an arrow pointer
+
+The user (#55): the hand pointer must be an arrow to aim; #56b
+delete and place again is fine, but no way to delete a dimension yet;
+the user has not managed to drag a dimension (maybe still in
+[Dimension]; not yet known).  `ScrollHandDrag` dropped: the view pans
+by hand (`pan_from`; a press nothing takes starts it, closed hand
+only while panning).  23 tests pass.  Next chunks: delete a dimension
+in [Delete] (with its letter) and a hint after placing one; then the
+formula tooltips (#57).
+
+## 2026-11-17: No modes (#58, #59)
+
+The user: modes need training; drag and drop is natural; the [Del]
+button deletes.  Done in 3 chunks: no mode buttons; dragging moves
+corners and dimension lines; a click selects (Shift adds or drops;
+empty space clears; the origin too), highlighted in the palette's
+highlight color (`chosen_points` in click order, `chosen_dimensions`,
+cleared by `make_squares()`).  [Delete (Del)] (`delete_selected()`:
+corners and dimensions as one change, their letters too unless still
+used; at least 3 corners) and [Dimension (N)]
+(`dimension_selected()`: the two selected points; refused for same
+place).  `Snapshot` holds letters, so undo restores table rows.
+`EdgeHandle` (#59): a 7 px hollow circle mid-edge in the quiet color,
+hidden when the edge is under 27 px on screen; dragging pulls out a
+snapped corner (made at the first move), one change; a click does
+nothing.  27 tests pass, checkers clean.  Next: #57 formula
+tooltips, then Step 4 is done.
+
+## 2026-11-17: #60 the keys never fired
+
+The user could not make dimensions; the edge circles work great
+(zoom when crowded), but should be more visible; the edge showing
+through the circle is natural.  Found by an offscreen probe: a
+`QPushButton.setShortcut()` key never fired (button clicks did), so
+`N`, `G`, `Del`, ... did nothing from the keyboard; a `QShortcut`
+on the window does (`OutlineEditor.keys`, each `activated` ->
+`button.click`).  A test now presses `G` for real.  Handles: 9 px,
+hollow, 1.5 px ink ring.  27 tests pass, checkers clean.
+
+## 2026-11-17: #60 dimensioning in any order, no Shift
+
+The user: circles "look great and are really natural"; Shift+click
+does not feel natural; C1-C2-D, C1-D-C2 and D-C1-C2 must all make a
+dimension; no commit until dimensioning feels easier.  Now every
+click adds to the selection (a point clicked again becomes the
+latest), empty space clears it (and the waiting); [Dimension] uses
+the last two points clicked, or waits (`wanted`) with "Click two
+points to dimension." / "Click a second point."  27 tests pass.
+
+## 2026-11-17: #63 the dimension circle (#64: the line only selects)
+
+`Dimension.along` (the letter's place along the line, a share from
+the `start` end; below 0 or above 1 is past the arrowheads, the line
+drawn on out to it, `DimensionItem.draw_reach()`).
+`DimensionHandle`: the edge handles' hollow circle at
+`DimensionItem.at()`; dragged along the line it moves `along`, across
+it `offset`, snapped, one change.  A click on the line only selects
+(no line drag).  `OutlineView.circles`.  27 tests pass, checkers
+clean.  Awaiting the user's run; commit after.
+
+## 2026-11-17: Where things stand (before `git commit` and `/clear`)
+
+* Letters sit on the side of their line away from the middle of the
+  outline's box (`DimensionItem.draw_letter()`), as the user asked.
+* The user: "We are really close"; the circles on edges and
+  dimensions feel natural.  Not yet confirmed by a run: dimensioning
+  in any order (#60), the dimension circle (#63), the letter side.
+* Done: Steps 1-3; Step 4 all but #57 (each corner's formula as a
+  tooltip on its square, e.g. "(W - T, H)" or "x not dimensioned
+  yet").  No modes: drag moves, clicks add to the selection, empty
+  space clears; [Delete (Del)], [Dimension (N)] (last two points, in
+  any order, waiting if needed); edge circles pull out corners;
+  dimension circles move letter (`along`) and line (`offset`); keys
+  are `QShortcut`s (button shortcuts never fired).
+* Files: `scraftcam/gui/outline_editor.py`, `letters.py`,
+  `dimensions.py`; `tests/test_outline_editor.py`, `test_letters.py`,
+  `test_dimensions.py` (27 tests, coverage last measured 98%; run
+  `uvx --python /usr/bin/python3 coverage run --include=... -m
+  unittest ...`).  Checkers clean.
+* Open items, numbers sticky up to #64: #57 tooltips (next); #62 a
+  big selection is cleared by an empty-space click (asked, no
+  answer); #56a/#33/#39 later.  Next Steps: 5 angles and slanted
+  lengths, 6 [Revolve], 7 TOML, 8 SVG, 9 radii, 10 the GUI tree,
+  11 a separate extruding class (#33).
+* Work rule: ~3 minute chunks with a progress note at each mark;
+  the transcript for the user's friend is regenerated each round
+  (`~/.scraftcam/transcripts/transcript.py`).
