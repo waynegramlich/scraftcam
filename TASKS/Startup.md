@@ -15,6 +15,7 @@
 @5.1.9.1_Original_and_Changed_Values/Context.md
 @5.1.9.2_Parametric_RoundedPolygon_GUI/Details.md
 @5.1.9.2_Parametric_RoundedPolygon_GUI/Context.md
+@5.1.9.2.1_Convert_Existing_Tools_to_the_2D_Editor/Details.md
 @5.1.10_Catalog_Management/Details.md
 @5.1.10_Catalog_Management/Context.md
 @5.3_Create_More_Tools/Details.md
