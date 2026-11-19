@@ -1,0 +1,54 @@
+kind = "outline"
+revolve = true
+
+[letters.A]
+name = "Half point angle"
+default = "59 deg"
+help = "Half of the drill's point angle (118 deg drills: 59 deg)."
+
+[letters.R]
+name = "Radius"
+default = "1/8 in"
+help = "Half of the drill's diameter."
+
+[letters.L]
+name = "Overall length"
+default = "4 in"
+help = "From the point's tip to the end of the shank."
+
+[[points]]
+at = [0.0, 0.0]
+
+[[points]]
+at = [2.0, 1.2]
+
+[[points]]
+at = [2.0, 8.0]
+
+[[points]]
+at = [0.0, 8.0]
+
+[[dimensions]]
+letter = "A"
+kind = "angle"
+from = 0
+to = "y_axis"
+offset = 0.5830951894845301
+along = 0.5
+rays = [1, 1]
+
+[[dimensions]]
+letter = "R"
+kind = "horizontal"
+from = "origin"
+to = 1
+offset = -0.4
+along = 0.5
+
+[[dimensions]]
+letter = "L"
+kind = "vertical"
+from = "origin"
+to = 2
+offset = 4.0
+along = 0.5

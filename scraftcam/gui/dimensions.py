@@ -8,9 +8,10 @@ vertical ones; each step adds or takes away its letter, as the
 drawing shows (a corner drawn left of the one it is measured from
 takes it away).  So each coordinate is a formula in the letters, with
 no solver.  A corner drawn on an axis has that coordinate 0 already,
-as the origin does.  A coordinate with no chain is not dimensioned yet, and a
-dimension between two coordinates already tied another way is one too
-many (over-dimensioned).
+as the origin does, and an edge drawn level (upright) gives its two
+corners the same Y (X).  A coordinate with no chain is not dimensioned
+yet, and a dimension between two coordinates already tied another way
+is one too many (over-dimensioned).
 """
 
 from dataclasses import dataclass, field
@@ -252,6 +253,61 @@ def solve(
         solution.x,
         solution.y,
     )
+    _seed(points, known)
+
+    # Pass after pass, until nothing more is found: the dimensions,
+    # then the edges whose directions angles gave.
+    ways: dict[int, str] = {X_AXIS: "0 deg", Y_AXIS: "90 deg"}
+    used: set[int] = set()
+    # Level and upright edges first: a dimension saying again what
+    # one says is the one too many.
+    level: list[Dimension] = _level_edges(points)
+    every: list[Dimension] = level + dimensions
+    found: bool = True
+    while found:
+        found = False
+        index: int
+        dimension: Dimension
+        for index, dimension in enumerate(every):
+            if index in used:
+                continue
+            if dimension.kind == ANGLE:
+                done: bool = _angle_way(dimension, ways)
+            else:
+                done = _apply(points, dimension, known, solution.extra, index)
+            if done:
+                # Start over, so the level edges go first again.
+                used.add(index)
+                found = True
+                break
+        edge: int
+        way: str
+        for edge, way in ways.items():
+            if edge not in AXES and _along_edge(points, edge, way, known):
+                found = True
+    known[0].pop(ORIGIN)
+    known[1].pop(ORIGIN)
+
+    # The extras by the dimensions' own indices.
+    solution.extra[:] = sorted(
+        index - len(level) for index in solution.extra if index >= len(level)
+    )
+    return solution
+
+
+# Function `_seed()`:
+def _seed(
+    points: list[tuple[float, float]],
+    known: tuple[dict[int, Formula], dict[int, Formula]],
+) -> None:
+    """Start from what is known before any dimension: the origin, and
+    each corner drawn on an axis (#23).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
+      The X and Y formulas, filled in.
+    """
     axis: int
     for axis in (0, 1):
         known[axis][ORIGIN] = Formula()
@@ -261,34 +317,33 @@ def solve(
             if abs(point[axis]) <= ON_AXIS:
                 known[axis][corner] = Formula()
 
-    # Pass after pass, until nothing more is found: the dimensions,
-    # then the edges whose directions angles gave.
-    ways: dict[int, str] = {X_AXIS: "0 deg", Y_AXIS: "90 deg"}
-    used: set[int] = set()
-    found: bool = True
-    while found:
-        found = False
-        index: int
-        dimension: Dimension
-        for index, dimension in enumerate(dimensions):
-            if index in used:
-                continue
-            if dimension.kind == ANGLE:
-                done: bool = _angle_way(dimension, ways)
-            else:
-                done = _apply(points, dimension, known, solution.extra, index)
-            if done:
-                used.add(index)
-                found = True
-        edge: int
-        way: str
-        for edge, way in ways.items():
-            if edge not in AXES and _along_edge(points, edge, way, known):
-                found = True
-    for axis in (0, 1):
-        known[axis].pop(ORIGIN)
-    solution.extra.sort()
-    return solution
+
+# Function `_level_edges()`:
+def _level_edges(points: list[tuple[float, float]]) -> list[Dimension]:
+    """Return an edge drawn level (upright) as a vertical (horizontal)
+    dimension of nothing between its corners (#100): they share Y (X),
+    as a corner drawn on an axis is on it (#23).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+
+    Returns:
+    * (`list[Dimension]`): One per level or upright edge, letter "".
+    """
+    edges: list[Dimension] = []
+    corner: int
+    here: tuple[float, float]
+    for corner, here in enumerate(points):
+        after: int = (corner + 1) % len(points)
+        apart: tuple[float, float] = (
+            abs(points[after][0] - here[0]),
+            abs(points[after][1] - here[1]),
+        )
+        if apart[1] <= ON_AXIS < apart[0]:
+            edges.append(Dimension("", VERTICAL, corner, after))
+        elif apart[0] <= ON_AXIS < apart[1]:
+            edges.append(Dimension("", HORIZONTAL, corner, after))
+    return edges
 
 
 # Function `_apply()`:
@@ -366,7 +421,11 @@ def _along_axis(
     sign: int = (
         1 if _drawn(points, end, axis) >= _drawn(points, start, axis) else -1
     )
-    known[end] = known[start].plus(sign, dimension.letter)
+    known[end] = (
+        known[start].plus(sign, dimension.letter)
+        if dimension.letter
+        else known[start]  # A level or upright edge: the same.
+    )
     return True
 
 

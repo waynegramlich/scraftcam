@@ -32,6 +32,7 @@ from ..shops import (
     CATALOG,
     CATALOG_PAGES,
     KINDS,
+    OUTLINE_SUFFIX,
     SHOP_DIRECTORIES,
     tool_label,
     tool_order,
@@ -475,7 +476,11 @@ def shop_children(directory: Path, skip: Path | None = None) -> list[Node]:
             branch.about = about_directory(path.name)
             branch.children = shop_children(path)
             children.append(branch)
-        elif path.suffix == ".toml" and path != skip:
+        elif (
+            path.suffix == ".toml"
+            and path != skip
+            and not path.name.endswith(OUTLINE_SUFFIX)  # Until #S7.
+        ):
             children.append(toml_node(path))
 
     # Directories first (as `entries()` gives them), then the files by

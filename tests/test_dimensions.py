@@ -53,9 +53,42 @@ class DimensionsTest(unittest.TestCase):
         self.assertEqual(str(solution.x[3]), "W - T")
         self.assertEqual(str(solution.y[2]), "T")
         self.assertEqual(str(solution.y[4]), "T + H")
-        missing = solution.missing(len(L_BRACKET))
-        self.assertIn((2, "x"), missing)
-        self.assertNotIn((3, "x"), missing)
+        # Its edges are all level or upright, so they carry the rest
+        # (#100): corner 2 has corner 1's X.
+        self.assertEqual(solution.missing(len(L_BRACKET)), [])
+        self.assertEqual(str(solution.x[2]), "W")
+
+    def test_level_edges(self) -> None:
+        """A level edge's corners share Y, an upright one's X; a
+        slanted edge carries nothing; a dimension saying again what an
+        edge says is one too many (#100)."""
+        slanted: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (6.0, 0.0),
+            (5.0, 3.0),
+        ]
+        solution = solve(slanted, [Dimension("W", HORIZONTAL, ORIGIN, 1)])
+        self.assertEqual(str(solution.y[1]), "0")
+        self.assertNotIn(2, solution.x)
+        box: list[tuple[float, float]] = [
+            (1.0, 1.0),
+            (6.0, 1.0),
+            (6.0, 4.0),
+            (1.0, 4.0),
+        ]
+        solution = solve(
+            box,
+            [
+                Dimension("X", HORIZONTAL, ORIGIN, 0),
+                Dimension("Y", VERTICAL, ORIGIN, 0),
+                Dimension("W", HORIZONTAL, 0, 1),
+                Dimension("H", VERTICAL, 1, 2),
+                Dimension("Z", VERTICAL, ORIGIN, 1),
+            ],
+        )
+        self.assertEqual(solution.missing(4), [])
+        self.assertEqual(str(solution.y[3]), "Y + H")
+        self.assertEqual(solution.extra, [4])
 
     def test_on_axis(self) -> None:
         """A corner on an axis has that coordinate 0 (the one at the

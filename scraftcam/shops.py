@@ -470,6 +470,10 @@ SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 # Where a directory's items are, when not its own `*.toml` files: a
 # catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.cm~5.1.10` #43).
 CATALOG: str = "catalog.toml"
+
+# The outline editor's files (`T.prg~5.1.9.2` #S4), kept beside the
+# items in `tools/` and `tooling/`; not items themselves.
+OUTLINE_SUFFIX: str = ".outline.toml"
 CATALOG_PAGES: str = "pages"
 ITEM_PATTERNS: dict[str, str] = {"catalogs": f"*/*/{CATALOG}"}
 
@@ -2627,6 +2631,8 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
             path: Path
             pattern: str = ITEM_PATTERNS.get(directory, "*.toml")
             for path in sorted((self.directory / directory).glob(pattern)):
+                if path.name.endswith(OUTLINE_SUFFIX):
+                    continue  # A drawing, not an item.
                 item: dict[str, object] | None = self.item(path, kinds)
                 if item is not None:
                     found.setdefault(str(item["kind"]), []).append(item)

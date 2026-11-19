@@ -30,6 +30,7 @@ import math
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 
 from ..packages import require
 
@@ -104,6 +105,12 @@ from .letters import (  # noqa: E402
     next_letter,
     use_problem,
     value_problem,
+)
+from .outline_file import (  # noqa: E402
+    Outline,
+    OutlineError,
+    outline_from_text,
+    outline_text,
 )
 from .window import make_application  # noqa: E402
 
@@ -212,15 +219,17 @@ class Snapshot:
     * `points` (`tuple[tuple[float, float], ...]`): The corners.
     * `dimensions` (`tuple[Dimension, ...]`): Copies of the dimensions.
     * `letters` (`tuple[Letter, ...]`): Copies of the letters.
+    * `revolve` (`bool`): Whether it is revolved (#32).
 
     Constructor:
-    * `Snapshot(points, dimensions, letters)`
+    * `Snapshot(points, dimensions, letters, revolve)`
     """
 
     # Constructor arguments:
     points: tuple[tuple[float, float], ...] = field(init=True)
     dimensions: tuple[Dimension, ...] = field(init=True)
     letters: tuple[Letter, ...] = field(init=True)
+    revolve: bool = field(init=True, default=False)
 
 
 # Class `Drawing`:
@@ -233,9 +242,11 @@ class Drawing:
       The corners, in order, counterclockwise.
     * `letters` (`list[Letter]`): The letters naming its sizes.
     * `dimensions` (`list[Dimension]`): The dimensions, by letter.
+    * `revolve` (`bool`): Whether it is revolved about the Y axis
+      (#32): a round tool, drawn at X >= 0 only.
 
     Constructor:
-    * `Drawing(points, letters, dimensions)`
+    * `Drawing(points, letters, dimensions, revolve)`
     """
 
     # Constructor arguments:
@@ -244,6 +255,7 @@ class Drawing:
     )
     letters: list[Letter] = field(init=True, default_factory=list)
     dimensions: list[Dimension] = field(init=True, default_factory=list)
+    revolve: bool = field(init=True, default=False)
 
     # Method `Drawing.snapshot()`:
     def snapshot(self) -> Snapshot:
@@ -252,6 +264,7 @@ class Drawing:
             tuple(self.points),
             tuple(replace(dimension) for dimension in self.dimensions),
             tuple(replace(letter) for letter in self.letters),
+            self.revolve,
         )
 
     # Method `Drawing.restore()`:
@@ -266,6 +279,7 @@ class Drawing:
             replace(dimension) for dimension in snapshot.dimensions
         ]
         self.letters[:] = [replace(letter) for letter in snapshot.letters]
+        self.revolve = snapshot.revolve
 
     # Method `Drawing.follow_angles()`:
     def follow_angles(self) -> None:
@@ -459,6 +473,8 @@ class PullSquare(QGraphicsRectItem):
                 & Qt.KeyboardModifier.ShiftModifier
             )
             moved: QPointF = value if free else snap(value, self.editor.step())
+            if self.editor.drawing.revolve and moved.x() < 0.0:
+                moved.setX(0.0)  # A revolved outline keeps to X >= 0.
             self.editor.drawing.points[self.index] = (moved.x(), moved.y())
             self.editor.outline.refresh()
             self.editor.follow()
@@ -496,6 +512,8 @@ class OutlineItem(QGraphicsItem):
         """Return a box around the corners, with room for the arrows."""
         xs: list[float] = [x for x, _ in self.drawing.points]
         ys: list[float] = [y for _, y in self.drawing.points]
+        if self.drawing.revolve:
+            xs += [-x for x in xs]
         box: QRectF = QRectF(
             min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
         )
@@ -520,6 +538,17 @@ class OutlineItem(QGraphicsItem):
             QPointF(x, y) for x, y in self.drawing.points
         ]
         painter.drawPolygon(QPolygonF(corners))
+
+        # Revolved: the other half, mirrored, faint and dashed.
+        if self.drawing.revolve:
+            ghost: QPen = QPen(QColor(theme.colors().quiet), THIN_PIXELS)
+            ghost.setCosmetic(True)
+            ghost.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(ghost)
+            painter.drawPolygon(
+                QPolygonF([QPointF(-x, y) for x, y in self.drawing.points])
+            )
+            painter.setPen(pen)
 
         # Each arrowhead is `ARROW_PIXELS` long on screen, pointing
         # along its edge into the corner it ends at.
@@ -805,6 +834,8 @@ class EdgeHandle(QGraphicsEllipseItem):
         )
         if not free:
             where = snap(where, self.editor.step())
+        if self.editor.drawing.revolve and where.x() < 0.0:
+            where.setX(0.0)  # A revolved outline keeps to X >= 0.
         if self.added < 0:
             self.added = self.index + 1
             self.editor.drawing.insert(self.added, (where.x(), where.y()))
@@ -1321,6 +1352,8 @@ class OutlineView(QGraphicsView):
       Where the pointer was, while empty space is dragged.
     * `letters_changed` (`Callable[[], None]`):
       Called after a new dimension adds a letter (the window sets it).
+    * `released` (`Callable[[], None]`):
+      Called after a mouse button comes up (the window saves).
     * `origin` (`QGraphicsRectItem`): The origin's square.
     * `outline` (`OutlineItem`): The outline.
     * `snap_on` (`bool`): Whether drags snap to the grid.
@@ -1349,6 +1382,7 @@ class OutlineView(QGraphicsView):
         self.chosen_edges: list[int] = []
         self.wanted: bool = False
         self.letters_changed: Callable[[], None] = self.update
+        self.released: Callable[[], None] = self.update
         self.snap_on: bool = True
         scene: QGraphicsScene = QGraphicsScene(self)
         scene.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
@@ -1661,12 +1695,14 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.mouseReleaseEvent()`:
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        """End a pan (the pointer an arrow again), or pass it on."""
+        """End a pan (the pointer an arrow again), or pass it on; then
+        tell the window (a drag may have ended)."""
         if self.pan_from is not None:
             self.pan_from = None
             self.viewport().unsetCursor()
             return
         super().mouseReleaseEvent(event)
+        self.released()
 
     # Method `OutlineView.mouseDoubleClickEvent()`:
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
@@ -1897,6 +1933,26 @@ class OutlineView(QGraphicsView):
         self.restyle()
         self.letters_changed()
 
+    # Method `OutlineView.toggle_revolve()`:
+    def toggle_revolve(self) -> None:
+        """[Revolve]: turn revolving about the Y axis on or off, as one
+        change; refused while a corner is left of the axis."""
+        if not self.drawing.revolve and any(
+            x < 0.0 for x, _ in self.drawing.points
+        ):
+            self.message = (
+                "A revolved outline is drawn at X >= 0: move the "
+                "corners left of the Y axis first."
+            )
+            self.scene().update()
+            return
+        self.history.remember(self.drawing.snapshot())
+        self.drawing.revolve = not self.drawing.revolve
+        self.message = ""
+        self.outline.refresh()
+        self.resetCachedContent()
+        self.follow()
+
     # Method `OutlineView.undo()`:
     def undo(self) -> None:
         """Go back to the corners before the last change, if any."""
@@ -2048,6 +2104,12 @@ class OutlineView(QGraphicsView):
             chosen: bool = axis in self.chosen_edges
             pen.setColor(lit if chosen else QColor(color))
             pen.setWidthF(3.0 if chosen else THIN_PIXELS)
+            # Revolved: the Y axis is the center line, dash-dot.
+            pen.setStyle(
+                Qt.PenStyle.DashDotLine
+                if axis == Y_AXIS and self.drawing.revolve
+                else Qt.PenStyle.SolidLine
+            )
             painter.setPen(pen)
             if axis == X_AXIS:
                 painter.drawLine(
@@ -2174,16 +2236,24 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
     """
 
     # Method `OutlineEditor.__init__()`:
-    def __init__(self, drawing: Drawing | None = None) -> None:
+    def __init__(
+        self, drawing: Drawing | None = None, *, path: Path | None = None
+    ) -> None:
         """Make the window.
 
         Arguments:
         * `drawing` (`Drawing | None`):
           The outline to edit (the first triangle when `None`).
+        * `path` (`Path | None`): The file it is kept in, rewritten
+          after every change (#90); `None` keeps nothing.
         """
         super().__init__()
         self.drawing: Drawing = Drawing() if drawing is None else drawing
-        self.setWindowTitle("Outline Editor")
+        self.path: Path | None = path
+        self.saved: str = file_text(path)
+        self.setWindowTitle(
+            "Outline Editor" if path is None else f"Outline Editor: {path}"
+        )
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.view: OutlineView = OutlineView(self.drawing)
@@ -2215,6 +2285,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             ("Dimension", "N"),
             ("Dim. Kind", "K"),
             ("Angle", "A"),
+            ("Revolve", "R"),
             ("Fit", "F"),
             ("Undo", "Ctrl+Z"),
             ("Redo", "Ctrl+Shift+Z"),
@@ -2233,6 +2304,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         for word in ("Grid", "Snap"):
             self.buttons[word].setCheckable(True)
             self.buttons[word].setChecked(True)
+        self.buttons["Revolve"].setCheckable(True)
         # What each button does.
         does: dict[str, Callable[[], None]] = {
             "Grid": self.view.toggle_grid,
@@ -2242,6 +2314,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             "Dimension": self.view.dimension_selected,
             "Dim. Kind": self.view.cycle_kind,
             "Angle": self.view.angle_selected,
+            "Revolve": self.toggle_revolve,
             "Undo": self.view.undo,
             "Redo": self.view.redo,
             "New Letter": self.new_letter,
@@ -2253,6 +2326,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         mode_bar.addWidget(self.status, 1)
         self.view.scene().changed.connect(self.show_message)
         self.view.letters_changed = self.fill_table
+        self.view.released = self.save
         self.fill_table()
         self.table.itemChanged.connect(self.letter_edited)
         self.show_message()
@@ -2304,6 +2378,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         attribute: str = COLUMNS[column][1]
         setattr(self.drawing.letters[row], attribute, text.strip())
         self.check_letters()
+        self.save()
 
     # Method `OutlineEditor.check_letters()`:
     def check_letters(self) -> None:
@@ -2344,6 +2419,33 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         """Turn snapping on or off, as [Snap] now shows."""
         self.view.snap_on = self.buttons["Snap"].isChecked()
 
+    # Method `OutlineEditor.toggle_revolve()`:
+    def toggle_revolve(self) -> None:
+        """[Revolve]: revolve or not, the button showing the result
+        (a refusal leaves it as it was)."""
+        self.view.toggle_revolve()
+        self.buttons["Revolve"].setChecked(self.view.drawing.revolve)
+
+    # Method `OutlineEditor.save()`:
+    def save(self) -> None:
+        """Rewrite the file if the outline changed (not mid-drag: the
+        view saves again when the mouse button comes up)."""
+        if self.path is None or QApplication.mouseButtons() != (
+            Qt.MouseButton.NoButton
+        ):
+            return
+        text: str = outline_text(
+            Outline(
+                list(self.drawing.points),
+                list(self.drawing.letters),
+                list(self.drawing.dimensions),
+                self.drawing.revolve,
+            )
+        )
+        if text != self.saved:
+            self.path.write_text(text, encoding="utf-8")
+            self.saved = text
+
     # Method `OutlineEditor.show_message()`:
     def show_message(self, *_regions: object) -> None:
         """Show the view's last refusal (or nothing) in the mode bar.
@@ -2354,15 +2456,65 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         history: History = self.view.history
         self.buttons["Undo"].setEnabled(bool(history.done))
         self.buttons["Redo"].setEnabled(bool(history.undone))
+        # [Revolve] shows the drawing's state (a refusal, an undo).
+        self.buttons["Revolve"].setChecked(self.view.drawing.revolve)
+        self.save()
         self.status.setText(self.view.message or self.problem)
         self.status.setStyleSheet(f"color: {theme.colors().problem}")
 
 
+# Function `file_text()`:
+def file_text(path: Path | None) -> str:
+    """Return what a file holds ("" for none, or none yet).
+
+    Arguments:
+    * `path` (`Path | None`): The file.
+
+    Returns:
+    * (`str`): Its text.
+    """
+    if path is None or not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
+# Function `drawing_from()`:
+def drawing_from(path: Path) -> Drawing:
+    """Read a drawing from an outline file.
+
+    Arguments:
+    * `path` (`Path`): The file.
+
+    Returns:
+    * (`Drawing`): Its drawing.
+
+    Raises:
+    * `OutlineError`: When the file cannot be read as an outline.
+    * `OSError`: When the file cannot be read at all.
+    """
+    outline: Outline = outline_from_text(
+        path.read_text(encoding="utf-8"), str(path)
+    )
+    return Drawing(
+        outline.points, outline.letters, outline.dimensions, outline.revolve
+    )
+
+
 # Function `main()`:
 def main() -> None:
-    """Show the editor until its window is closed."""
+    """Show the editor until its window is closed: on the file named
+    on the command line, if any (a new one starts as the triangle),
+    refusing one that cannot be read (#93)."""
+    path: Path | None = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    drawing: Drawing = Drawing()
+    if path is not None and path.exists():
+        try:
+            drawing = drawing_from(path)
+        except (OSError, OutlineError) as error:
+            print(error, file=sys.stderr)
+            sys.exit(1)
     application: QApplication = make_application(headless=False)
-    editor: OutlineEditor = OutlineEditor()
+    editor: OutlineEditor = OutlineEditor(drawing, path=path)
     theme.follow(application, editor.view.restyle)
     editor.show()
     editor.view.fit()

@@ -680,3 +680,138 @@ rays, then the letter checks; axis angles the chunk after).
 * Open: #7, #8, #9, #81 (formula tidying), #83, #84.  Numbers sticky
   this session (up to #84).
 * Transcript: `~/.scraftcam/transcripts/2026-11-18_T.prg_5.1.9.2.md`.
+
+`git`: `fea4900` (#S2), pushed.
+
+## 2026-11-18: #S3 chunk 1: [Revolve (R)]
+
+`Drawing.revolve`, `Snapshot.revolve` (undoable); [Revolve (R)]
+checkable, after [Angle] (`OutlineEditor.toggle_revolve()` sets the
+button from the drawing; `OutlineView.toggle_revolve()` refuses while
+a corner is left of the Y axis).  Revolved: the mirror half faint and
+dashed (`OutlineItem.paint()`, `boundingRect()` both halves), the Y
+axis dash-dot, corner and edge-circle drags kept at X >= 0 (snapped
+to 0).  `test_revolve`; 32 editor tests pass; checkers clean;
+picture checked.  Next: chunk 2, diameters (horizontal dimensions
+from the Y axis shown and solved as diameters), then doubled tip
+angles (#74), then #7.
+
+## 2026-11-18: #S3 done (by the user); #S4 design questions
+
+* #85 [Revolve] works.  #86 diameters: "I think so, but not sure
+  where this is going"; #87 the user makes the half angle with a
+  letter of their own; #88 the mirror shows the outline only; #7
+  moved after #S4.  The user: #S3 done.  #86/#87 kept as deferred
+  items (#89) for catalog numbers (diameters, whole tip angles).
+* #S4 questions #90-#94 in the conversation.  Found:
+  `gui/fields.py` `write_item()`/`item_text()` writes shop TOML (not
+  yet checked for arrays of tables).
+
+## 2026-11-18: #S4 chunk 1: outlines as TOML text
+
+* #90 (save after every change) and #91 (the layout) taken as
+  agreed; #92 fixed field order; #93 refuse bad files, never rewrite
+  one; #94 four chunks.
+* New `scraftcam/gui/outline_file.py` (no Qt): `Outline(points,
+  letters, dimensions, revolve)`, `outline_text()` (fixed order;
+  `from`/`to` as an index or `"origin"`, `"x_axis"`, `"y_axis"`;
+  `rays` for angles only, `places` only when set; floats by `repr`,
+  strings by `json.dumps`), `outline_from_text(text, source)`
+  raising `OutlineError` (unchecked beyond `tomllib` and `kind`;
+  `type: ignore` casts to go in chunk 2).
+  `tests/test_outline_file.py` (3: round trip, one moved corner one
+  changed line, bad text).  Checkers clean.  Next: chunk 2, checks.
+
+## 2026-11-18: #S4 chunk 2: checks on reading
+
+* #95-#99 agreed: every problem named by file and entry; editor rules
+  (letter names, units, values) left to the table (#96); `FILE` on
+  the command line, rewritten after every change (#97);
+  `examples/shop/tools/` for the drill (#98); the outline file holds
+  the drawing only, the shop item tied in at #S7 (#99).
+* `outline_file._Reader` (`note()`, `outline()`, `points()`,
+  `letters()`, `dimension()`, `end()`, `places()`), `KINDS`,
+  `_is_number()`: kind, revolve, 3+ corners `at = [x, y]`, revolved
+  corners at X >= 0, letters with text name/default/help, dimension
+  kind and letter known, ends in range ("origin" for lengths, axes
+  for angles), numbers for offset/along, rays of +/-1, places.
+  `test_checks`; 4 tests pass; checkers clean.  Next: chunk 3, the
+  editor on a file.
+
+## 2026-11-18: #S4 chunk 3: the editor on a file
+
+`python3 -m scraftcam.gui.outline_editor FILE`: `main()` reads it by
+`drawing_from()` (`outline_from_text()`), printing every problem and
+exiting 1 for a bad file (tried); a missing file starts as the
+triangle and is written at once.  `OutlineEditor(drawing, path=)`,
+`path`, `saved` (`file_text()`), `save()` (rewrites when the text
+changed, never mid-drag); called from `show_message()` (scene
+changes), `keep()` (table typing) and `OutlineView.released` (after a
+mouse button comes up).  Title shows the file.  `test_file`; 37 tests
+(`test_outline_editor`, `test_outline_file`) pass; checkers clean.
+Next: chunk 4, a half drill in `examples/shop/tools/`.
+
+## 2026-11-18: #S4 chunk 4: `examples/shop/tools/drill.outline.toml`; #S4 done
+
+Made through the editor's own calls (offscreen): half a 1/4 in drill,
+revolved; `A` half point angle `59 deg` (edge 0 to the Y axis), `R`
+radius `1/8 in` (horizontal from the origin to corners 1 and 2), `L`
+overall length `4 in` (vertical from the origin to corners 2 and 3).
+Every corner dimensioned (no yellow, no red); the tip shoulder's Y is
+`(R) * tan(90 deg - A)`.  Picture checked.  Found: a level top edge
+still needs its own dimension (no "horizontal edge" rule, #100).
+
+## 2026-11-18: #101 duplicates gone: level and upright edges (#100)
+
+* #101 (the user): `L` and `R` were each drawn twice; keep the right
+  ones.  #102: no commit until they are gone.
+* #100 done the #23 way: an edge drawn exactly level (upright) gives
+  its corners the same Y (X): `dimensions._level_edges()` adds them
+  as letterless dimensions, tried first (each pass starts over after
+  a new fact), so a dimension repeating one is the extra (red);
+  `_seed()` split out.  `test_level_edges`; the L bracket needs fewer
+  dimensions now.  The drill keeps `A`, `R` (to corner 1) and `L` (to
+  corner 2): every corner known, no extras; picture checked.
+* #103 found real: the shop reader took `drill.outline.toml` for an
+  item (`ShopError`, the example shop would not load).
+  `shops.OUTLINE_SUFFIX`; `_Reader.directories()` and
+  `gui/tree.shop_children()` skip outline files (the tree until #S7).
+* Tests: `test_dimensions`, `test_outline_editor`, `test_outline_file`
+  (44), `test_shops`, `test_gui_tree` (60) pass; checkers clean.
+
+## 2026-11-18: #7 the sharp drill tip revolved in SolidCraft
+
+* #104 the drill looks right (staged, not committed yet).  #105
+  explained; drop unless needed.
+* Scratchpad `show_outline.py FILE (PORT | headless)` (gone after
+  the session; enough to redo): reads the outline file, `solve()`s
+  it, adds each letter as a SolidCraft parameter (`Length.solidcraft()`
+  for lengths, angles as written), sketches the corners as the
+  formulas themselves on the XZ plane (`sketch.line(points=,
+  closed=True)`, a bare `0` sent as `0 mm`), revolves about Z
+  (`solid.revolve`).
+* Headless and in a window (`--control 8085`, raised by KWin
+  script): the sharp tip (corner on the axis) revolved with no error
+  or warning (70-75 ms); live changes `A` 45 deg, back to 59 deg,
+  `R` 1/4 in: 14-26 ms each.  The camera looked from above, tip
+  hidden; `view.navigate` and `view.save` need a `camera` object of
+  unknown shape (`"current"`, `{}`, eye/target/up and
+  position/target/up all "invalid camera"): asked the user to orbit.
+
+## 2026-11-18: #106 the sharp tip looks broken: cut flat at build
+
+* #106 (the user): the sharp tip is "ill defined" and "broken"
+  looking in SolidCraft, as before; cut off the very tip so a small
+  circle is at the bottom (the old fix).
+* The scratch `show_outline.py` now has `flatten_tips()` (build time
+  only; the outline file stays the true sharp drill): a corner at X =
+  0 between an edge on the axis and a slanted (not level) edge
+  becomes two, `TIP_FLAT` 0.05 along the slanted edge and on the axis
+  at that height, as `COUNTERSINK_TIP_FLAT` did.  Built headless and
+  in a window (restarted, the user had closed it): 49 ms, live `A`
+  changes 8-33 ms.  Awaiting the user's look.
+
+## 2026-11-18: #110 the cut tip works; #S3/#S4 committed
+
+#110 the flat tip looks right; #111 5% of the radius kept.  #102
+commit and push.  #109: the user asked what #S6 (radii) is.

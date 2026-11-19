@@ -523,6 +523,61 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.editor.buttons["Dimension"].click()
         self.assertEqual(view.drawing.dimensions[-1].kind, HORIZONTAL)
 
+    def test_revolve(self) -> None:
+        """[Revolve]: refused left of the Y axis; on, it keeps drags at
+        X >= 0; undone as one change, the button following (#32)."""
+        from PySide6.QtCore import QPointF  # pylint: disable=C0415
+
+        view = self.editor.view
+        button = self.editor.buttons["Revolve"]
+        button.click()
+        self.assertFalse(view.drawing.revolve)
+        self.assertIn("X >= 0", view.message)
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        view.make_squares()
+        button.click()
+        self.assertTrue(view.drawing.revolve)
+        self.assertTrue(button.isChecked())
+        self.assertFalse(view.grab().isNull())
+        self.assertLess(view.outline.boundingRect().left(), -1.9)
+        view.squares[1].setPos(QPointF(-3.0, 1.0))
+        self.assertEqual(view.drawing.points[1][0], 0.0)
+        view.undo()
+        self.assertFalse(view.drawing.revolve)
+        self.editor.show_message()
+        self.assertFalse(button.isChecked())
+
+    def test_file(self) -> None:
+        """An editor on a file rewrites it after each change, and reads
+        back the same drawing (#90, #97)."""
+        import tempfile  # pylint: disable=C0415
+        from pathlib import Path  # pylint: disable=C0415
+
+        with tempfile.TemporaryDirectory() as folder:
+            path: Path = Path(folder) / "drill.outline.toml"
+            editor: OutlineEditor = OutlineEditor(path=path)
+            self.assertIn("drill.outline.toml", editor.windowTitle())
+            # A new file is written at once, holding the triangle.
+            editor.save()
+            self.assertTrue(path.exists())
+            editor.view.add_after(0)
+            editor.show_message()
+            self.assertTrue(path.exists())
+            drawing = outline_editor.drawing_from(path)
+            self.assertEqual(drawing.points, editor.drawing.points)
+            editor.view.dimension_between(-1, 1)
+            editor.keep(0, 2, "3 in")
+            self.assertEqual(
+                outline_editor.drawing_from(path).letters[0].default, "3 in"
+            )
+            again: OutlineEditor = OutlineEditor(
+                outline_editor.drawing_from(path), path=path
+            )
+            self.assertEqual(again.saved, path.read_text(encoding="utf-8"))
+            self.assertEqual(outline_editor.file_text(None), "")
+            editor.close()
+            again.close()
+
     def test_undo_redo(self) -> None:
         """Undo and redo go back and forth; a new change ends redo."""
         view = self.editor.view
