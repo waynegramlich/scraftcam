@@ -104,14 +104,35 @@ def use_problem(letter: str, text: str, kinds: set[str]) -> str:
         return f"{letter} measures a length: {text} is an angle."
     if "angle" in kinds and not angle:
         return f"{letter} measures an angle: {text} is a length."
-    if "angle" in kinds:
-        # Near 0 or 180 degrees the edges are parallel (#58).
+    if not kinds:
+        return ""
+    return _range_problem(letter, text, angle)
+
+
+# Function `_range_problem()`:
+def _range_problem(letter: str, text: str, angle: bool) -> str:
+    """Return what is wrong with a good value for its use ("" if
+    nothing): an angle near 0 or 180 degrees, whose edges are parallel
+    (#58), or a length not more than 0, as a dimension measures a
+    distance (#154).
+
+    Arguments:
+    * `letter` (`str`): The letter.
+    * `text` (`str`): Its value, of the kind its use needs.
+    * `angle` (`bool`): Whether it is an angle.
+
+    Returns:
+    * (`str`): The problem, as the user should read it.
+    """
+    if angle:
         degrees: float = float(Angle.parse(text).degrees)
         if not ANGLE_LIMITS[0] < degrees < ANGLE_LIMITS[1]:
             return (
                 f"{letter}: angles must be between {ANGLE_LIMITS[0]} and "
                 f"{ANGLE_LIMITS[1]} deg, not {text}."
             )
+    elif Length.parse(text).value <= 0:
+        return f"{letter} must be more than 0, not {text}."
     return ""
 
 

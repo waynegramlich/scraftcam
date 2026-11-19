@@ -10,6 +10,7 @@ from scraftcam.gui.dimensions import (
     Y_AXIS,
     Dimension,
 )
+from scraftcam.gui.hides import Hide
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_file import (
     Outline,
@@ -39,6 +40,8 @@ HALF_DRILL: Outline = Outline(
         ),
     ],
     revolve=True,
+    note_radius="D",
+    hides=[Hide(1, 1, 2, 1.8, 2.0)],
 )
 
 
@@ -101,6 +104,10 @@ class OutlineFileTest(unittest.TestCase):
             "from = 0\nto = 1\noffset = true\nalong = 0.5\n"
             'rays = [1, 2]\nplaces = [["up", 1.0, 2.0]]\n'
         )
+        bad += (
+            '[[hides]]\naxis = "z"\n'
+            '[[hides]]\naxis = "y"\nbelow = 9\nabove = 1\nlow = 0\nhigh = 0\n'
+        )
         with self.assertRaises(OutlineError) as caught:
             outline_from_text(bad, "drill.outline.toml")
         lines: list[str] = str(caught.exception).splitlines()
@@ -119,6 +126,8 @@ class OutlineFileTest(unittest.TestCase):
             "dimensions[1]: needs numbers for offset and along",
             "dimensions[1]: rays must be two of 1 and -1",
             "dimensions[1]: places:",
+            'hides[0]: needs axis = "x" or "y"',
+            "hides[1]: needs corners below, above and numbers",
         ):
             self.assertIn(expected, text)
         for broken in (

@@ -48,6 +48,7 @@ from PySide6.QtCore import (  # noqa: E402
     Qt,
 )
 from PySide6.QtGui import (  # noqa: E402
+    QBrush,
     QColor,
     QFont,
     QKeySequence,
@@ -62,6 +63,7 @@ from PySide6.QtGui import (  # noqa: E402
     QWheelEvent,
 )
 from PySide6.QtWidgets import (  # noqa: E402
+    QAbstractItemView,
     QApplication,
     QGraphicsEllipseItem,
     QGraphicsItem,
@@ -73,6 +75,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QStyledItemDelegate,
     QStyleOptionGraphicsItem,
@@ -91,6 +94,7 @@ from .dimensions import (  # noqa: E402
     LENGTH,
     NEXT_KIND,
     ORIGIN,
+    RADIUS,
     VERTICAL,
     X_AXIS,
     Y_AXIS,
@@ -98,6 +102,16 @@ from .dimensions import (  # noqa: E402
     Formula,
     Solution,
     solve,
+)
+from .hides import (  # noqa: E402
+    HIDE_X,
+    HIDE_Y,
+    Hide,
+    across,
+    inside_spans,
+    lay,
+    minus,
+    strip,
 )
 from .letters import (  # noqa: E402
     Letter,
@@ -112,6 +126,11 @@ from .outline_file import (  # noqa: E402
     outline_from_text,
     outline_text,
 )
+from .values import (  # noqa: E402
+    crosses,
+    fillet_problems,
+    real_coordinates,
+)
 from .window import make_application  # noqa: E402
 
 # pylint: enable=wrong-import-position,wrong-import-order
@@ -122,11 +141,19 @@ from .window import make_application  # noqa: E402
 SQUARE_PIXELS: float = 9.0
 ARROW_PIXELS: float = 9.0
 
+# A fillet is drawn with this share of its shorter edge as radius.
+FILLET_SHARE: float = 0.2
+
+# The letter of every fillet without a radius of its own (#120): the
+# note reads "All undimensioned fillets are radius UDF".
+NOTE_LETTER: str = "UDF"
+
 # How many straight pieces draw an angle's arc.
 ARC_STEPS: int = 48
 
 THICK_PIXELS: float = 2.0
 THIN_PIXELS: float = 1.0
+CHOSEN_PIXELS: float = 2.5
 GRID_PIXELS: float = 12.0
 
 # Every `MAJOR_EVERY`th grid line is drawn darker.
@@ -141,7 +168,7 @@ ZOOM_LIMITS: tuple[float, float] = (1e-3, 1e5)
 COLUMNS: tuple[tuple[str, str], ...] = (
     ("Letter", "letter"),
     ("Name", "name"),
-    ("Default", "default"),
+    ("Value", "default"),  # Its value (#147); `default` in files.
     ("Help", "help"),
 )
 
@@ -154,6 +181,19 @@ LETTER_POINTS: int = 11
 # An edge handle's size, and the least length on screen of an edge
 # that shows one (pixels).
 HANDLE_PIXELS: float = 9.0
+GRIP_PIXELS: float = 11.0
+
+# The working view (#170, #172): the gap at a cut, and a long break
+# line's zigzag, half its length and its height (pixels).
+GAP_PIXELS: float = 20.0
+ZIG_HALF_PIXELS: float = 10.0
+ZIG_HIGH_PIXELS: float = 6.0
+
+# Half the length of the small S ending a dimension line at a cut.
+ESS_PIXELS: float = 9.0
+
+# How far the working view's pieces reach (past any drawing).
+FAR: float = 1e6
 HANDLE_EDGE_PIXELS: float = 3.0 * SQUARE_PIXELS
 
 # An outline has at least this many corners.
@@ -220,9 +260,12 @@ class Snapshot:
     * `dimensions` (`tuple[Dimension, ...]`): Copies of the dimensions.
     * `letters` (`tuple[Letter, ...]`): Copies of the letters.
     * `revolve` (`bool`): Whether it is revolved (#32).
+    * `note_radius` (`str`): The fillets' note letter (#116).
+    * `hides` (`tuple[Hide, ...]`): Copies of the hide strips.
 
     Constructor:
-    * `Snapshot(points, dimensions, letters, revolve)`
+    * `Snapshot(points, dimensions, letters, revolve, note_radius,
+      hides)`
     """
 
     # Constructor arguments:
@@ -230,32 +273,42 @@ class Snapshot:
     dimensions: tuple[Dimension, ...] = field(init=True)
     letters: tuple[Letter, ...] = field(init=True)
     revolve: bool = field(init=True, default=False)
+    note_radius: str = field(init=True, default="")
+    hides: tuple[Hide, ...] = field(init=True, default=())
 
 
 # Class `Drawing`:
 @dataclass(slots=True)
-class Drawing:
-    """The outline being drawn, as corner positions in drawing steps.
+class Drawing(Outline):
+    """The outline being drawn: an `Outline` (what its file holds,
+    corners in drawing steps) with the editor's own state.
 
     Attributes:
-    * `points` (`list[tuple[float, float]]`):
-      The corners, in order, counterclockwise.
+    * `points` (`list[tuple[float, float]]`): The corners, in order,
+      counterclockwise (the first triangle when none are given).
     * `letters` (`list[Letter]`): The letters naming its sizes.
     * `dimensions` (`list[Dimension]`): The dimensions, by letter.
     * `revolve` (`bool`): Whether it is revolved about the Y axis
       (#32): a round tool, drawn at X >= 0 only.
+    * `note_radius` (`str`): The letter of every fillet without a
+      radius of its own (#116), "" before the first fillet.
+    * `hides` (`list[Hide]`): The hide strips (#157).
+    * `scale` (`float`): Drawing steps per millimeter, once the
+      drawing follows the values (#148); 0 before.
 
     Constructor:
-    * `Drawing(points, letters, dimensions, revolve)`
+    * `Drawing(points, letters, dimensions, revolve, note_radius,
+      hides)`
     """
 
-    # Constructor arguments:
-    points: list[tuple[float, float]] = field(
-        init=True, default_factory=triangle
-    )
-    letters: list[Letter] = field(init=True, default_factory=list)
-    dimensions: list[Dimension] = field(init=True, default_factory=list)
-    revolve: bool = field(init=True, default=False)
+    # Remaining attributes (alphabetized):
+    scale: float = field(init=False, default=0.0)
+
+    # Method `Drawing.__post_init__()`:
+    def __post_init__(self) -> None:
+        """Start from the first triangle when no corners are given."""
+        if not self.points:
+            self.points[:] = triangle()
 
     # Method `Drawing.snapshot()`:
     def snapshot(self) -> Snapshot:
@@ -265,6 +318,8 @@ class Drawing:
             tuple(replace(dimension) for dimension in self.dimensions),
             tuple(replace(letter) for letter in self.letters),
             self.revolve,
+            self.note_radius,
+            tuple(replace(hide) for hide in self.hides),
         )
 
     # Method `Drawing.restore()`:
@@ -280,6 +335,8 @@ class Drawing:
         ]
         self.letters[:] = [replace(letter) for letter in snapshot.letters]
         self.revolve = snapshot.revolve
+        self.note_radius = snapshot.note_radius
+        self.hides[:] = [replace(hide) for hide in snapshot.hides]
 
     # Method `Drawing.follow_angles()`:
     def follow_angles(self) -> None:
@@ -463,7 +520,14 @@ class PullSquare(QGraphicsRectItem):
     def itemChange(
         self, change: QGraphicsItem.GraphicsItemChange, value: object
     ) -> object:
-        """Snap a move, and move the corner with it."""
+        """Snap a move, and move the corner with it; a coordinate the
+        dimensions fix does not move (#148)."""
+        if (
+            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            and isinstance(value, QPointF)
+            and self.editor.placing
+        ):
+            return value
         if (
             change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
             and isinstance(value, QPointF)
@@ -475,6 +539,13 @@ class PullSquare(QGraphicsRectItem):
             moved: QPointF = value if free else snap(value, self.editor.step())
             if self.editor.drawing.revolve and moved.x() < 0.0:
                 moved.setX(0.0)  # A revolved outline keeps to X >= 0.
+            # Only dimensions pin a coordinate; a corner merely drawn
+            # on an axis or beside a level edge drags freely (#176).
+            here: tuple[float, float] = self.editor.drawing.points[self.index]
+            if self.index in self.editor.pinned.x:
+                moved.setX(here[0])
+            if self.index in self.editor.pinned.y:
+                moved.setY(here[1])
             self.editor.drawing.points[self.index] = (moved.x(), moved.y())
             self.editor.outline.refresh()
             self.editor.follow()
@@ -537,7 +608,23 @@ class OutlineItem(QGraphicsItem):
         corners: list[QPointF] = [
             QPointF(x, y) for x, y in self.drawing.points
         ]
-        painter.drawPolygon(QPolygonF(corners))
+        rounded: list[tuple[QPointF, QPointF]] = fillet_ends(self.drawing)
+        painter.drawPath(rounded_path(self.drawing, rounded))
+
+        # Each rounded corner's edges carried on, thin and dashed, to
+        # the sharp corner the dimensions measure to (#117).
+        dashed: QPen = QPen(ink, THIN_PIXELS)
+        dashed.setCosmetic(True)
+        dashed.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(dashed)
+        corner: int
+        start: QPointF
+        end: QPointF
+        for corner, (start, end) in enumerate(rounded):
+            if start != end:
+                painter.drawLine(start, corners[corner])
+                painter.drawLine(corners[corner], end)
+        painter.setPen(pen)
 
         # Revolved: the other half, mirrored, faint and dashed.
         if self.drawing.revolve:
@@ -556,9 +643,269 @@ class OutlineItem(QGraphicsItem):
         length: float = ARROW_PIXELS / max(abs(scale), 1e-12)
         painter.setBrush(ink)
         index: int
-        for index, end in enumerate(corners):
-            start: QPointF = corners[index - 1]
-            painter.drawPath(arrowhead(start, end, length))
+        for index in range(len(corners)):
+            # From where the last corner's fillet ends to where this
+            # one's begins (the corners themselves, when sharp).
+            painter.drawPath(
+                arrowhead(rounded[index - 1][1], rounded[index][0], length)
+            )
+
+
+# Function `first_scale()`:
+def first_scale(
+    points: list[tuple[float, float]],
+    real: tuple[dict[int, float], dict[int, float]],
+) -> float:
+    """Return drawing steps per millimeter, chosen once (#148): the
+    middle of the drawn-to-real ratios of the fixed coordinates.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `real` (`tuple[dict[int, float], dict[int, float]]`): The fixed
+      coordinates' real values (mm).
+
+    Returns:
+    * (`float`): The scale; 0 when nothing says.
+    """
+    ratios: list[float] = sorted(
+        points[corner][axis] / value
+        for axis in (0, 1)
+        for corner, value in real[axis].items()
+        if abs(value) > 1e-9 and points[corner][axis] / value > 0.0
+    )
+    return ratios[len(ratios) // 2] if ratios else 0.0
+
+
+# Function `shift_at()`:
+def shift_at(pieces: list[tuple[float, float, float]], at: float) -> float:
+    """Return how far the working view shifts a place: by its piece.
+
+    Arguments:
+    * `pieces` (`list[tuple[float, float, float]]`): From
+      `OutlineView.cut_offsets()`.
+    * `at` (`float`): The place.
+
+    Returns:
+    * (`float`): The shift (0 inside a cut, or past every piece).
+    """
+    low: float
+    high: float
+    shift: float
+    for low, high, shift in pieces:
+        if low <= at <= high:
+            return shift
+    return 0.0
+
+
+# Function `fillet_radii()`:
+def fillet_radii(drawing: Drawing) -> dict[int, float]:
+    """Return each rounded corner's radius as drawn.
+
+    Arguments:
+    * `drawing` (`Drawing`): The outline.
+
+    Returns:
+    * (`dict[int, float]`): Radius by corner.
+    """
+    return {
+        dimension.start: drawn_radius(drawing.points, dimension.start)
+        for dimension in drawing.dimensions
+        if dimension.kind == RADIUS
+    }
+
+
+# Function `drawn_radius()`:
+def drawn_radius(points: list[tuple[float, float]], corner: int) -> float:
+    """Return a fillet's radius as drawn: a fifth of its shorter edge,
+    following the corners (#121); its real size is its letter's.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `corner` (`int`): The rounded corner.
+
+    Returns:
+    * (`float`): The radius, in drawing steps.
+    """
+    here: tuple[float, float] = points[corner]
+    return FILLET_SHARE * min(
+        math.dist(here, points[corner - 1]),
+        math.dist(here, points[(corner + 1) % len(points)]),
+    )
+
+
+# Function `fillet_ends()`:
+def fillet_ends(drawing: Drawing) -> list[tuple[QPointF, QPointF]]:
+    """Return where each corner's fillet meets its two edges: on the
+    edge in and the edge out (the corner twice, when sharp).  A
+    radius too big for its edges is drawn as big as fits (chunk 3
+    marks it).
+
+    Arguments:
+    * `drawing` (`Drawing`): The outline.
+
+    Returns:
+    * (`list[tuple[QPointF, QPointF]]`): By corner.
+    """
+    radii: dict[int, float] = fillet_radii(drawing)
+    points: list[tuple[float, float]] = drawing.points
+    ends: list[tuple[QPointF, QPointF]] = []
+    corner: int
+    for corner, here in enumerate(points):
+        at: QPointF = QPointF(*here)
+        back: QPointF = QPointF(*points[corner - 1]) - at
+        ahead: QPointF = QPointF(*points[(corner + 1) % len(points)]) - at
+        reach: float = _tangent_reach(back, ahead, radii.get(corner, 0.0))
+        ends.append(
+            (
+                at + back * (reach / max(_size(back), 1e-12)),
+                at + ahead * (reach / max(_size(ahead), 1e-12)),
+            )
+        )
+    return ends
+
+
+# Function `fillet_middle()`:
+def fillet_middle(
+    drawing: Drawing, corner: int
+) -> tuple[QPointF, QPointF] | None:
+    """Return the middle of a fillet's arc, and the way out from its
+    center there (for its letter, #126).
+
+    Arguments:
+    * `drawing` (`Drawing`): The outline.
+    * `corner` (`int`): The rounded corner.
+
+    Returns:
+    * (`tuple[QPointF, QPointF] | None`): The point and a unit
+      vector; `None` when the corner is not rounded.
+    """
+    start: QPointF
+    end: QPointF
+    start, end = fillet_ends(drawing)[corner]
+    at: QPointF = QPointF(*drawing.points[corner])
+    if start == end:
+        return None
+    center: QPointF | None = _fillet_center(at, start, end)
+    if center is None:
+        return None
+    out: QPointF = at - center
+    out /= max(_size(out), 1e-12)
+    return center + out * _size(start - center), out
+
+
+# Function `_fillet_center()`:
+def _fillet_center(
+    at: QPointF, start: QPointF, end: QPointF
+) -> QPointF | None:
+    """Return a fillet's center: on the bisector, square to each edge
+    at its tangent point.
+
+    Arguments:
+    * `at` (`QPointF`): The sharp corner.
+    * `start` (`QPointF`): Where the arc leaves the edge in.
+    * `end` (`QPointF`): Where it meets the edge out.
+
+    Returns:
+    * (`QPointF | None`): The center; `None` for a straight corner.
+    """
+    bisector: QPointF = (start + end) / 2.0 - at
+    toward: QPointF = start - at
+    along: float = QPointF.dotProduct(bisector, toward)
+    if along == 0.0:
+        return None
+    return at + bisector * (QPointF.dotProduct(toward, toward) / along)
+
+
+# Function `rounded_path()`:
+def rounded_path(
+    drawing: Drawing, ends: list[tuple[QPointF, QPointF]]
+) -> QPainterPath:
+    """Return the closed outline, each fillet an arc tangent to its
+    edges.
+
+    Arguments:
+    * `drawing` (`Drawing`): The outline.
+    * `ends` (`list[tuple[QPointF, QPointF]]`): From `fillet_ends()`.
+
+    Returns:
+    * (`QPainterPath`): The outline.
+    """
+    path: QPainterPath = QPainterPath()
+    path.moveTo(ends[0][1])
+    corner: int
+    for corner in [*range(1, len(ends)), 0]:
+        path.lineTo(ends[corner][0])
+        if ends[corner][0] != ends[corner][1]:
+            _arc_to(path, QPointF(*drawing.points[corner]), *ends[corner])
+    path.closeSubpath()
+    return path
+
+
+# Function `_arc_to()`:
+def _arc_to(
+    path: QPainterPath, at: QPointF, start: QPointF, end: QPointF
+) -> None:
+    """Draw a fillet's arc from one tangent point to the other.
+
+    Arguments:
+    * `path` (`QPainterPath`): The outline so far, at `start`.
+    * `at` (`QPointF`): The sharp corner.
+    * `start` (`QPointF`): Where the arc leaves the edge in.
+    * `end` (`QPointF`): Where it meets the edge out.
+    """
+    center: QPointF | None = _fillet_center(at, start, end)
+    if center is None:
+        path.lineTo(end)
+        return
+    radius: float = _size(start - center)
+    first: float = math.atan2(start.y() - center.y(), start.x() - center.x())
+    turn: float = (
+        math.atan2(end.y() - center.y(), end.x() - center.x())
+        - first
+        + math.pi
+    ) % (2.0 * math.pi) - math.pi
+    step: int
+    for step in range(1, ARC_STEPS + 1):
+        angle: float = first + turn * step / ARC_STEPS
+        path.lineTo(
+            center + QPointF(math.cos(angle), math.sin(angle)) * radius
+        )
+
+
+# Function `_tangent_reach()`:
+def _tangent_reach(back: QPointF, ahead: QPointF, radius: float) -> float:
+    """Return how far from a corner a fillet meets its edges.
+
+    Arguments:
+    * `back` (`QPointF`): Toward the corner before.
+    * `ahead` (`QPointF`): Toward the corner after.
+    * `radius` (`float`): The fillet's radius (0 for none).
+
+    Returns:
+    * (`float`): The distance, at most each edge's length.
+    """
+    if radius <= 0.0:
+        return 0.0
+    cosine: float = QPointF.dotProduct(back, ahead) / max(
+        _size(back) * _size(ahead), 1e-24
+    )
+    half: float = math.acos(max(-1.0, min(1.0, cosine))) / 2.0
+    if half <= 1e-9 or half >= math.pi / 2.0 - 1e-9:
+        return 0.0
+    return min(radius / math.tan(half), _size(back), _size(ahead))
+
+
+# Function `_size()`:
+def _size(way: QPointF) -> float:
+    """Return a vector's length.
+
+    Arguments:
+    * `way` (`QPointF`): The vector.
+
+    Returns:
+    * (`float`): Its length.
+    """
+    return math.hypot(way.x(), way.y())
 
 
 # Function `arrowhead()`:
@@ -860,6 +1207,181 @@ class EdgeHandle(QGraphicsEllipseItem):
         self.before = None
 
 
+# Class `StripHandle`:
+class StripHandle(QGraphicsEllipseItem):
+    """A hide strip's circle, in the overview (#173, #178): one on each
+    of its four sides resizes it, the middle one moves it; snapped; a
+    strip that would cover a corner or a fillet, or not reach right
+    across the part, stays put (#165, #180).
+
+    Attributes:
+    * `editor` (`OutlineView`): The view it is drawn in.
+    * `index` (`int`): Its strip's index in the drawing.
+    * `part` (`str`): `"low"`, `"high"` (its sides along the axis),
+      `"under"`, `"over"` (across it) or `"whole"`.
+    * `before` (`Snapshot | None`): The drawing when a drag began.
+    * `grabbed` (`tuple[float, float]`): Where the drag began, along
+      the axis and across it.
+    """
+
+    # Method `StripHandle.__init__()`:
+    def __init__(self, editor: "OutlineView", index: int, part: str) -> None:
+        """Make one circle of a strip.
+
+        Arguments:
+        * `editor` (`OutlineView`): The view it is drawn in.
+        * `index` (`int`): Its strip's index in the drawing.
+        * `part` (`str`): `"low"`, `"high"` or `"whole"`.
+        """
+        half: float = GRIP_PIXELS / 2.0
+        super().__init__(-half, -half, GRIP_PIXELS, GRIP_PIXELS)
+        self.editor: OutlineView = editor
+        self.index: int = index
+        self.part: str = part
+        self.before: Snapshot | None = None
+        self.grabbed: tuple[float, float] = (0.0, 0.0)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
+        self.setZValue(2.5)
+
+    # Method `StripHandle.place()`:
+    def place(self) -> None:
+        """Sit in the middle of its side of the strip's rectangle, or
+        in its middle (#178); shown in the overview only."""
+        hide: Hide = self.editor.drawing.hides[self.index]
+        points: list[tuple[float, float]] = self.editor.drawing.points
+        low: float
+        high: float
+        low, high = strip(points, hide)
+        near: float
+        far: float
+        near, far = across(points, hide)
+        along: float = {"low": low, "high": high}.get(
+            self.part, (low + high) / 2.0
+        )
+        side: float = {"under": near, "over": far}.get(
+            self.part, (near + far) / 2.0
+        )
+        self.setPos(
+            QPointF(side, along)
+            if hide.axis == HIDE_Y
+            else QPointF(along, side)
+        )
+        self.setVisible(self.editor.overview)
+
+    # Method `StripHandle.mousePressEvent()`:
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Get ready to resize or move the strip."""
+        self.before = self.editor.drawing.snapshot()
+        hide: Hide = self.editor.drawing.hides[self.index]
+        at: QPointF = event.scenePos()
+        self.grabbed = (
+            (at.y(), at.x()) if hide.axis == HIDE_Y else (at.x(), at.y())
+        )
+        event.accept()
+
+    # Method `StripHandle.mouseMoveEvent()`:
+    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Resize the strip from a side, or move it, if it may go
+        there: never over a corner or a fillet (#165), and past the
+        part and its dimensions (#180)."""
+        assert self.before is not None
+        axis: int = self.before.hides[self.index].axis
+        low: float
+        high: float
+        under: float
+        over: float
+        low, high, under, over = self.proposed(event.scenePos())
+        laid: Hide | str = lay(
+            self.editor.drawing.points,
+            axis,
+            low,
+            high,
+            self.editor.fillet_arcs(axis),
+        )
+        other: list[float] = [
+            point[1 - axis] for point in self.editor.drawing.points
+        ]
+        least: tuple[float, float] = self.editor.reach(axis)
+        if isinstance(laid, Hide) and (
+            min(other) - under > least[0] or max(other) + over < least[1]
+        ):
+            laid = "A hide must reach past the part and its dimensions."
+        if isinstance(laid, str):
+            self.editor.message = laid
+        else:
+            laid.under, laid.over = under, over
+            self.editor.drawing.hides[self.index] = laid
+            self.editor.message = ""
+        self.editor.place_handles()
+        self.editor.viewport().update()
+        self.editor.scene().update()
+
+    # Method `StripHandle.proposed()`:
+    def proposed(self, at: QPointF) -> tuple[float, float, float, float]:
+        """Return where the strip would go with this circle dragged to
+        a point: its two sides along the axis, and how far it reaches
+        past the outline on each side across it.
+
+        Arguments:
+        * `at` (`QPointF`): The pointer, in the scene.
+
+        Returns:
+        * (`tuple[float, float, float, float]`): Low, high, under,
+          over.
+        """
+        assert self.before is not None
+        old: Hide = self.before.hides[self.index]
+        low: float
+        high: float
+        low, high = strip(list(self.before.points), old)
+        under: float = old.under
+        over: float = old.over
+        along: float = at.y() if old.axis == HIDE_Y else at.x()
+        side: float = at.x() if old.axis == HIDE_Y else at.y()
+        other: list[float] = [
+            point[1 - old.axis] for point in self.editor.drawing.points
+        ]
+        if self.part == "whole":
+            # Moved: its low side snapped, its size kept.
+            width: float = high - low
+            low = self._snapped(low + along - self.grabbed[0])
+            high = low + width
+            shift: float = self._snapped(side - self.grabbed[1])
+            under, over = under - shift, over + shift
+        elif self.part == "low":
+            low = self._snapped(along)
+        elif self.part == "high":
+            high = self._snapped(along)
+        elif self.part == "under":
+            under = min(other) - self._snapped(side)
+        else:
+            over = self._snapped(side) - max(other)
+        return low, high, under, over
+
+    # Method `StripHandle.mouseReleaseEvent()`:
+    def mouseReleaseEvent(self, _event: QGraphicsSceneMouseEvent) -> None:
+        """End the drag: remember it, if it changed the strip."""
+        if self.before is not None and self.before.hides != tuple(
+            self.editor.drawing.hides
+        ):
+            self.editor.history.remember(self.before)
+        self.before = None
+
+    # Method `StripHandle._snapped()`:
+    def _snapped(self, along: float) -> float:
+        """Return a place along the axis, snapped when [Snap] is on.
+
+        Arguments:
+        * `along` (`float`): The place.
+
+        Returns:
+        * (`float`): It, on the grid if snapping.
+        """
+        if not self.editor.snap_on:
+            return along
+        return snap(QPointF(along, along), self.editor.step()).x()
+
+
 # Class `DimensionHandle`:
 class DimensionHandle(QGraphicsEllipseItem):
     """A dimension's small hollow circle, beside its letter (#63).
@@ -892,8 +1414,12 @@ class DimensionHandle(QGraphicsEllipseItem):
 
     # Method `DimensionHandle.place()`:
     def place(self) -> None:
-        """Sit on the line, where the letter is."""
-        self.setPos(self.editor.measures[self.index].at())
+        """Sit on the line, where the letter is (hidden for a fillet,
+        for now)."""
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        self.setVisible(dimension.kind != RADIUS)
+        if dimension.kind != RADIUS:
+            self.setPos(self.editor.measures[self.index].at())
 
     # Method `DimensionHandle.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
@@ -1041,6 +1567,8 @@ class DimensionItem(QGraphicsItem):
         path: QPainterPath = QPainterPath()
         if self.index >= len(self.editor.drawing.dimensions):
             return path
+        if self.editor.drawing.dimensions[self.index].kind == RADIUS:
+            return path  # Drawn as its outline's arc (#116).
         if self.editor.drawing.dimensions[self.index].kind == ANGLE:
             path = self.arc_path()
         else:
@@ -1077,6 +1605,18 @@ class DimensionItem(QGraphicsItem):
         # already gone (an undo).
         if self.index >= len(self.editor.drawing.dimensions):
             return QRectF()
+        if self.editor.drawing.dimensions[self.index].kind == RADIUS:
+            # Room around its arc's middle for its letter.
+            middle: tuple[QPointF, QPointF] | None = fillet_middle(
+                self.editor.drawing,
+                self.editor.drawing.dimensions[self.index].start,
+            )
+            if middle is None:
+                return QRectF()
+            room: float = 60.0 / max(self.editor.zoom(), 1e-12)
+            return QRectF(
+                middle[0].x() - room, middle[0].y() - room, 2 * room, 2 * room
+            )
         margin: float = 40.0 / max(self.editor.zoom(), 1e-12)
         if self.editor.drawing.dimensions[self.index].kind == ANGLE:
             # Its arc, and the extension lines out to it.
@@ -1096,6 +1636,26 @@ class DimensionItem(QGraphicsItem):
             max(ys) - min(ys) + 2.0 * margin,
         )
 
+    # Method `DimensionItem.pen()`:
+    def pen(self) -> QPen:
+        """Return the pen it is drawn with: thin, red when one too
+        many; selected, colored and thicker, not told by color alone
+        (#131).
+
+        Returns:
+        * (`QPen`): A cosmetic pen.
+        """
+        extra: bool = self.index in self.editor.solution.extra
+        ink: QColor = QColor(
+            theme.colors().problem if extra else theme.colors().ink
+        )
+        chosen: bool = self.index in self.editor.chosen_dimensions
+        if chosen:
+            ink = self.editor.palette().highlight().color()
+        pen: QPen = QPen(ink, CHOSEN_PIXELS if chosen else THIN_PIXELS)
+        pen.setCosmetic(True)
+        return pen
+
     # Method `DimensionItem.paint()`:
     def paint(
         self,
@@ -1104,19 +1664,14 @@ class DimensionItem(QGraphicsItem):
         _widget: QWidget | None = None,
     ) -> None:
         """Draw the extension lines, the line, its arrows and letter."""
-        # Thin cosmetic lines, red for a dimension one too many.
-        extra: bool = self.index in self.editor.solution.extra
-        ink: QColor = QColor(
-            theme.colors().problem if extra else theme.colors().ink
-        )
-        if self.index in self.editor.chosen_dimensions:
-            ink = self.editor.palette().highlight().color()
-        pen: QPen = QPen(ink, THIN_PIXELS)
-        pen.setCosmetic(True)
+        pen: QPen = self.pen()
         painter.setPen(pen)
-        painter.setBrush(ink)
+        painter.setBrush(pen.color())
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         scale: float = max(abs(painter.worldTransform().m11()), 1e-12)
+        if self.editor.drawing.dimensions[self.index].kind == RADIUS:
+            self.paint_radius(painter)
+            return
         if self.editor.drawing.dimensions[self.index].kind == ANGLE:
             self.paint_angle(painter, scale)
             return
@@ -1217,6 +1772,46 @@ class DimensionItem(QGraphicsItem):
                 path.moveTo(center + ray * max(reach, 0.0))
                 path.lineTo(tip)
         return path
+
+    # Method `DimensionItem.paint_radius()`:
+    def paint_radius(self, painter: QPainter) -> None:
+        """Write a fillet's own letter out past its sharp corner, on
+        the line from its center through its arc's middle (#126); a
+        fillet on the note letter shows nothing.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, pen set.
+        """
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        if dimension.letter == self.editor.drawing.note_radius:
+            return
+        middle: tuple[QPointF, QPointF] | None = fillet_middle(
+            self.editor.drawing, dimension.start
+        )
+        if middle is None:
+            return
+        # Out past the sharp corner's square, along the way out from
+        # the arc's center, clear of the square and the dashes.
+        if dimension.start in self.editor.trouble:
+            painter.setPen(QColor(theme.colors().problem))  # Too big.
+        world: QTransform = painter.worldTransform()
+        at: QPointF = world.map(
+            QPointF(*self.editor.drawing.points[dimension.start])
+        )
+        out: QPointF = world.map(middle[0] + middle[1]) - world.map(middle[0])
+        out /= max(_size(out), 1e-12)
+        at += out * (LETTER_POINTS + SQUARE_PIXELS)
+        painter.save()
+        painter.resetTransform()
+        font: QFont = QFont("sans-serif", LETTER_POINTS)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(
+            QRectF(at.x() - 50.0, at.y() - 40.0, 100.0, 80.0),
+            Qt.AlignmentFlag.AlignCenter,
+            dimension.letter,
+        )
+        painter.restore()
 
     # Method `DimensionItem.paint_angle()`:
     def paint_angle(self, painter: QPainter, scale: float) -> None:
@@ -1354,6 +1949,17 @@ class OutlineView(QGraphicsView):
       Called after a new dimension adds a letter (the window sets it).
     * `released` (`Callable[[], None]`):
       Called after a mouse button comes up (the window saves).
+    * `placing` (`bool`): Whether the squares are being put where the
+      values say (their moves are not drags).
+    * `overview` (`bool`): Whether the whole drawing is shown, its
+      hide strips shaded (#168), not cut out.
+    * `hiding` (`bool`): Whether [Hide] waits for a drag (#164).
+    * `hide_from` (`QPointF | None`): Where that drag began.
+    * `band` (`QGraphicsRectItem`): The rectangle being dragged.
+    * `cleared` (`Callable[[], None]`): Called when the selection is
+      cleared (the window clears the table's, #125).
+    * `trouble` (`dict[int, str]`): Fillets too big for their edges,
+      by corner (#127; the window finds them).
     * `origin` (`QGraphicsRectItem`): The origin's square.
     * `outline` (`OutlineItem`): The outline.
     * `snap_on` (`bool`): Whether drags snap to the grid.
@@ -1361,8 +1967,11 @@ class OutlineView(QGraphicsView):
     * `measures` (`list[DimensionItem]`): The dimensions' items.
     * `handles` (`list[EdgeHandle]`): The edges' handles.
     * `circles` (`list[DimensionHandle]`): The dimensions' circles.
+    * `grips` (`list[StripHandle]`): The hide strips' circles.
     * `solution` (`Solution`): The corners' formulas, and what is
       amiss.
+    * `pinned` (`Solution`): The coordinates the dimensions alone fix,
+      which a drag does not move (#176).
     """
 
     # Method `OutlineView.__init__()`:
@@ -1383,6 +1992,15 @@ class OutlineView(QGraphicsView):
         self.wanted: bool = False
         self.letters_changed: Callable[[], None] = self.update
         self.released: Callable[[], None] = self.update
+        self.placing: bool = False
+        self.overview: bool = False
+        self.hiding: bool = False
+        self.hide_from: QPointF | None = None
+        self.band: QGraphicsRectItem = QGraphicsRectItem()
+        self.band.setVisible(False)
+        self.band.setZValue(3.0)
+        self.cleared: Callable[[], None] = self.update
+        self.trouble: dict[int, str] = {}
         self.snap_on: bool = True
         scene: QGraphicsScene = QGraphicsScene(self)
         scene.setSceneRect(QRectF(-1e6, -1e6, 2e6, 2e6))
@@ -1421,11 +2039,16 @@ class OutlineView(QGraphicsView):
         # The outline, then a square on each corner.
         self.outline: OutlineItem = OutlineItem(drawing)
         scene.addItem(self.outline)
+        scene.addItem(self.band)
         self.squares: list[PullSquare] = []
         self.handles: list[EdgeHandle] = []
         self.circles: list[DimensionHandle] = []
+        self.grips: list[StripHandle] = []
         self.measures: list[DimensionItem] = []
         self.solution: Solution = solve(drawing.points, drawing.dimensions)
+        self.pinned: Solution = solve(
+            drawing.points, drawing.dimensions, drawn=False
+        )
         self.make_squares()
         self.resize(800, 600)
         self.fit()
@@ -1475,6 +2098,16 @@ class OutlineView(QGraphicsView):
         ]
         for circle in self.circles:
             self.scene().addItem(circle)
+        grip: StripHandle
+        for grip in self.grips:
+            self.scene().removeItem(grip)
+        self.grips = [
+            StripHandle(self, index, part)
+            for index in range(len(self.drawing.hides))
+            for part in ("low", "high", "under", "over", "whole")
+        ]
+        for grip in self.grips:
+            self.scene().addItem(grip)
         self.outline.refresh()
         self.follow()
 
@@ -1542,6 +2175,7 @@ class OutlineView(QGraphicsView):
         self.chosen_dimensions = []
         self.chosen_edges = []
         self.wanted = False
+        self.cleared()
         self.restyle()
 
     # Method `OutlineView.dimension_between()`:
@@ -1561,10 +2195,10 @@ class OutlineView(QGraphicsView):
         """
         start: QPointF = self.point(first)
         end: QPointF = self.point(second)
-        across: float = abs(end.x() - start.x())
+        wide: float = abs(end.x() - start.x())
         up: float = abs(end.y() - start.y())
         if not kind:
-            kind = HORIZONTAL if across >= up else VERTICAL
+            kind = HORIZONTAL if wide >= up else VERTICAL
         letter: Letter = next_letter(self.drawing.letters)
         self.history.remember(self.drawing.snapshot())
         self.drawing.letters.append(letter)
@@ -1630,8 +2264,8 @@ class OutlineView(QGraphicsView):
         index: int
         for index in self.chosen_dimensions:
             dimension: Dimension = self.drawing.dimensions[index]
-            if dimension.kind == ANGLE:
-                continue  # Its four arcs: not yet.
+            if dimension.kind in (ANGLE, RADIUS):
+                continue  # Not cycled.
             self.measures[index].prepareGeometryChange()
             kind: str = NEXT_KIND[dimension.kind]
             dimension.become(
@@ -1646,7 +2280,13 @@ class OutlineView(QGraphicsView):
     # Method `OutlineView.mousePressEvent()`:
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Select the origin or clear the selection, then pan, when
-        no corner or dimension takes the press."""
+        no corner or dimension takes the press; after [Hide], start
+        the rectangle instead."""
+        if self.hiding and event.button() == Qt.MouseButton.LeftButton:
+            self.hide_from = self.mapToScene(event.position().toPoint())
+            self.band.setRect(QRectF(self.hide_from, self.hide_from))
+            self.band.setVisible(True)
+            return
         super().mousePressEvent(event)
         if (
             event.button() == Qt.MouseButton.LeftButton
@@ -1682,7 +2322,16 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.mouseMoveEvent()`:
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        """While panning, move the view with the pointer."""
+        """While panning, move the view with the pointer; while
+        hiding, stretch the rectangle."""
+        if self.hide_from is not None:
+            self.band.setRect(
+                QRectF(
+                    self.hide_from,
+                    self.mapToScene(event.position().toPoint()),
+                ).normalized()
+            )
+            return
         if self.pan_from is None:
             super().mouseMoveEvent(event)
             return
@@ -1697,6 +2346,13 @@ class OutlineView(QGraphicsView):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """End a pan (the pointer an arrow again), or pass it on; then
         tell the window (a drag may have ended)."""
+        if self.hide_from is not None:
+            self.lay_hide(self.band.rect())
+            self.hide_from = None
+            self.hiding = False
+            self.band.setVisible(False)
+            self.released()
+            return
         if self.pan_from is not None:
             self.pan_from = None
             self.viewport().unsetCursor()
@@ -1722,8 +2378,13 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.follow()`:
     def follow(self) -> None:
-        """Solve again, then draw the dimensions and squares to match."""
+        """Draw the dimensioned corners from the values, solve again,
+        then draw the dimensions and squares to match."""
+        self.apply_values()
         self.solution = solve(self.drawing.points, self.drawing.dimensions)
+        self.pinned = solve(
+            self.drawing.points, self.drawing.dimensions, drawn=False
+        )
         measure: DimensionItem
         for measure in self.measures:
             measure.prepareGeometryChange()
@@ -1732,6 +2393,67 @@ class OutlineView(QGraphicsView):
             measure.update()
         self.place_handles()
         self.restyle()
+
+    # Method `OutlineView.apply_values()`:
+    def apply_values(self) -> None:
+        """Put each coordinate the dimensions fix where the letters'
+        values put it, to scale (#148, #153); a coordinate not fixed
+        stays as drawn.  Values that cannot be drawn (a formula failing,
+        edges crossing) leave the drawing as it was (#154)."""
+        if self.letters_bad():
+            return
+        real: tuple[dict[int, float], dict[int, float]] | None = (
+            real_coordinates(
+                self.drawing.points,
+                self.drawing.letters,
+                self.drawing.dimensions,
+            )
+        )
+        if real is None or not self.drawing.dimensions:
+            return
+        if self.drawing.scale <= 0.0:
+            self.drawing.scale = first_scale(self.drawing.points, real)
+            if self.drawing.scale <= 0.0:
+                return
+        scale: float = self.drawing.scale
+        placed: list[tuple[float, float]] = [
+            (
+                real[0][corner] * scale if corner in real[0] else x,
+                real[1][corner] * scale if corner in real[1] else y,
+            )
+            for corner, (x, y) in enumerate(self.drawing.points)
+        ]
+        if placed == self.drawing.points or crosses(placed):
+            return
+        self.drawing.points[:] = placed
+        self.placing = True
+        square: PullSquare
+        for square in self.squares:
+            square.setPos(*placed[square.index])
+        self.placing = False
+        self.outline.refresh()
+
+    # Method `OutlineView.letters_bad()`:
+    def letters_bad(self) -> bool:
+        """Return whether a letter a dimension uses has a bad value
+        (red in the table): the drawing then keeps its shape (#154).
+
+        Returns:
+        * (`bool`): Whether one has.
+        """
+        letter: Letter
+        for letter in self.drawing.letters:
+            kinds: set[str] = {
+                "angle" if dimension.kind == ANGLE else "length"
+                for dimension in self.drawing.dimensions
+                if dimension.letter == letter.letter
+            }
+            if kinds and (
+                value_problem(letter.default)
+                or use_problem(letter.letter, letter.default, kinds)
+            ):
+                return True
+        return False
 
     # Method `OutlineView.place_handles()`:
     def place_handles(self) -> None:
@@ -1742,6 +2464,9 @@ class OutlineView(QGraphicsView):
         circle: DimensionHandle
         for circle in self.circles:
             circle.place()
+        grip: StripHandle
+        for grip in self.grips:
+            grip.place()
 
     # Method `OutlineView.add_after()`:
     def add_after(self, index: int) -> None:
@@ -1933,6 +2658,230 @@ class OutlineView(QGraphicsView):
         self.restyle()
         self.letters_changed()
 
+    # Method `OutlineView.fillet_selected()`:
+    def fillet_selected(self, letter: str = "") -> None:
+        """[Fillet]: round the selected corners by a letter (#125): the
+        one whose row is selected in the table, else the note letter
+        (`UDF`, made the first time: "All undimensioned fillets are
+        radius UDF", #116, #120).  Corners already rounded by that
+        letter, all of them, are made sharp again.  One change.
+
+        Arguments:
+        * `letter` (`str`): The table's selected letter, "" for none.
+        """
+        corners: list[int] = [
+            corner for corner in self.chosen_points if corner != ORIGIN
+        ]
+        if not corners:
+            self.message = "Click corners to fillet."
+            self.scene().update()
+            return
+        if letter and self.is_angle(letter):
+            self.message = (
+                f"{letter} is an angle: pick a length letter for a fillet."
+            )
+            self.scene().update()
+            return
+        self.history.remember(self.drawing.snapshot())
+        target: str = letter or self.note_letter()
+        rounded: dict[int, Dimension] = {
+            dimension.start: dimension
+            for dimension in self.drawing.dimensions
+            if dimension.kind == RADIUS
+        }
+        if all(
+            corner in rounded and rounded[corner].letter == target
+            for corner in corners
+        ):
+            # Pressed again: sharp again.
+            self.drawing.dimensions[:] = [
+                dimension
+                for dimension in self.drawing.dimensions
+                if not (
+                    dimension.kind == RADIUS and dimension.start in corners
+                )
+            ]
+        else:
+            corner: int
+            for corner in corners:
+                if corner in rounded:
+                    rounded[corner].letter = target
+                else:
+                    self.drawing.dimensions.append(
+                        Dimension(target, RADIUS, corner, corner)
+                    )
+        self.message = ""
+        self.make_squares()
+        self.letters_changed()
+
+    # Method `OutlineView.note_letter()`:
+    def note_letter(self) -> str:
+        """Return the note letter, making it the first time (`UDF`, or
+        the next free letter if `UDF` is taken).
+
+        Returns:
+        * (`str`): The letter.
+        """
+        if self.drawing.note_radius:
+            return self.drawing.note_radius
+        letter: Letter = replace(
+            next_letter(self.drawing.letters),
+            name="Undimensioned fillet radius",
+            default="1/16 in",
+            help="Every fillet without a radius of its own.",
+        )
+        if not any(
+            each.letter == NOTE_LETTER for each in self.drawing.letters
+        ):
+            letter = replace(letter, letter=NOTE_LETTER)
+        self.drawing.letters.append(letter)
+        self.drawing.note_radius = letter.letter
+        return letter.letter
+
+    # Method `OutlineView.is_angle()`:
+    def is_angle(self, letter: str) -> bool:
+        """Return whether a letter is an angle: used by an angle, or
+        its default in degrees or radians.
+
+        Arguments:
+        * `letter` (`str`): The letter.
+
+        Returns:
+        * (`bool`): Whether it is.
+        """
+        if any(
+            dimension.kind == ANGLE and dimension.letter == letter
+            for dimension in self.drawing.dimensions
+        ):
+            return True
+        return any(
+            each.letter == letter
+            and each.default.split()[-1:] in (["deg"], ["rad"])
+            for each in self.drawing.letters
+        )
+
+    # Method `OutlineView.start_hide()`:
+    def start_hide(self) -> None:
+        """[Hide]: wait for a rectangle dragged over a boring stretch,
+        in the overview (#164, #168)."""
+        self.overview = True
+        self.hiding = True
+        self.place_handles()
+        self.restyle()
+        self.message = "Drag a rectangle over the stretch to hide."
+        self.viewport().update()
+        self.scene().update()
+
+    # Method `OutlineView.lay_hide()`:
+    def lay_hide(self, rectangle: QRectF) -> None:
+        """Lay a strip from a dragged rectangle: one reaching across the
+        part's width hides a stretch of height, one reaching top to
+        bottom a stretch of width (else a wide one hides height); not
+        over a corner or a fillet (#165).  One change.
+
+        Arguments:
+        * `rectangle` (`QRectF`): The rectangle, in the scene.
+        """
+        # Hiding height if it reaches across the part's width, width if
+        # top to bottom; when both or neither, a wide one hides height.
+        xs: list[float] = [x for x, _ in self.drawing.points]
+        ys: list[float] = [y for _, y in self.drawing.points]
+        wide: bool = rectangle.left() <= min(xs) and rectangle.right() >= max(
+            xs
+        )
+        tall: bool = rectangle.top() <= min(ys) and rectangle.bottom() >= max(
+            ys
+        )
+        axis: int = (
+            (HIDE_Y if wide else HIDE_X)
+            if wide != tall
+            else (
+                HIDE_Y if rectangle.width() >= rectangle.height() else HIDE_X
+            )
+        )
+        low: float = rectangle.top() if axis == HIDE_Y else rectangle.left()
+        high: float = (
+            rectangle.bottom() if axis == HIDE_Y else rectangle.right()
+        )
+        laid: Hide | str = lay(
+            self.drawing.points, axis, low, high, self.fillet_arcs(axis)
+        )
+        if isinstance(laid, str):
+            self.message = laid
+            self.scene().update()
+            return
+        # It reaches across as far as dragged, and at least a step
+        # past the outline and its dimensions (#180).
+        other: list[float] = [point[1 - axis] for point in self.drawing.points]
+        near: float = rectangle.left() if axis == HIDE_Y else rectangle.top()
+        far: float = (
+            rectangle.right() if axis == HIDE_Y else rectangle.bottom()
+        )
+        least: tuple[float, float] = self.reach(axis)
+        laid.under = min(other) - min(near, least[0] - self.step())
+        laid.over = max(far, least[1] + self.step()) - max(other)
+        self.history.remember(self.drawing.snapshot())
+        self.drawing.hides.append(laid)
+        self.message = ""
+        self.make_squares()
+        self.viewport().update()
+        self.scene().update()
+
+    # Method `OutlineView.reach()`:
+    def reach(self, axis: int) -> tuple[float, float]:
+        """Return how far the outline and its dimensions reach across a
+        strip's axis: a strip must reach past both (#180).
+
+        Arguments:
+        * `axis` (`int`): The strip's axis, `HIDE_X` or `HIDE_Y`.
+
+        Returns:
+        * (`tuple[float, float]`): The low and high ends, across.
+        """
+        box: QRectF = self.outline.boundingRect()
+        measure: DimensionItem
+        for measure in self.measures:
+            if self.drawing.dimensions[measure.index].kind == RADIUS:
+                continue
+            if self.drawing.dimensions[measure.index].kind == ANGLE:
+                box = box.united(measure.arc_path().boundingRect())
+            else:
+                corner: QPointF
+                for corner in measure.ends():
+                    box = box.united(QRectF(corner, corner))
+        return (
+            (box.left(), box.right())
+            if axis == HIDE_Y
+            else (box.top(), box.bottom())
+        )
+
+    # Method `OutlineView.fillet_arcs()`:
+    def fillet_arcs(self, axis: int) -> list[tuple[float, float]]:
+        """Return where along an axis each fillet's arc runs, as drawn.
+
+        Arguments:
+        * `axis` (`int`): `HIDE_X` or `HIDE_Y`.
+
+        Returns:
+        * (`list[tuple[float, float]]`): Each arc's two ends.
+        """
+        return [
+            (start.y(), end.y()) if axis == HIDE_Y else (start.x(), end.x())
+            for start, end in fillet_ends(self.drawing)
+            if start != end
+        ]
+
+    # Method `OutlineView.toggle_overview()`:
+    def toggle_overview(self) -> None:
+        """[Overview]: the whole drawing, strips shaded, or the working
+        view, strips cut out (#168)."""
+        self.overview = not self.overview
+        self.hiding = False
+        self.place_handles()
+        self.restyle()
+        self.viewport().update()
+        self.scene().update()
+
     # Method `OutlineView.toggle_revolve()`:
     def toggle_revolve(self) -> None:
         """[Revolve]: turn revolving about the Y axis on or off, as one
@@ -1983,41 +2932,69 @@ class OutlineView(QGraphicsView):
         self.setBackgroundBrush(QColor(scheme.paper))
         pen: QPen = QPen(QColor(scheme.ink), THIN_PIXELS)
         pen.setCosmetic(True)
-        chosen: QPen = QPen(self.palette().highlight().color(), 3.0)
-        chosen.setCosmetic(True)
-        self.origin.setPen(chosen if ORIGIN in self.chosen_points else pen)
-        self.origin.setBrush(QColor(scheme.ink))
-        # A square is yellow (a warning) while its corner is not
-        # dimensioned yet (once there are dimensions at all).
+        # Squares and circles alike (#124, #129): hollow, so the edges
+        # show through; filled when selected, not told by color alone
+        # (some people do not see colors).  A corner not dimensioned
+        # yet has a thick ring, in the warning color too (dashes left
+        # gaps on so small a square, #133).
+        ring: QPen = QPen(QColor(scheme.ink), 1.5)
+        ring.setCosmetic(True)
+        warned: QPen = QPen(QColor(scheme.warning), 3.0)
+        bad: QPen = QPen(QColor(scheme.problem), 3.0)
+        bad.setCosmetic(True)
+        warned.setCosmetic(True)
+        warned.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+        filled: QBrush = QBrush(QColor(scheme.ink))
+        hollow: QBrush = QBrush(Qt.BrushStyle.NoBrush)
+
+        # The origin is a filled square, a fixed point; selected, its
+        # ring is thick.
+        thick: QPen = QPen(QColor(scheme.ink), 3.0)
+        thick.setCosmetic(True)
+        self.origin.setPen(thick if ORIGIN in self.chosen_points else pen)
+        self.origin.setBrush(filled)
         missing: set[int] = {
             corner
             for corner, _ in self.solution.missing(len(self.drawing.points))
         }
         square: PullSquare
         for square in self.squares:
-            square.setPen(
-                chosen if square.index in self.chosen_points else pen
-            )
             loose: bool = bool(self.drawing.dimensions) and (
                 square.index in missing
             )
-            square.setBrush(QColor(scheme.warning if loose else scheme.paper))
+            square.setPen(
+                bad
+                if square.index in self.trouble
+                else warned
+                if loose
+                else ring
+            )
+            square.setBrush(
+                filled if square.index in self.chosen_points else hollow
+            )
             square.setToolTip(self.corner_tip(square.index))
         self.origin.setToolTip("The origin: (0, 0)")
-        # Hollow, so the edge shows through (#60), in ink to be seen; a
-        # selected dimension's circle as a selected square.
-        ring: QPen = QPen(QColor(scheme.ink), 1.5)
-        ring.setCosmetic(True)
         handle: EdgeHandle
         for handle in self.handles:
-            handle.setPen(
-                chosen if handle.index in self.chosen_edges else ring
+            handle.setPen(ring)
+            handle.setBrush(
+                filled if handle.index in self.chosen_edges else hollow
             )
+        # A strip's circles have a paper inside, so the hatching does
+        # not run through them (#177); they look hollow all the same.
+        grip: StripHandle
+        for grip in self.grips:
+            grip.setPen(ring)
+            grip.setBrush(QBrush(QColor(scheme.paper)))
         circle: DimensionHandle
         for circle in self.circles:
-            circle.setPen(
-                chosen if circle.index in self.chosen_dimensions else ring
+            circle.setPen(ring)
+            circle.setBrush(
+                filled if circle.index in self.chosen_dimensions else hollow
             )
+        # The working view with cuts: look and pan only (#171), since
+        # its items are not where they are drawn.
+        self.setInteractive(self.overview or not self.drawing.hides)
         self.viewport().update()
 
     # Method `OutlineView.corner_tip()`:
@@ -2078,6 +3055,323 @@ class OutlineView(QGraphicsView):
         """Show the grid, or hide it."""
         self.grid_shown = not self.grid_shown
         self.viewport().update()
+
+    # Method `OutlineView.drawForeground()`:
+    def drawForeground(
+        self, painter: QPainter, exposed: QRectF | QRect
+    ) -> None:
+        """Shade the hide strips in the overview (#168), or cut them out
+        in the working view (#170); write the fillets' note in the
+        lower left, when any fillet has no radius of its own (#118)."""
+        if self.overview:
+            self.shade_hides(painter, QRectF(exposed))
+        elif self.drawing.hides:
+            self.draw_cut(painter, QRectF(exposed))
+        note: str = self.drawing.note_radius
+        if not any(
+            dimension.kind == RADIUS and dimension.letter == note
+            for dimension in self.drawing.dimensions
+        ):
+            return
+        painter.save()
+        painter.resetTransform()
+        painter.setPen(QColor(theme.colors().ink))
+        painter.setFont(QFont("sans-serif", LETTER_POINTS))
+        painter.drawText(
+            QRectF(
+                LETTER_GAP_PIXELS * 2,
+                0.0,
+                self.viewport().width(),
+                self.viewport().height() - LETTER_GAP_PIXELS * 2,
+            ),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom,
+            f"All undimensioned fillets are radius {note}",
+        )
+        painter.restore()
+
+    # Method `OutlineView.cut_offsets()`:
+    def cut_offsets(self, axis: int) -> list[tuple[float, float, float]]:
+        """Return the working view's pieces along an axis: each from
+        one cut to the next, and how far it is drawn shifted (#170).
+
+        Arguments:
+        * `axis` (`int`): `HIDE_X` or `HIDE_Y` (cuts across X, or Y).
+
+        Returns:
+        * (`list[tuple[float, float, float]]`): Each piece's low and
+          high ends, and its shift (drawing steps).
+        """
+        gap: float = GAP_PIXELS / max(self.zoom(), 1e-12)
+        cuts: list[tuple[float, float]] = sorted(
+            strip(self.drawing.points, hide)
+            for hide in self.drawing.hides
+            if hide.axis == axis
+        )
+        pieces: list[tuple[float, float, float]] = []
+        start: float = -FAR
+        shift: float = 0.0
+        low: float
+        high: float
+        for low, high in cuts:
+            pieces.append((start, low, shift))
+            shift -= high - low - gap
+            start = high
+        pieces.append((start, FAR, shift))
+        return pieces
+
+    # Method `OutlineView.draw_cut()`:
+    def draw_cut(self, painter: QPainter, exposed: QRectF) -> None:
+        """Draw the working view: the drawing again, piece by piece, each
+        shifted to close up the hidden stretches, a gap at each cut with
+        a long break line on each side (#170).
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, in scene coordinates.
+        * `exposed` (`QRectF`): What is shown (cleared first).
+        """
+        painter.fillRect(exposed, QColor(theme.colors().paper))
+        across_x: list[tuple[float, float, float]] = self.cut_offsets(HIDE_X)
+        across_y: list[tuple[float, float, float]] = self.cut_offsets(HIDE_Y)
+        left: float
+        right: float
+        dx: float
+        for left, right, dx in across_x:
+            bottom: float
+            top: float
+            dy: float
+            for bottom, top, dy in across_y:
+                source: QRectF = QRectF(
+                    left, bottom, right - left, top - bottom
+                )
+                # Clipped to its piece: items reaching into a hidden
+                # stretch are cut there, not drawn on across the gap.
+                painter.save()
+                painter.setClipRect(source.translated(dx, dy))
+                self.scene().render(
+                    painter,
+                    source.translated(dx, dy),
+                    source,
+                    Qt.AspectRatioMode.IgnoreAspectRatio,
+                )
+                painter.restore()
+        self.draw_breaks(painter, across_x, across_y)
+
+    # Method `OutlineView.draw_breaks()`:
+    def draw_breaks(
+        self,
+        painter: QPainter,
+        across_x: list[tuple[float, float, float]],
+        across_y: list[tuple[float, float, float]],
+    ) -> None:
+        """Draw a long break line on each side of every cut: straight,
+        with a zigzag in its middle, the two meshing (#170); only where
+        the cut crosses the part, edge to edge, stopping at another
+        cut's gap (#185).
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, in scene coordinates.
+        * `across_x` (`list[tuple[float, float, float]]`): The pieces
+          along X, from `cut_offsets()`.
+        * `across_y` (`list[tuple[float, float, float]]`): Along Y.
+        """
+        pen: QPen = QPen(QColor(theme.colors().ink), THIN_PIXELS)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        hide: Hide
+        for hide in self.drawing.hides:
+            pieces: list[tuple[float, float, float]] = (
+                across_y if hide.axis == HIDE_Y else across_x
+            )
+            others: list[tuple[float, float, float]] = (
+                across_x if hide.axis == HIDE_Y else across_y
+            )
+            holes: list[tuple[float, float]] = [
+                strip(self.drawing.points, other)
+                for other in self.drawing.hides
+                if other.axis != hide.axis
+            ]
+            # Each side of the cut where it really is, then shifted
+            # with its piece.
+            side: float
+            for side in strip(self.drawing.points, hide):
+                at: float = side + shift_at(pieces, side)
+                start: float
+                end: float
+                for start, end in minus(
+                    inside_spans(
+                        self.drawing.points,
+                        hide.axis,
+                        side,
+                        self.drawing.revolve,
+                    ),
+                    holes,
+                ):
+                    shift: float = shift_at(others, (start + end) / 2.0)
+                    painter.drawPath(
+                        self.zigzag(hide.axis, at, start + shift, end + shift)
+                    )
+            self.draw_esses(painter, hide, pieces, others)
+
+    # Method `OutlineView.draw_esses()`:
+    def draw_esses(
+        self,
+        painter: QPainter,
+        hide: Hide,
+        pieces: list[tuple[float, float, float]],
+        others: list[tuple[float, float, float]],
+    ) -> None:
+        """End each dimension line a cut chops with a small S on each
+        side of the gap, the same way round, so the hump of one matches
+        the valley of the other (#185).
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, pen set.
+        * `hide` (`Hide`): The cut.
+        * `pieces` (`list[tuple[float, float, float]]`): The pieces
+          along the cut's axis.
+        * `others` (`list[tuple[float, float, float]]`): Across it.
+        """
+        measure: DimensionItem
+        for measure in self.measures:
+            if self.drawing.dimensions[measure.index].kind in (ANGLE, RADIUS):
+                continue
+            start: QPointF
+            end: QPointF
+            _, _, start, end = measure.ends()
+            first: float = start.y() if hide.axis == HIDE_Y else start.x()
+            last: float = end.y() if hide.axis == HIDE_Y else end.x()
+            side: float
+            for side in strip(self.drawing.points, hide):
+                if (first - side) * (last - side) >= 0.0:
+                    continue  # The line does not cross this side.
+                meets: QPointF = start + (end - start) * (
+                    (side - first) / (last - first)
+                )
+                across_at: float = (
+                    meets.x() if hide.axis == HIDE_Y else meets.y()
+                )
+                painter.drawPath(
+                    self.ess(
+                        hide.axis,
+                        side + shift_at(pieces, side),
+                        across_at + shift_at(others, across_at),
+                    )
+                )
+
+    # Method `OutlineView.ess()`:
+    def ess(self, axis: int, at: float, across_at: float) -> QPainterPath:
+        """Return a small S ending a dimension line at a cut's side: it
+        lies across the line (#187), its middle exactly at the line's
+        end (#188); the same shape on both sides, so the hump of one
+        faces the valley of the other.
+
+        Arguments:
+        * `axis` (`int`): The cut's axis (`HIDE_Y`: the dimension line
+          runs along Y, the S lies along X).
+        * `at` (`float`): The cut's side, along the axis.
+        * `across_at` (`float`): The dimension line, across it.
+
+        Returns:
+        * (`QPainterPath`): The S.
+        """
+        long: float = ESS_PIXELS / max(self.zoom(), 1e-12)
+        wide: float = long / 2.0
+
+        # Function `point()`:
+        def point(along: float, off: float) -> QPointF:
+            """Return a point along the line and off to its side."""
+            return (
+                QPointF(across_at + off, at + along)
+                if axis == HIDE_Y
+                else QPointF(at + along, across_at + off)
+            )
+
+        # Across the line, like a small break line (#187), its middle
+        # exactly at the line's end (#188): the same way round on either
+        # side.
+        path: QPainterPath = QPainterPath(point(0.0, -long))
+        path.cubicTo(
+            point(wide, -long / 3.0),
+            point(-wide, long / 3.0),
+            point(0.0, long),
+        )
+        return path
+
+    # Method `OutlineView.zigzag()`:
+    def zigzag(
+        self, axis: int, at: float, near: float, far: float
+    ) -> QPainterPath:
+        """Return a long break line: straight across, with a zigzag in
+        its middle that goes the same way on both sides of a cut, so
+        the two mesh (#170), as the grid plate's sketch does.
+
+        Arguments:
+        * `axis` (`int`): The cut's axis (`HIDE_Y`: a line along X).
+        * `at` (`float`): Where the line is, along the axis.
+        * `near` (`float`): Where it starts, across.
+        * `far` (`float`): Where it ends.
+
+        Returns:
+        * (`QPainterPath`): The line.
+        """
+        half: float = ZIG_HALF_PIXELS / max(self.zoom(), 1e-12)
+        high: float = ZIG_HIGH_PIXELS / max(self.zoom(), 1e-12)
+        middle: float = (near + far) / 2.0
+        steps: list[tuple[float, float]] = [
+            (near, 0.0),
+            (middle - half, 0.0),
+            (middle - half / 3.0, high),
+            (middle + half / 3.0, -high),
+            (middle + half, 0.0),
+            (far, 0.0),
+        ]
+        path: QPainterPath = QPainterPath()
+        index: int
+        along: float
+        off: float
+        for index, (along, off) in enumerate(steps):
+            point: QPointF = (
+                QPointF(along, at + off)
+                if axis == HIDE_Y
+                else QPointF(at + off, along)
+            )
+            if index == 0:
+                path.moveTo(point)
+            else:
+                path.lineTo(point)
+        return path
+
+    # Method `OutlineView.shade_hides()`:
+    def shade_hides(self, painter: QPainter, _rect: QRectF) -> None:
+        """Shade each hide strip across the outline, with a margin, so
+        its sides can be reached (#173): hatched, so it is told by more
+        than its color.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, in scene coordinates.
+        * `_rect` (`QRectF`): What is shown.
+        """
+        quiet: QColor = QColor(theme.colors().quiet)
+        pen: QPen = QPen(quiet, THIN_PIXELS)
+        pen.setCosmetic(True)
+        painter.save()
+        painter.setPen(pen)
+        painter.setBrush(QBrush(quiet, Qt.BrushStyle.BDiagPattern))
+        hide: Hide
+        for hide in self.drawing.hides:
+            low: float
+            high: float
+            low, high = strip(self.drawing.points, hide)
+            near: float
+            far: float
+            near, far = across(self.drawing.points, hide)
+            painter.drawRect(
+                QRectF(near, low, far - near, high - low)
+                if hide.axis == HIDE_Y
+                else QRectF(low, near, high - low, far - near)
+            )
+        painter.restore()
 
     # Method `OutlineView.drawBackground()`:
     def drawBackground(
@@ -2228,7 +3522,8 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
       The mode bar's buttons, by their word (`"Grid"`, `"Fit"`, ...).
     * `keys` (`dict[str, QShortcut]`): Each button's key, by its word.
     * `drawing` (`Drawing`): The outline being drawn.
-    * `problem` (`str`): The letters' first problem ("" if none).
+    * `problems` (`QLabel`): The letters' problems, a line each, red,
+      right under the table (#141).
     * `splitter` (`QSplitter`): The drawing over the table.
     * `status` (`QLabel`): The last refusal, at the bar's end.
     * `table` (`QTableWidget`): The letters, a row each.
@@ -2266,14 +3561,10 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         self.splitter: QSplitter = QSplitter(Qt.Orientation.Vertical)
         self.splitter.addWidget(self.view)
         self.table: QTableWidget = QTableWidget(0, len(COLUMNS))
-        self.table.setHorizontalHeaderLabels([title for title, _ in COLUMNS])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setItemDelegate(LiveDelegate(self))
-        self.splitter.addWidget(self.table)
+        self.problems: QLabel = QLabel("")
+        self.splitter.addWidget(self.letters_area())
         self.splitter.setSizes([450, 150])
         layout.addWidget(self.splitter)
-        self.problem: str = ""
         self.buttons: dict[str, QPushButton] = {}
         self.keys: dict[str, QShortcut] = {}
         word: str
@@ -2286,7 +3577,10 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             ("Dim. Kind", "K"),
             ("Angle", "A"),
             ("Revolve", "R"),
-            ("Fit", "F"),
+            ("Fillet", "F"),
+            ("Hide", "H"),
+            ("Overview", "O"),
+            ("Fit", "Home"),
             ("Undo", "Ctrl+Z"),
             ("Redo", "Ctrl+Shift+Z"),
             ("New Letter", "L"),
@@ -2305,6 +3599,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             self.buttons[word].setCheckable(True)
             self.buttons[word].setChecked(True)
         self.buttons["Revolve"].setCheckable(True)
+        self.buttons["Overview"].setCheckable(True)
         # What each button does.
         does: dict[str, Callable[[], None]] = {
             "Grid": self.view.toggle_grid,
@@ -2315,6 +3610,9 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             "Dim. Kind": self.view.cycle_kind,
             "Angle": self.view.angle_selected,
             "Revolve": self.toggle_revolve,
+            "Fillet": self.fillet_selected,
+            "Hide": self.view.start_hide,
+            "Overview": self.toggle_overview,
             "Undo": self.view.undo,
             "Redo": self.view.redo,
             "New Letter": self.new_letter,
@@ -2323,18 +3621,59 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         for word, action in does.items():
             self.buttons[word].clicked.connect(action)
         self.status: QLabel = QLabel("")
+        self.status.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         mode_bar.addWidget(self.status, 1)
         self.view.scene().changed.connect(self.show_message)
         self.view.letters_changed = self.fill_table
         self.view.released = self.save
+        self.view.cleared = self.table.clearSelection
         self.fill_table()
         self.table.itemChanged.connect(self.letter_edited)
         self.show_message()
         self.resize(800, 600)
 
+    # Method `OutlineEditor.letters_area()`:
+    def letters_area(self) -> QWidget:
+        """Return the letters' table with its problems right under it,
+        in red, wrapped so the window never widens (#141).
+
+        Returns:
+        * (`QWidget`): The table and the problem line.
+        """
+        self.table.setHorizontalHeaderLabels([title for title, _ in COLUMNS])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setItemDelegate(LiveDelegate(self))
+        # One click on a cell edits it, so typing goes into the cell:
+        # a key typed onto a cell not being edited half-started an edit
+        # and could fire a button's key (`n` of `in`: [Dimension]).
+        triggers: type[QAbstractItemView.EditTrigger] = (
+            QAbstractItemView.EditTrigger
+        )
+        self.table.setEditTriggers(
+            triggers.CurrentChanged
+            | triggers.SelectedClicked
+            | triggers.DoubleClicked
+            | triggers.EditKeyPressed
+        )
+        self.problems.setWordWrap(True)
+        self.problems.setStyleSheet(f"color: {theme.colors().problem}")
+        area: QWidget = QWidget()
+        stack: QVBoxLayout = QVBoxLayout(area)
+        stack.setContentsMargins(0, 0, 0, 0)
+        stack.addWidget(self.table)
+        stack.addWidget(self.problems)
+        return area
+
     # Method `OutlineEditor.fill_table()`:
     def fill_table(self) -> None:
-        """Show every letter, a row each, its problems marked."""
+        """Show every letter, a row each, its problems marked.
+
+        No cell is left current: one would be edited at once (a click
+        edits), taking the keys the buttons answer to.
+        """
         self.table.blockSignals(True)
         self.table.setRowCount(len(self.drawing.letters))
         row: int
@@ -2346,7 +3685,9 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
                 self.table.setItem(
                     row, column, QTableWidgetItem(getattr(letter, attribute))
                 )
+        self.table.setCurrentCell(-1, -1)
         self.table.blockSignals(False)
+        self.view.setFocus()
         self.check_letters()
 
     # Method `OutlineEditor.new_letter()`:
@@ -2388,6 +3729,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         problems: list[str] = []
         row: int
         letter: Letter
+        trouble: dict[str, str] = self.fillet_trouble()
         for row, letter in enumerate(self.drawing.letters):
             kinds: set[str] = {
                 "angle" if dimension.kind == ANGLE else "length"
@@ -2400,7 +3742,8 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
                 (letter_problem(self.drawing.letters, row), 0),
                 (
                     value_problem(letter.default)
-                    or use_problem(letter.letter, letter.default, kinds),
+                    or use_problem(letter.letter, letter.default, kinds)
+                    or trouble.get(letter.letter, ""),
                     2,
                 ),
             ):
@@ -2409,15 +3752,62 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
                     cell.setBackground(bad if found else QColor(0, 0, 0, 0))
                     cell.setToolTip(found)
                 if found:
-                    problems.append(f"{letter.letter}: {found}")
+                    # A message naming its letter first is not given it
+                    # twice (#143).
+                    problems.append(
+                        found
+                        if found.startswith(f"{letter.letter} ")
+                        else f"{letter.letter}: {found}"
+                    )
         self.table.blockSignals(False)
-        self.problem = problems[0] if problems else ""
+        self.problems.setText("\n".join(problems))
         self.show_message()
+
+    # Method `OutlineEditor.fillet_trouble()`:
+    def fillet_trouble(self) -> dict[str, str]:
+        """Find the fillets too big for their edges (#127), mark them
+        in the drawing, and return each one's problem by letter.
+
+        Returns:
+        * (`dict[str, str]`): The first problem of each fillet letter.
+        """
+        self.view.trouble = fillet_problems(
+            self.drawing.points, self.drawing.letters, self.drawing.dimensions
+        )
+        self.view.follow()  # The drawing follows the values (#148).
+        letters: dict[int, str] = {
+            dimension.start: dimension.letter
+            for dimension in self.drawing.dimensions
+            if dimension.kind == RADIUS
+        }
+        trouble: dict[str, str] = {}
+        corner: int
+        message: str
+        for corner, message in self.view.trouble.items():
+            trouble.setdefault(letters[corner], message)
+        return trouble
 
     # Method `OutlineEditor.toggle_snap()`:
     def toggle_snap(self) -> None:
         """Turn snapping on or off, as [Snap] now shows."""
         self.view.snap_on = self.buttons["Snap"].isChecked()
+
+    # Method `OutlineEditor.fillet_selected()`:
+    def fillet_selected(self) -> None:
+        """[Fillet]: by the letter whose row is selected, if any."""
+        rows: list[int] = sorted(
+            {index.row() for index in self.table.selectedIndexes()}
+        )
+        letters: list[Letter] = self.drawing.letters
+        self.view.fillet_selected(
+            letters[rows[0]].letter if rows and rows[0] < len(letters) else ""
+        )
+
+    # Method `OutlineEditor.toggle_overview()`:
+    def toggle_overview(self) -> None:
+        """[Overview]: switch views, the button showing which."""
+        self.view.toggle_overview()
+        self.buttons["Overview"].setChecked(self.view.overview)
 
     # Method `OutlineEditor.toggle_revolve()`:
     def toggle_revolve(self) -> None:
@@ -2434,14 +3824,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             Qt.MouseButton.NoButton
         ):
             return
-        text: str = outline_text(
-            Outline(
-                list(self.drawing.points),
-                list(self.drawing.letters),
-                list(self.drawing.dimensions),
-                self.drawing.revolve,
-            )
-        )
+        text: str = outline_text(self.drawing)
         if text != self.saved:
             self.path.write_text(text, encoding="utf-8")
             self.saved = text
@@ -2458,8 +3841,9 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         self.buttons["Redo"].setEnabled(bool(history.undone))
         # [Revolve] shows the drawing's state (a refusal, an undo).
         self.buttons["Revolve"].setChecked(self.view.drawing.revolve)
+        self.buttons["Overview"].setChecked(self.view.overview)
         self.save()
-        self.status.setText(self.view.message or self.problem)
+        self.status.setText(self.view.message)
         self.status.setStyleSheet(f"color: {theme.colors().problem}")
 
 
@@ -2496,7 +3880,12 @@ def drawing_from(path: Path) -> Drawing:
         path.read_text(encoding="utf-8"), str(path)
     )
     return Drawing(
-        outline.points, outline.letters, outline.dimensions, outline.revolve
+        outline.points,
+        outline.letters,
+        outline.dimensions,
+        outline.revolve,
+        outline.note_radius,
+        outline.hides,
     )
 
 

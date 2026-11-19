@@ -14,6 +14,7 @@ yet, and a dimension between two coordinates already tied another way
 is one too many (over-dimensioned).
 """
 
+import re
 from dataclasses import dataclass, field
 
 # The origin, as a point of a dimension (corners are 0 and up).
@@ -38,6 +39,12 @@ AXES: tuple[int, ...] = (X_AXIS, Y_AXIS)
 # edge leaves, or an axis); `offset` is its arc's radius, `along` the letter's
 # place along the arc.  Not in `AXIS` either.
 ANGLE: str = "angle"
+
+# A fillet: its corner rounded (`start` and `end` the corner); `offset`
+# is its radius as drawn.  Fillets sharing the drawing's note letter
+# show no dimension of their own (#116).  Not in `AXIS`: the corner
+# stays where its edges meet, as in SolidCraft.
+RADIUS: str = "radius"
 
 # What [Dim. Kind] turns each kind into.
 NEXT_KIND: dict[str, str] = {
@@ -224,7 +231,9 @@ class Solution:
 
 # Function `solve()`:
 def solve(
-    points: list[tuple[float, float]], dimensions: list[Dimension]
+    points: list[tuple[float, float]],
+    dimensions: list[Dimension],
+    drawn: bool = True,
 ) -> Solution:
     """Find each corner's coordinates from the dimensions.
 
@@ -244,6 +253,10 @@ def solve(
     * `points` (`list[tuple[float, float]]`):
       The corners as drawn, for the signs.
     * `dimensions` (`list[Dimension]`): The dimensions.
+    * `drawn` (`bool`): Whether what the drawing says counts too:
+      corners on an axis (#23), level and upright edges (#100).
+      Without it, only the dimensions fix coordinates (what pins a
+      drag, #176).
 
     Returns:
     * (`Solution`): The formulas, and the extra dimensions.
@@ -253,7 +266,7 @@ def solve(
         solution.x,
         solution.y,
     )
-    _seed(points, known)
+    _seed(points if drawn else [], known)
 
     # Pass after pass, until nothing more is found: the dimensions,
     # then the edges whose directions angles gave.
@@ -261,7 +274,7 @@ def solve(
     used: set[int] = set()
     # Level and upright edges first: a dimension saying again what
     # one says is the one too many.
-    level: list[Dimension] = _level_edges(points)
+    level: list[Dimension] = _level_edges(points) if drawn else []
     every: list[Dimension] = level + dimensions
     found: bool = True
     while found:
@@ -462,10 +475,16 @@ def _along_length(
                 if _drawn(points, start, want) >= _drawn(points, end, want)
                 else "-"
             )
-            across: str = f"({known[have][start]}) - ({known[have][end]})"
+            across: str = difference(
+                str(known[have][start]), str(known[have][end])
+            )
+            reach: str = (
+                dimension.letter
+                if across == "0"
+                else f"sqrt({dimension.letter}^2 - {grouped(across)}^2)"
+            )
             known[want][start] = Formula(
-                text=f"{known[want][end]} {side} "
-                f"sqrt({dimension.letter}^2 - ({across})^2)"
+                text=total(str(known[want][end]), side, reach)
             )
             return True
     return all(start in table for table in known)
@@ -531,13 +550,114 @@ def _along_edge(
         x0: Formula = known[0][full]
         y0: Formula = known[1][full]
         if other in known[0] and other not in known[1]:
-            known[1][other] = Formula(
-                text=f"{y0} + (({known[0][other]}) - ({x0})) * tan({way})"
+            rise: str = product(
+                difference(str(known[0][other]), str(x0)), f"tan({way})"
             )
+            known[1][other] = Formula(text=total(str(y0), "+", rise))
             return True
         if other in known[1] and other not in known[0]:
-            known[0][other] = Formula(
-                text=f"{x0} + (({known[1][other]}) - ({y0})) / tan({way})"
-            )
+            run: str = difference(str(known[1][other]), str(y0))
+            over: str = "0" if run == "0" else f"{grouped(run)} / tan({way})"
+            known[0][other] = Formula(text=total(str(x0), "+", over))
             return True
     return False
+
+
+# Tidy formulas (#81): no `0 +`, no `- 0`, and brackets only where
+# they change the meaning, so `R * tan(90 deg - A)` and not
+# `0 + ((R) - (0)) * tan(90 deg - A)`.
+TOKEN: re.Pattern[str] = re.compile(r"[A-Za-z0-9_.]+")
+CALL: re.Pattern[str] = re.compile(r"[A-Za-z_]\w*\(")
+
+
+# Function `grouped()`:
+def grouped(text: str) -> str:
+    """Return a formula ready to be multiplied, divided or squared:
+    in brackets unless it is a letter, a number or one call.
+
+    Arguments:
+    * `text` (`str`): The formula.
+
+    Returns:
+    * (`str`): It, bracketed if need be.
+    """
+    if TOKEN.fullmatch(text) or _one_call(text):
+        return text
+    return f"({text})"
+
+
+# Function `_one_call()`:
+def _one_call(text: str) -> bool:
+    """Return whether a formula is one call, `name(...)`, its brackets
+    closing only at the end.
+
+    Arguments:
+    * `text` (`str`): The formula.
+
+    Returns:
+    * (`bool`): Whether it is.
+    """
+    opening: re.Match[str] | None = CALL.match(text)
+    if opening is None or not text.endswith(")"):
+        return False
+    depth: int = 0
+    index: int
+    mark: str
+    for index, mark in enumerate(text[opening.end() - 1 :]):
+        depth += {"(": 1, ")": -1}.get(mark, 0)
+        if depth == 0:
+            return opening.end() + index == len(text)
+    return False
+
+
+# Function `total()`:
+def total(left: str, sign: str, right: str) -> str:
+    """Return `left + right` or `left - right`, tidily.
+
+    Arguments:
+    * `left` (`str`): A formula.
+    * `sign` (`str`): `"+"` or `"-"`.
+    * `right` (`str`): A formula.
+
+    Returns:
+    * (`str`): The sum or difference.
+    """
+    if right == "0":
+        return left
+    if left == "0":
+        return right if sign == "+" else f"-{grouped(right)}"
+    if sign == "-" and any(mark in right for mark in "+-"):
+        right = f"({right})"
+    return f"{left} {sign} {right}"
+
+
+# Function `difference()`:
+def difference(left: str, right: str) -> str:
+    """Return `left - right`, tidily (`0` when they are the same).
+
+    Arguments:
+    * `left` (`str`): A formula.
+    * `right` (`str`): A formula.
+
+    Returns:
+    * (`str`): The difference.
+    """
+    if left == right:
+        return "0"
+    return total(left, "-", right)
+
+
+# Function `product()`:
+def product(left: str, right: str) -> str:
+    """Return `left * right`, tidily (`0` when either is).
+
+    Arguments:
+    * `left` (`str`): A formula.
+    * `right` (`str`): A formula.
+
+    Returns:
+    * (`str`): The product.
+    """
+    if "0" in (left, right):
+        return "0"
+    return f"{grouped(left)} * {grouped(right)}"

@@ -815,3 +815,412 @@ still needs its own dimension (no "horizontal edge" rule, #100).
 
 #110 the flat tip looks right; #111 5% of the radius kept.  #102
 commit and push.  #109: the user asked what #S6 (radii) is.
+
+## 2026-11-18: #108 the tip cutting built in: `gui/outline_solid.py`
+
+* The user: #112 #S6 before #S5; #113 key for [Fillet] open (`F` Fit
+  and `S` Snap are taken; the letter is only the shortcut, the button
+  shows the word); #114 a ball end (radius using up an edge) allowed;
+  #108 build the tip cutting in now; #81 parked until Claude asks.
+* New `scraftcam/gui/outline_solid.py` (no Qt): `TIP_FLAT` 0.05,
+  `ZERO`, `corner_expressions()` (refuses a floating corner),
+  `flatten_tips()`, `letter_value()`, `build(solidcraft, outline,
+  name)` (revolved only so far; XZ plane, about Z), `main()`:
+  `python3 -m scraftcam.gui.outline_solid FILE (PORT | headless)`.
+  `tests/test_outline_solid.py` (5, one headless SolidCraft build
+  with a live change); checkers clean.
+* Next: #S6, once #113's key is chosen.
+
+## 2026-11-18: #S6 chunk 1: [Fillet (F)]
+
+* The user: #113 (c): [Fillet (F)], Fit moved to `Home`; #115 [Show
+  in SolidCraft] with #S7; #116 the chunk order agreed, plus the
+  drafting note "All undimensioned fillets are radius RF" (maybe a
+  second for exterior fillets).
+* `dimensions.RADIUS` (`start` = `end` = the corner, `offset` the
+  radius as drawn); `Drawing.note_radius`, `Snapshot.note_radius`,
+  `Outline.note_radius` (`note_radius = "A"` in the file, read and
+  checked).  `OutlineView.fillet_selected()` (selected corners not yet
+  rounded get a radius dimension by the note letter, made the first
+  time: "Fillet radius", `1/16 in`), `drawn_radius()` (a fifth of the
+  shorter edge).  `fillet_radii()`, `fillet_ends()`
+  (`_tangent_reach()`, capped at the edges), `rounded_path()`,
+  `_arc_to()`: the outline drawn with true tangent arcs; arrowheads
+  end where the fillets begin.  Radius dimensions draw nothing yet,
+  their circles hidden; `K` skips them.  `test_fillet`; 50 tests
+  (`test_outline_editor`, `test_outline_file`, `test_outline_solid`,
+  `test_dimensions`) pass; checkers clean; picture checked (two
+  outside, one inside fillet).
+* Next: chunk 2, the note on screen, and a fillet's own radius
+  dimension (leader from the center).
+
+## 2026-11-18: #117-#121 answered
+
+#117 [Fillet] works (the user clicks buttons, not keys); the user
+asks about dashed lines showing the sharp polygon, to anchor the
+dimension lines.  #118 the note in the lower left: OK.  #119 own
+radius by [Dimension] on one corner, [Delete] back to the note: OK.
+#120 a fixed note letter: the user suggests `DFR` (Default Fillet
+Radius).  #121 not understood; explained again in the conversation.
+
+## 2026-11-18: #S6 chunk 2a: `UDF`, dashed corners, the note
+
+* The user: #117/#122 dashed lines at filleted corners only; #120
+  the note letter is `UDF` ("Undimensioned Fillet Radius", matching
+  the note); #123 no fillets expected on revolved tools (vises etc.
+  will have them); #121 taken as recommended.
+* `NOTE_LETTER` "UDF" (the next free letter only if `UDF` is taken),
+  name "Undimensioned fillet radius"; `FILLET_SHARE` 0.2 and
+  `drawn_radius(points, corner)`: a fillet's drawn size follows its
+  corners (the radius dimension's `offset` no longer used for it).
+  `OutlineItem.paint()` draws thin dashed lines from each arc's ends
+  to the sharp corner; `OutlineView.drawForeground()` writes "All
+  undimensioned fillets are radius UDF" lower left while any fillet
+  uses the note.  34 editor tests pass; checkers clean; picture
+  checked.  Next: chunk 2b, a fillet's own radius (#119).
+
+## 2026-11-18: #124/#129 marks: hollow, filled when selected
+
+* The user: corner squares were filled (paper or yellow) while edge
+  circles were hollow; make both hollow, filled only when selected;
+  never tell things by color alone (color blindness).  A circle is
+  only a corner not yet made.  #125 fillet sizes bound from the
+  letters table (corners, a row, [Fillet]; again to remove) liked;
+  #126 a radius label is the letter alone; #128 not reproducible;
+  #130 #119 dropped (never built; #125 replaces it).
+* `OutlineView.restyle()`: squares, edge circles and dimension circles
+  hollow with an ink ring, filled with ink when selected; a corner
+  not dimensioned yet has a dashed ring in the warning color; the
+  origin a filled square, its ring thick when selected.  Tests check
+  fills and dashes, not colors.  34 editor tests pass; checkers clean;
+  picture checked.  Not changed yet: a selected dimension line or arc
+  is still told by the highlight color only (#131).
+* Next: chunk B, #125 binding fillets to letters.
+
+## 2026-11-18: Polishing: #133 solid warning ring; #131 thick selected lines
+
+* #133 (the user): the dashed yellow squares showed two gaps; now a
+  solid 3 px ring in the warning color (thickness the color-free
+  cue), mitered.  Squares and circles are both 9 px (`SQUARE_PIXELS`,
+  `HANDLE_PIXELS`); a square only looks bigger.
+* #131: a selected dimension line or arc is colored and drawn
+  `CHOSEN_PIXELS` 2.5 thick (`DimensionItem.pen()`, split out of
+  `paint()`).  #132, #127 agreed.  #125 (binding) waits for more
+  polishing.  34 editor tests pass; checkers clean; picture checked.
+
+## 2026-11-18: #S6 chunk B: fillets bound to letters (#125, #126, #132)
+
+* The user: #134 marks look great; #135 squares stay 9 px (a little
+  more prominent is good); #136 selections stay until empty space is
+  clicked.
+* `OutlineView.fillet_selected(letter)`: the selected corners get the
+  letter (the table's selected row, via `OutlineEditor.fillet_selected()`),
+  else the note letter (`note_letter()`, `UDF` made the first time);
+  corners already filleted change letter; if every selected corner
+  already has that letter, they are made sharp again (#125).  An
+  angle letter (`is_angle()`: on an angle, or a deg/rad default) is
+  refused (#132).  `OutlineView.cleared` hook: an empty-space click
+  clears the table's row too.
+* #126: a fillet on its own letter shows the letter past its sharp
+  corner, on the line from its center through its arc's middle
+  (`fillet_middle()`, `_fillet_center()` shared with `_arc_to()`,
+  `DimensionItem.paint_radius()`, `boundingRect()` around it); note
+  fillets show nothing.  Picture checked.
+* `test_fillet` reworked, `test_fillet_letters`; 35 editor tests pass;
+  checkers clean.  Next: chunk C, fillets too big for their edges
+  (#127).
+
+## 2026-11-18: #S6 chunk C: fillets too big (#127, #139); #141 problems under the table
+
+* The user: #141 table problems right under their entry, not in the
+  bar (the window grew); #137/#138 binding works; #139 red both on
+  the drawing and in the table (the user must see how to fix it).
+* New `scraftcam/gui/values.py` (no Qt): `letter_values()` (mm,
+  radians), `evaluate()` (an `ast` reader: numbers, letters, `deg`,
+  `mm`, `pi`, `+ - * / ^`, `sin cos tan atan sqrt abs`; anything
+  else refused), `real_corners()`, `fillet_problems()` (each edge's
+  two fillets' reach `r / tan(half angle)` against its length,
+  `FIT_SLACK` 1e-9 mm so using an edge up is allowed, #114; message
+  in the first fillet letter's unit by `Length.from_mm()`).
+  `tests/test_values.py` (3).
+* Editor: `letters_area()` (the table, then `problems`, a red
+  wrapped `QLabel` with every problem, a line each); `self.problem`
+  gone; the bar's `status` has an `Ignored` width (never widens the
+  window).  `fillet_trouble()` sets `OutlineView.trouble` (by
+  corner): a red 3 px ring on the square, a red own-letter label; the
+  letter's Default cell red with the reason.  `test_fillet_too_big`;
+  tests moved from `status` to `problems`.  56 tests
+  (`test_outline_editor`, `test_values`, `test_outline_file`,
+  `test_outline_solid`, `test_dimensions`, `test_letters`) pass;
+  checkers clean; picture checked.  Small: the line reads "UDF: UDF
+  need ..." (#143).
+* Next: chunk D, fillets built in SolidCraft (#140).
+
+## 2026-11-18: #143 done; #142, #145 explained
+
+#143: a table problem already starting with its letter is not
+prefixed again ("UDF need 3/4 in ...").  #141, #144 agreed (commit
+after chunk D).  #142: the user thought typing a size needs a
+dimension entry; sizes are the letters' Default cells (double-click).
+#145: the user has seen no problems under the table yet.  #140 (flat
+outlines in SolidCraft: a thickness letter now, or wait for #S8)
+asked again.
+
+## 2026-11-18: #147 "Value"; #148 after #S6; #140 waits for #S8
+
+* #147: the table's third column is "Value" (the `Letter.default`
+  attribute and the file's `default` key unchanged).
+* #148 (drawn from the values, to scale, #28) after #S6; until then a
+  changed value does not change the drawing (the user's #142).
+* #140 (b): fillets in SolidCraft wait for #S8 (extruding class);
+  leftovers may go to a new #S9 later.  So #S6 is chunks A-C; done
+  once the user has checked chunk C (#142).
+* #81 explained again (formula tidying).
+
+## 2026-11-18: Typing into the table; work reordered
+
+* #150 (the user, standing rule, also in memory): reorder Steps and
+  chunks freely; deal now with what blocks use and testing, defer the
+  rest to later Steps.
+* #142 the user could not make a typed value stick.  Found offscreen:
+  a key typed on a selected but not edited cell half-started an edit
+  (letter `3`, cell still `1 in`) and letters in the text fired button
+  keys (`n` of `in` is [Dimension]).  Now one click on a cell edits it
+  (`setEditTriggers(CurrentChanged | SelectedClicked | DoubleClicked |
+  EditKeyPressed)`); `test_click_and_type`.  37 editor tests pass.
+* Correction to the entry above: the checkpoint went in with
+  `test_live_typing` failing.  Fixed: `fill_table()` leaves no cell
+  current (a current cell would now be edited at once, taking the
+  buttons' keys) and gives the drawing the keyboard; [New Letter]
+  still edits the new Name cell on purpose.  `test_live_typing`
+  moves to the Value cell by `setCurrentCell()`.  58 tests (editor,
+  values, file, solid, dimensions, letters) pass; checkers clean.
+
+## 2026-11-18: The order from here (#150)
+
+Now: (1) #148 drawn from the values (the user cannot test chunk C,
+or see any value, until the drawing follows the table); (2) #81
+formula tidying (the same formulas, now on screen everywhere);
+(3) the user checks chunk C (#142), then commit #S6.  Deferred:
+SolidCraft fillets and flat outlines to #S8 (#140); #S5 SVG, #S7
+GUI tree after; leftovers to a new #S9.
+* The order as the user wants it written (issue numbers only, no
+  1-2-3): #81, then #148, then #142 (the user's check), then #156 git
+  commit.
+
+## 2026-11-18: #81 tidy formulas
+
+`dimensions.grouped()` (brackets unless a token or one call,
+`_one_call()` matching brackets), `total()`, `difference()`,
+`product()`; `_along_length()` and `_along_edge()` build with them.
+The drill's shoulder reads `R * tan(90 deg - A)` (was `0 + ((R) -
+(0)) * tan(90 deg - A)`); a length `sqrt(S^2 - (P - W)^2)`, below
+`-sqrt(...)`.  `test_tidy`; 61 tests (dimensions, solid, values,
+editor, file, letters) pass, the headless SolidCraft build too;
+checkers clean.  Next: #148.
+
+## 2026-11-18: #148 chunk 1: the drawing follows the values
+
+* #152, #153, #154 agreed.
+* `values.real_coordinates()` (each fixed coordinate in mm, partly
+  fixed corners too), `crosses()`/`_segments_cross()`.
+  `Drawing.scale` (steps per mm, chosen once by `first_scale()`: the
+  middle drawn/real ratio).  `OutlineView.apply_values()` (in
+  `follow()`): fixed coordinates to `real * scale`, the others as
+  drawn; nothing changes while a used letter is bad (`letters_bad()`),
+  a formula fails or edges cross (#154); squares moved with
+  `placing` set so their moves are not drags.  `PullSquare.itemChange()`
+  holds fixed coordinates (dragging them to change the value is
+  #152, next).  Table edits call `view.follow()`.
+* `letters._range_problem()`: a length used by a dimension must be
+  more than 0 (#154; `-2 in` had mirrored the rectangle).
+* `test_follows_values`; tests pass (editor, values, dimensions,
+  letters, file, solid); checkers clean.
+* Found (#157): drawn to scale, the drill (1/4 in by 4 in) is a thin
+  stick, its tip a few pixels: long thin parts need break lines (#9)
+  or "not to scale" dimensions.  Asked the user.
+
+## 2026-11-18: Hide strips (#157), chunk 1 part 1
+
+* The user's view (#157, #167, #168): mark boring stretches with
+  rectangles, as the grid plate's sketch did (`tool_models._Broken`,
+  `_zigzag()`); two views of one drawing: an overview (whole, to
+  scale, strips shaded) and a working view (strips cut out, long
+  break lines); strips are part of the drawing and its file.
+  [Hide (H)] lays one by dragging (#164); [Overview (O)] toggles
+  (#168); a strip covers straight stretches only: no corner, no
+  fillet arc; a radius change pushing an arc into a strip is declined
+  (#165); a strip hides more when values grow, the view unchanged
+  (#160 (a)); no break marks on dimension lines (#166).  Chunks are
+  Claude's to reshape (#169).
+* New `scraftcam/gui/hides.py` (no Qt): `Hide(axis, below, above,
+  low, high)` tied to the corners outside it, `strip()`, `lay()`
+  (refuses corners, fillet arcs, outside the outline).
+  `tests/test_hides.py` (2).  Checkers clean.
+
+## 2026-11-18: Hide strips, chunk 1 done
+
+* `Drawing` is now a subclass of `outline_file.Outline` (pylint found
+  the two duplicated; `Outline.points` defaults to `[]`,
+  `Drawing.__post_init__()` gives the triangle), so `save()` writes
+  the drawing itself.  `hides` in `Outline`, `Drawing`, `Snapshot`
+  (undo) and the file (`[[hides]]`: `axis` "x"/"y", `below`,
+  `above`, `low`, `high`; `_Reader.hides()` checks them).
+* Editor: [Hide (H)] (`OutlineView.start_hide()`: to the overview,
+  wait for a drag; press/move/release draw `band`; `lay_hide()`: wide
+  -> `HIDE_Y`, tall -> `HIDE_X`, fillet arcs passed to `lay()`; a
+  refusal in the bar) and [Overview (O)] (checkable,
+  `toggle_overview()`); `shade_hides()` hatches each strip right
+  across the view in the overview (from `drawForeground()`).
+* `test_hide` (the drag by mouse), file round trip and checks with
+  hides; tests pass (editor, file, hides, solid); checkers clean;
+  picture checked.  The working view does not cut strips out yet.
+* Next: chunk 2, the working view: strips cut out, long break lines.
+
+## 2026-11-18: #173 strips finite, resized and moved by circles
+
+* The user: #170 long break lines must mesh (peak in valley); #171
+  keep it simple, the wheel zooms to details: taken as dragging in
+  the overview only, the working view for looking and selecting
+  (not confirmed in words); #172 a gap of ~20 px; #173 endless strips
+  cannot be reached: make them finite; #174 the grid plate is Python
+  and hand SVG, not tried in the editor.
+* `StripHandle` (`low`, `high`, `whole`): circles on a strip's sides
+  and middle, overview only; a drag re-lays the strip by `lay()`
+  (refused over a corner or a fillet, the message in the bar);
+  `_snapped()` snaps where it lands (a move snaps its low side, width
+  kept); one change on release.  `OutlineView.grips`,
+  `fillet_arcs()`.  `shade_hides()` draws each strip across the
+  outline's box plus two grid steps.  `test_strip_circles`; tests
+  pass (editor, hides, file); checkers clean; picture checked.
+* Next: #170, the working view: strips cut out, meshing long break
+  lines, dimensions across a cut shortened.
+
+## 2026-11-18: #176 corners could not cross an axis
+
+The user could not drag a corner across the X or Y axis.  Cause:
+since #148 a known coordinate is held during a drag, and a corner on
+an axis is known by #23 (and one beside a level edge by #100), so a
+corner reaching an axis stuck.  Now `solve(..., drawn=False)` leaves
+out what the drawing says (axis seeds, level edges), and
+`OutlineView.pinned` (that solution) is what `PullSquare.itemChange()`
+holds: only dimensions pin a drag.  `test_drag_across_axes`; tests
+pass (editor, dimensions, values, solid); checkers clean.
+
+## 2026-11-18: #177 strip circles could not be found
+
+The user: corners drag freely now; a hide strip was made, but no
+circles to resize or move it.  Offscreen the circles existed and were
+shown, but on the triangle they sat at X = 0: the middle one under
+the origin's square, the others on the Y axis inside the hatching,
+small and hollow.  Now `GRIP_PIXELS` 11, placed in the strip's
+margin one grid step past the outline (right of it, or above for a
+top-to-bottom strip), with a paper inside so the hatching does not
+run through them.  Tests pass; checkers clean; picture checked.
+
+## 2026-11-18: #178 a strip resized on all four sides, moved from the middle
+
+The user: resize left/right/up/down, and a middle circle to move.
+`Hide.under`, `Hide.over` (how far past the outline it reaches across
+its axis, never below 0: it must cut right through the part, #180),
+`hides.across()`; in the file (`under`, `over`, default 1).
+`StripHandle` parts `low`, `high`, `under`, `over`, `whole` at the
+middles of the rectangle's sides and its middle; `whole` moves both
+ways; a side into the outline is refused ("A hide must reach right
+across the part.").  `lay_hide()` keeps the dragged rectangle's
+reach.  `shade_hides()` draws the rectangle as it is.  The local
+`across` in `dimension_between()` renamed `wide`.  Tests pass
+(editor, hides, file); checkers clean.
+
+## 2026-11-18: #180 hide regions reach past the part and its dimensions
+
+#181 all five circles work.  #180 (the user): a hide region must
+reach past the outline's box and its dimensions, up/down or
+left/right.  `OutlineView.reach(axis)` (outline box united with each
+dimension's line ends and angle arcs); `lay_hide()` makes a new
+region reach at least a grid step past it; `StripHandle` refuses a
+side inside it ("A hide must reach past the part and its
+dimensions."); `proposed()` split out of `mouseMoveEvent()`.  Tests
+pass; checkers clean.  Next: #170, the working view.
+
+## 2026-11-18: #170 the working view
+
+* `OutlineView.cut_offsets(axis)` (pieces between cuts, each shifted
+  by the stretches hidden below it less `GAP_PIXELS` 20 per cut),
+  `draw_cut()` (from `drawForeground()` out of the overview: paper
+  over the normal drawing, then the scene rendered piece by piece,
+  each clipped to itself, X pieces times Y pieces so crossing strips
+  leave four corners), `draw_breaks()` and `zigzag()` (a long break
+  line on each side of a cut, the zigzag the same way on both so
+  they mesh, `ZIG_HALF_PIXELS` 10, `ZIG_HIGH_PIXELS` 6), `shift_at()`.
+  The working view with strips is look and pan only
+  (`setInteractive()` in `restyle()`; [Overview] and [Hide]
+  restyle).
+* Found and fixed: a tall drag over a long upright shank was taken
+  as hiding width and refused; `lay_hide()` now decides by what the
+  rectangle reaches across (the part's width: hide height; its
+  height: hide width; else wide hides height).  Without clipping,
+  items reaching into a hidden stretch were drawn across the gap.
+* `test_working_view`; 68 tests (editor, hides, file, values,
+  dimensions, letters, solid) pass; checkers clean; picture of a real
+  1/4 x 4 in drill checked.  Open: a dimension's letter inside a
+  hidden stretch is not drawn (#182); no grid or axes in the working
+  view (#183).
+
+## 2026-11-18: #185 break lines edge to edge; S ends on dimension lines
+
+The user (drafting practice, the grid plate's SVG): long break lines
+end at the outline's edges (and at another hide's gap); a dimension
+line a cut chops ends in a small S on each side, hump facing valley.
+`hides.inside_spans()` (where a line across is inside the outline,
+even-odd, a revolved outline's mirror counted, joined), `minus()`
+(less other hides' stretches); `draw_breaks()` draws each side of a
+cut where it really is (spans at that side), shifted with its piece,
+one zigzag per span.  `draw_esses()`/`ess()`: an S (cubic,
+`ESS_PIXELS` 9) wholly on its own side of the gap, the same shape on
+both (first try straddled the gap and the two S's met, hiding it).
+`test_spans`; `test_working_view` adds a dimension across the cut.
+Tests pass (editor, hides, file, values, dimensions, letters, solid);
+checkers clean; pictures checked.
+
+## 2026-11-18: #187 the S's lie across the dimension line
+
+The user: the long break lines match perfectly; the S's were turned
+90 degrees the wrong way; "one fix away from basically being done
+with hide zones".  `ess()` now lies across the line (like a small
+break line), its middle on the line, wholly on its own side of the
+gap, the same shape on both.  Test checks it is wider than tall.
+Tests pass; checkers clean; picture checked.
+
+## 2026-11-18: #188 the S's middle at the line's end
+
+The user: the S's middle must be exactly at the end of the dimension
+line (it went over a little).  `ess(axis, at, across_at)` (no `way`):
+centered on the cut's side.  Test checks the center.  Tests pass;
+checkers clean; picture checked.
+
+## 2026-11-18: Where things stand (before `git commit`)
+
+* Done since `fea4900` (#S2): #S3 [Revolve] and #S4 outline files
+  (committed as `ee27af0`), then: `gui/outline_solid.py` (revolved
+  outlines built in SolidCraft, tips cut flat, #108); #S6 fillets
+  ([Fillet (F)], the `UDF` note, letters bound from the table,
+  fillets too big red, #116-#143); marks hollow, filled when selected
+  (#124-#136); table problems under the table, one click edits a cell
+  (#141, #142); "Value" column (#147); #81 tidy formulas; #148 the
+  drawing follows the values to a fixed scale (lengths > 0, bad values
+  keep the last shape); #176 only dimensions pin a drag; hide regions
+  (#157-#188: `gui/hides.py`, [Hide (H)], [Overview (O)], five
+  circles, reach past part and dimensions, the working view cut with
+  meshing long break lines edge to edge and S's on dimension lines).
+* Open, numbers sticky this session: #142 (the user's fillet check),
+  #152 (dragging a fixed corner changes its letter's value), #182 (a
+  long dimension's letter inside a hidden stretch is not drawn), #183
+  (no grid or axes in the working view), #7, #8, #9, #83, #84, #89.
+  Deferred: SolidCraft fillets and flat outlines to #S8 (#140); #S5
+  SVG; #S7 GUI tree; a new #S9 for leftovers when needed.
+* Tests: `test_outline_editor`, `test_hides`, `test_outline_file`,
+  `test_values`, `test_dimensions`, `test_letters`,
+  `test_outline_solid`, plus `test_shops`, `test_gui_tree`,
+  `test_gui_theme` for the files touched; all pass.  Checkers clean.
+* Transcript: `~/.scraftcam/transcripts/2026-11-18_T.prg_5.1.9.2.md`.

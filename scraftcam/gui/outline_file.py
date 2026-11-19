@@ -42,11 +42,13 @@ from .dimensions import (
     HORIZONTAL,
     LENGTH,
     ORIGIN,
+    RADIUS,
     VERTICAL,
     X_AXIS,
     Y_AXIS,
     Dimension,
 )
+from .hides import Hide
 from .letters import Letter
 
 # The words a file uses for the points that are not corners.
@@ -57,8 +59,11 @@ ENDS: dict[int, str] = {
 }
 
 
+# A hide strip's axis, as written (`HIDE_X`, `HIDE_Y`).
+AXES: tuple[str, ...] = ("x", "y")
+
 # The kinds of dimension a file may hold.
-KINDS: tuple[str, ...] = (HORIZONTAL, VERTICAL, LENGTH, ANGLE)
+KINDS: tuple[str, ...] = (HORIZONTAL, VERTICAL, LENGTH, ANGLE, RADIUS)
 
 
 # Class `OutlineError`:
@@ -76,16 +81,22 @@ class Outline:
     * `letters` (`list[Letter]`): The letters, in table order.
     * `dimensions` (`list[Dimension]`): The dimensions.
     * `revolve` (`bool`): Whether it is revolved about the Y axis.
+    * `note_radius` (`str`): The letter of every fillet without a
+      radius of its own ("" for none, #116).
+    * `hides` (`list[Hide]`): The hide strips (#157).
 
     Constructor:
-    * `Outline(points, letters, dimensions, revolve)`
+    * `Outline(points, letters, dimensions, revolve, note_radius,
+      hides)`
     """
 
     # Constructor arguments:
-    points: list[tuple[float, float]] = field(init=True)
+    points: list[tuple[float, float]] = field(init=True, default_factory=list)
     letters: list[Letter] = field(init=True, default_factory=list)
     dimensions: list[Dimension] = field(init=True, default_factory=list)
     revolve: bool = field(init=True, default=False)
+    note_radius: str = field(init=True, default="")
+    hides: list[Hide] = field(init=True, default_factory=list)
 
 
 # Function `outline_text()`:
@@ -102,6 +113,8 @@ def outline_text(outline: Outline) -> str:
         'kind = "outline"',
         f"revolve = {'true' if outline.revolve else 'false'}",
     ]
+    if outline.note_radius:
+        lines.append(f"note_radius = {_string(outline.note_radius)}")
 
     # The letters, a table each, in the order of the table.
     letter: Letter
@@ -139,6 +152,19 @@ def outline_text(outline: Outline) -> str:
                 for kind, offset, along in dimension.places
             )
             lines.append(f"places = [{places}]")
+    hide: Hide
+    for hide in outline.hides:
+        lines += [
+            "",
+            "[[hides]]",
+            f"axis = {_string(AXES[hide.axis])}",
+            f"below = {hide.below}",
+            f"above = {hide.above}",
+            f"low = {_number(hide.low)}",
+            f"high = {_number(hide.high)}",
+            f"under = {_number(hide.under)}",
+            f"over = {_number(hide.over)}",
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -215,11 +241,16 @@ class _Reader:
         if not isinstance(revolve, bool):
             self.note("revolve", "is not true or false")
             revolve = False
+        note: object = data.get("note_radius", "")
+        if not isinstance(note, str):
+            self.note("note_radius", "is not a letter")
+            note = ""
         outline: Outline = Outline(
             self.points(data.get("points", [])),
             self.letters(data.get("letters", {})),
             [],
             revolve,
+            note,
         )
         if revolve and any(x < 0.0 for x, _ in outline.points):
             self.note("points", "a revolved outline has a corner at X < 0")
@@ -235,7 +266,51 @@ class _Reader:
             )
             if dimension is not None:
                 outline.dimensions.append(dimension)
+        self.hides(data.get("hides", []), outline)
         return outline
+
+    # Method `_Reader.hides()`:
+    def hides(self, found: object, outline: Outline) -> None:
+        """Read the hide strips, their corners checked.
+
+        Arguments:
+        * `found` (`object`): The file's `hides`.
+        * `outline` (`Outline`): Given the good ones.
+        """
+        if not isinstance(found, list):
+            self.note("hides", "is not a list of tables")
+            return
+        index: int
+        table: object
+        for index, table in enumerate(found):
+            where: str = f"hides[{index}]"
+            if not isinstance(table, dict) or table.get("axis") not in AXES:
+                self.note(where, 'needs axis = "x" or "y"')
+                continue
+            corners: list[object] = [table.get("below"), table.get("above")]
+            sides: list[object] = [
+                table.get(key, 1.0) for key in ("low", "high", "under", "over")
+            ]
+            sides[:2] = [table.get("low"), table.get("high")]
+            if not all(
+                isinstance(corner, int)
+                and not isinstance(corner, bool)
+                and 0 <= corner < len(outline.points)
+                for corner in corners
+            ) or not all(_is_number(side) for side in sides):
+                self.note(where, "needs corners below, above and numbers")
+                continue
+            outline.hides.append(
+                Hide(
+                    AXES.index(str(table["axis"])),
+                    int(table["below"]),
+                    int(table["above"]),
+                    float(table["low"]),
+                    float(table["high"]),
+                    float(table.get("under", 1.0)),
+                    float(table.get("over", 1.0)),
+                )
+            )
 
     # Method `_Reader.points()`:
     def points(self, found: object) -> list[tuple[float, float]]:

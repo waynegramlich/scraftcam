@@ -275,13 +275,16 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn(letter, tip)
         self.assertEqual(tip.count("Floating"), 1)
         self.assertIn("(0, 0)", view.origin.toolTip())
+        # Selected circles and squares are filled, not colored (#129).
+        none = view.circles[0].brush().style().__class__.NoBrush
         view.clear_selection()
-        ring = view.circles[0].pen().color()
+        self.assertEqual(view.circles[0].brush().style(), none)
+        self.assertEqual(view.squares[1].brush().style(), none)
         view.select_dimension(0)
-        self.assertNotEqual(view.circles[0].pen().color(), ring)
-        self.assertEqual(
-            view.circles[0].pen().color(), view.palette().highlight().color()
-        )
+        view.select_point(1)
+        self.assertNotEqual(view.circles[0].brush().style(), none)
+        self.assertNotEqual(view.squares[1].brush().style(), none)
+        self.assertEqual(view.squares[0].pen().widthF(), 3.0)
 
     def test_cycle_kind(self) -> None:
         """[Dim. Kind] turns the selected dimensions horizontal <->
@@ -362,17 +365,17 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         view = self.editor.view
         port = view.viewport()
-        ring = view.handles[1].pen().color()
+        none = view.handles[1].brush().style()
         at: QPoint = view.mapFromScene(view.handles[1].scenePos())
         QTest.mouseClick(port, Qt.MouseButton.LeftButton, pos=at)
         self.assertEqual(view.chosen_edges, [1])
-        self.assertNotEqual(view.handles[1].pen().color(), ring)
+        self.assertNotEqual(view.handles[1].brush().style(), none)
         view.select_edge(2)
         view.select_edge(1)
         self.assertEqual(view.chosen_edges, [2, 1])
         view.clear_selection()
         self.assertEqual(view.chosen_edges, [])
-        self.assertEqual(view.handles[1].pen().color(), ring)
+        self.assertEqual(view.handles[1].brush().style(), none)
 
     def test_angle(self) -> None:
         """[Angle] between two edges: an arc, its letter in degrees;
@@ -469,10 +472,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.select_edge(1)
         self.editor.buttons["Angle"].click()
         self.editor.check_letters()
-        self.assertEqual(self.editor.problem, "")
+        self.assertEqual(self.editor.problems.text(), "")
         view.drawing.letters[0].default = "2 in"
         self.editor.check_letters()
-        self.assertIn("measures an angle", self.editor.problem)
+        self.assertIn("measures an angle", self.editor.problems.text())
 
     def test_axis_angle(self) -> None:
         """A click on an axis selects it; an angle from it to an edge:
@@ -578,6 +581,358 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             editor.close()
             again.close()
 
+    def test_fillet(self) -> None:
+        """[Fillet (F)] rounds the selected corners by the note letter,
+        made the first time; undone as one change; kept in the file
+        (#116)."""
+        view = self.editor.view
+        button = self.editor.buttons["Fillet"]
+        self.assertIn("(F)", button.text())
+        self.assertIn("(Home)", self.editor.buttons["Fit"].text())
+        button.click()
+        self.assertIn("Click corners", view.message)
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.make_squares()
+        view.select_point(1)
+        view.select_point(2)
+        button.click()
+        self.assertEqual(view.drawing.note_radius, "UDF")
+        self.assertEqual(view.drawing.letters[0].letter, "UDF")
+        self.assertEqual(view.drawing.letters[0].default, "1/16 in")
+        radii = outline_editor.fillet_radii(view.drawing)
+        self.assertEqual(sorted(radii), [1, 2])
+        self.assertAlmostEqual(radii[1], 0.8)
+
+        # The drawn size follows the corners (#121).
+        view.drawing.points[2] = (6.0, 2.0)
+        self.assertAlmostEqual(
+            outline_editor.fillet_radii(view.drawing)[1], 0.4
+        )
+        view.drawing.points[2] = (6.0, 4.0)
+        ends = outline_editor.fillet_ends(view.drawing)
+        self.assertEqual(ends[0][0], ends[0][1])
+        self.assertAlmostEqual(ends[1][0].x(), 5.2)
+        self.assertAlmostEqual(ends[1][1].y(), 0.8)
+        box = outline_editor.rounded_path(view.drawing, ends).boundingRect()
+        self.assertAlmostEqual(box.right(), 6.0, places=6)
+        self.assertFalse(view.grab().isNull())
+        # Pressed again on a UDF corner: sharp again (#125).
+        view.select_point(1)
+        button.click()
+        self.assertEqual(
+            sorted(outline_editor.fillet_radii(view.drawing)), [2]
+        )
+        self.editor.buttons["Dim. Kind"].click()
+        view.undo()
+        view.undo()
+        self.assertEqual(view.drawing.note_radius, "")
+        self.assertEqual(outline_editor.fillet_radii(view.drawing), {})
+
+    def test_fillet_letters(self) -> None:
+        """A fillet takes the letter whose row is selected; again, it
+        is sharp; an angle letter is refused; an empty click clears the
+        row (#125, #132)."""
+        view = self.editor.view
+        button = self.editor.buttons["Fillet"]
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.letters[:] = [
+            Letter("R2", "Big", "1/4 in", ""),
+            Letter("T", "Tilt", "30 deg", ""),
+        ]
+        view.make_squares()
+        self.editor.fill_table()
+        view.select_point(1)
+        view.select_point(2)
+        self.editor.table.selectRow(0)
+        button.click()
+        radii = [
+            (dimension.start, dimension.letter)
+            for dimension in view.drawing.dimensions
+        ]
+        self.assertEqual(radii, [(1, "R2"), (2, "R2")])
+        self.assertEqual(view.drawing.note_radius, "")
+        self.assertFalse(view.grab().isNull())
+
+        # Corner 2 moved to UDF; then pressed again with R2 on corner
+        # 1 alone: corner 1 sharp.
+        view.clear_selection()
+        self.assertEqual(self.editor.table.selectedIndexes(), [])
+        view.select_point(2)
+        button.click()
+        self.assertEqual(view.drawing.dimensions[1].letter, "UDF")
+        view.select_point(1)
+        self.editor.table.selectRow(0)
+        button.click()
+        self.assertEqual(
+            [dimension.start for dimension in view.drawing.dimensions], [2]
+        )
+
+        # An angle's letter is refused.
+        view.select_point(1)
+        self.editor.table.selectRow(1)
+        button.click()
+        self.assertIn("T is an angle", view.message)
+
+    def test_fillet_too_big(self) -> None:
+        """A fillet too big for its edges is red in the table, under it,
+        and on its corner (#127, #139, #141)."""
+        view = self.editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.make_squares()
+        view.dimension_between(-1, 1, HORIZONTAL)
+        view.dimension_between(-1, 2, VERTICAL)
+        view.drawing.letters[0].default = "1 in"
+        view.drawing.letters[1].default = "1/2 in"
+        view.clear_selection()
+        view.select_point(2)
+        self.editor.buttons["Fillet"].click()
+        self.editor.check_letters()
+        self.assertEqual(view.trouble, {})
+        self.assertEqual(self.editor.problems.text(), "")
+        view.drawing.letters[2].default = "3/4 in"
+        self.editor.check_letters()
+        self.assertEqual(sorted(view.trouble), [2])
+        self.assertIn(
+            "UDF need 3/4 in of a 1/2 in edge.",
+            self.editor.problems.text(),
+        )
+        self.assertNotIn("UDF: UDF", self.editor.problems.text())
+        self.assertEqual(view.squares[2].pen().color().name(), "#c00000")
+        self.assertFalse(view.grab().isNull())
+
+    def test_click_and_type(self) -> None:
+        """One click on a Value cell edits it; what is typed sticks and
+        fires no button's key (`n` of `in` is [Dimension]'s)."""
+        from PySide6.QtCore import Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+        from PySide6.QtWidgets import QApplication  # pylint: disable=C0415
+
+        view = self.editor.view
+        table = self.editor.table
+        view.dimension_between(-1, 1)
+        qt_app.process_events()
+        spot = table.visualRect(table.model().index(0, 2)).center()
+        QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=spot)
+        qt_app.process_events()
+        line = QApplication.focusWidget()
+        assert line is not None
+        QTest.keyClick(line, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        QTest.keyClicks(line, "3/4 in")
+        QTest.keyClick(line, Qt.Key.Key_Return)
+        qt_app.process_events()
+        self.assertEqual(view.drawing.letters[0].default, "3/4 in")
+        self.assertEqual(cell(self.editor, 0, 2).text(), "3/4 in")
+        self.assertEqual(len(view.drawing.dimensions), 1)
+
+        # A new dimension refills the table: no cell left being edited,
+        # so the buttons' keys still work.
+        view.dimension_between(-1, 2)
+        qt_app.process_events()
+        self.assertNotEqual(
+            table.state(), table.state().__class__.EditingState
+        )
+
+    def test_follows_values(self) -> None:
+        """The drawing follows the table's values, to a scale chosen
+        once; a bad value keeps the last good shape (#148, #154)."""
+        from PySide6.QtCore import QPointF  # pylint: disable=C0415
+
+        editor = self.editor
+        view = editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.make_squares()
+        view.dimension_between(-1, 1, HORIZONTAL)
+        view.dimension_between(-1, 2, VERTICAL)
+        editor.keep(0, 2, "1 in")
+        editor.keep(1, 2, "1/2 in")
+        self.assertAlmostEqual(view.drawing.points[2][0] / 2.0, 3.0)
+        self.assertAlmostEqual(view.drawing.points[2][1], 3.0)
+        scale: float = view.drawing.scale
+        editor.keep(0, 2, "2 in")
+        self.assertAlmostEqual(view.drawing.points[1][0], 12.0)
+        self.assertAlmostEqual(view.drawing.points[3][1], 3.0)
+        self.assertEqual(view.drawing.scale, scale)
+        self.assertEqual(view.squares[1].pos().x(), view.drawing.points[1][0])
+        for bad in ("-2 in", "0 in", "2 i"):
+            editor.keep(0, 2, bad)
+            self.assertAlmostEqual(view.drawing.points[1][0], 12.0)
+        self.assertIn("A: '2 i' is not a value", editor.problems.text())
+
+        # A fixed coordinate does not move when dragged (#152 to come).
+        view.squares[1].setPos(view.squares[1].pos() + QPointF(5.0, 0.0))
+        self.assertAlmostEqual(view.drawing.points[1][0], 12.0)
+
+    def test_hide(self) -> None:
+        """[Hide], then a wide drag over the shank: a strip hiding a
+        stretch of height, shown in the overview; refused over a
+        corner; undone as one change (#164, #165, #168)."""
+        from PySide6.QtCore import QPointF, Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+
+        editor = self.editor
+        view = editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        view.make_squares()
+        view.fit()
+        port = view.viewport()
+
+        # Function `drag()`:
+        def drag(start: QPointF, end: QPointF) -> None:
+            """Drag from one scene point to another."""
+            editor.buttons["Hide"].click()
+            QTest.mousePress(
+                port, Qt.MouseButton.LeftButton, pos=view.mapFromScene(start)
+            )
+            QTest.mouseMove(port, view.mapFromScene(end))
+            QTest.mouseRelease(
+                port, Qt.MouseButton.LeftButton, pos=view.mapFromScene(end)
+            )
+
+        drag(QPointF(-1.0, 3.0), QPointF(3.0, 6.0))
+        self.assertTrue(view.overview)
+        self.assertEqual(len(view.drawing.hides), 1)
+        hide = view.drawing.hides[0]
+        self.assertEqual((hide.axis, hide.below, hide.above), (1, 1, 2))
+        editor.show_message()
+        self.assertTrue(editor.buttons["Overview"].isChecked())
+        self.assertFalse(view.grab().isNull())
+        drag(QPointF(-1.0, 0.5), QPointF(3.0, 2.0))
+        self.assertIn("corner", view.message)
+        self.assertEqual(len(view.drawing.hides), 1)
+        editor.buttons["Overview"].click()
+        self.assertFalse(view.overview)
+        view.undo()
+        self.assertEqual(view.drawing.hides, [])
+
+    def test_strip_circles(self) -> None:
+        """A strip's side circles resize it, its middle one moves it;
+        not over a corner; only in the overview; one change (#173)."""
+        from PySide6.QtCore import (  # pylint: disable=C0415
+            QPoint,
+            QPointF,
+            QRectF,
+            Qt,
+        )
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+
+        from scraftcam.gui.hides import (  # pylint: disable=C0415
+            across,
+            strip,
+        )
+
+        view = self.editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        view.make_squares()
+        view.lay_hide(QRectF(-1.0, 3.0, 4.0, 3.0))
+        self.assertEqual(len(view.grips), 5)
+        self.assertFalse(view.grips[0].isVisible())
+        view.toggle_overview()
+        view.fit()
+        self.assertTrue(view.grips[0].isVisible())
+        port = view.viewport()
+
+        # Function `drag()`:
+        def drag(grip: int, to: QPointF) -> None:
+            """Drag one circle to a scene point."""
+            start: QPoint = view.mapFromScene(view.grips[grip].scenePos())
+            QTest.mousePress(port, Qt.MouseButton.LeftButton, pos=start)
+            QTest.mouseMove(port, view.mapFromScene(to))
+            QTest.mouseRelease(
+                port, Qt.MouseButton.LeftButton, pos=view.mapFromScene(to)
+            )
+
+        drag(1, QPointF(1.0, 7.0))  # The high side up to 7.
+        self.assertAlmostEqual(
+            strip(view.drawing.points, view.drawing.hides[0])[1], 7.0
+        )
+        drag(1, QPointF(1.0, 9.0))  # Past the top corner: refused.
+        self.assertIn("corner", view.message)
+        self.assertAlmostEqual(
+            strip(view.drawing.points, view.drawing.hides[0])[1], 7.0
+        )
+        drag(4, QPointF(1.0, 4.0))  # The middle (5) down by 1.
+        self.assertEqual(
+            strip(view.drawing.points, view.drawing.hides[0]), (2.0, 6.0)
+        )
+
+        # The left and right sides: out is fine, into the part not.
+        drag(3, QPointF(5.0, 4.0))  # The right side out to 5.
+        self.assertEqual(
+            across(view.drawing.points, view.drawing.hides[0])[1], 5.0
+        )
+        drag(2, QPointF(1.0, 4.0))  # The left side into the part.
+        self.assertIn("reach past", view.message)
+        view.undo()
+        view.undo()
+        self.assertAlmostEqual(
+            strip(view.drawing.points, view.drawing.hides[0])[1], 7.0
+        )
+
+    def test_drag_across_axes(self) -> None:
+        """A corner drags onto an axis and on across it; one fixed by
+        a dimension stays (#176)."""
+        from PySide6.QtCore import QPointF  # pylint: disable=C0415
+
+        view = self.editor.view
+        square = view.squares[0]
+        x: float
+        for x in (0.0, -2.0, 3.0):
+            square.setPos(QPointF(x, -3.0))
+            self.assertAlmostEqual(view.drawing.points[0][0], x)
+        square.setPos(QPointF(3.0, 0.0))
+        square.setPos(QPointF(3.0, 2.0))
+        self.assertAlmostEqual(view.drawing.points[0][1], 2.0)
+        view.dimension_between(-1, 0, HORIZONTAL)
+        square.setPos(QPointF(-4.0, 2.0))
+        self.assertAlmostEqual(view.drawing.points[0][1], 2.0)
+        self.assertNotAlmostEqual(view.drawing.points[0][0], -4.0)
+
+    def test_working_view(self) -> None:
+        """Out of the overview, a strip's stretch is cut out: the piece
+        past it drawn closer by the stretch less the gap; the view is
+        for looking (#170, #171)."""
+        from PySide6.QtCore import QRectF  # pylint: disable=C0415
+
+        view = self.editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 40), (0, 40)]
+        view.make_squares()
+        view.lay_hide(QRectF(-1.0, 5.0, 4.0, 30.0))
+        self.assertEqual(view.drawing.hides[0].axis, 1)
+        self.assertFalse(view.overview)
+        self.assertFalse(view.isInteractive())
+        gap: float = outline_editor.GAP_PIXELS / view.zoom()
+        pieces = view.cut_offsets(1)
+        self.assertEqual(len(pieces), 2)
+        self.assertAlmostEqual(pieces[0][2], 0.0)
+        self.assertAlmostEqual(pieces[1][2], -(30.0 - gap))
+        self.assertEqual(view.cut_offsets(0), [(-1e6, 1e6, 0.0)])
+        self.assertAlmostEqual(
+            outline_editor.shift_at(pieces, 38.0), pieces[1][2]
+        )
+        self.assertFalse(view.grab().isNull())
+
+        # A dimension across the cut: an S on each side, the same shape
+        # (#185).
+        view.dimension_between(-1, 2, VERTICAL)
+        self.assertFalse(view.grab().isNull())
+        below = view.ess(1, 5.0, 4.0)
+        above = view.ess(1, 6.0, 4.0)
+
+        # Its middle exactly at the line's end (#188).
+        self.assertAlmostEqual(below.boundingRect().center().y(), 5.0)
+        self.assertAlmostEqual(above.boundingRect().center().y(), 6.0)
+        self.assertAlmostEqual(below.boundingRect().center().x(), 4.0)
+        self.assertAlmostEqual(
+            below.boundingRect().width(), above.boundingRect().width()
+        )
+
+        # It lies across the line: wider than it is tall (#187).
+        self.assertGreater(
+            below.boundingRect().width(), below.boundingRect().height()
+        )
+        view.toggle_overview()
+        self.assertTrue(view.isInteractive())
+
     def test_undo_redo(self) -> None:
         """Undo and redo go back and forth; a new change ends redo."""
         view = self.editor.view
@@ -645,14 +1000,14 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(editor.drawing.letters[0].name, "Overall width")
         cell(editor, 1, 0).setText(" a ")
         self.assertEqual(editor.drawing.letters[1].letter, "a")
-        self.assertIn("only in case", editor.status.text())
+        self.assertIn("only in case", editor.problems.text())
         self.assertIn("only in case", cell(editor, 1, 0).toolTip())
         cell(editor, 1, 0).setText("H")
-        self.assertEqual(editor.status.text(), "")
+        self.assertEqual(editor.problems.text(), "")
         cell(editor, 1, 2).setText("2")
-        self.assertIn("H: '2' is not a value", editor.status.text())
+        self.assertIn("H: '2' is not a value", editor.problems.text())
         cell(editor, 1, 2).setText("2-1/4 in")
-        self.assertEqual(editor.status.text(), "")
+        self.assertEqual(editor.problems.text(), "")
         self.assertEqual(cell(editor, 1, 2).toolTip(), "")
 
     def test_live_typing(self) -> None:
@@ -664,18 +1019,19 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         editor = self.editor
         editor.buttons["New Letter"].click()
-        editor.table.editItem(cell(editor, 0, 2))
+        # [New Letter] edits the Name cell; on to the Value cell.
+        editor.table.setCurrentCell(0, 2)
         qt_app.process_events()
         entry: object = editor.table.focusWidget()
         assert isinstance(entry, QLineEdit)
         entry.selectAll()
         QTest.keyClicks(entry, "6")
         self.assertEqual(editor.drawing.letters[0].default, "6")
-        self.assertIn("is not a value", editor.status.text())
+        self.assertIn("is not a value", editor.problems.text())
         self.assertIn("is not a value", entry.toolTip())
         QTest.keyClicks(entry, " in")
         self.assertEqual(editor.drawing.letters[0].default, "6 in")
-        self.assertEqual(editor.status.text(), "")
+        self.assertEqual(editor.problems.text(), "")
         self.assertEqual(entry.styleSheet(), "")
 
     def test_dimension_selected(self) -> None:
@@ -804,7 +1160,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         )
         editor: OutlineEditor = OutlineEditor(drawing)
         self.assertEqual(cell(editor, 0, 2).text(), "6 in")
-        self.assertIn("pi: 'pi' is kept", editor.status.text())
+        self.assertIn("pi: 'pi' is kept", editor.problems.text())
         editor.close()
         editor.deleteLater()
 

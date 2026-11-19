@@ -36,6 +36,9 @@ class LettersTest(unittest.TestCase):
         self.assertIn("between", use_problem("A", "0.1 deg", {"angle"}))
         self.assertIn("between", use_problem("A", "180 deg", {"angle"}))
         self.assertIn("between", use_problem("A", "-30 deg", {"angle"}))
+        self.assertIn("more than 0", use_problem("W", "-2 in", {"length"}))
+        self.assertIn("more than 0", use_problem("W", "0 mm", {"length"}))
+        self.assertEqual(use_problem("W", "-2 in", set()), "")
 
     def test_letter_problem(self) -> None:
         """Bad shapes, kept names, repeats and case clashes."""

@@ -12,7 +12,11 @@ from scraftcam.gui.dimensions import (
     Dimension,
     Formula,
     _angle_way,
+    difference,
+    grouped,
+    product,
     solve,
+    total,
 )
 
 # An L bracket, counterclockwise from the origin: W wide, H high, its
@@ -119,10 +123,12 @@ class DimensionsTest(unittest.TestCase):
         ]
         solution = solve(triangle, dimensions)
         self.assertEqual(str(solution.x[2]), "P")
-        self.assertEqual(str(solution.y[2]), "0 + sqrt(S^2 - ((P) - (W))^2)")
+        self.assertEqual(str(solution.y[2]), "sqrt(S^2 - (P - W)^2)")
         self.assertEqual(solution.missing(3), [])
         below = [(0.0, 0.0), (4.0, 0.0), (1.0, -3.0)]
-        self.assertIn("0 - sqrt", str(solve(below, dimensions).y[2]))
+        self.assertEqual(
+            str(solve(below, dimensions).y[2]), "-sqrt(S^2 - (P - W)^2)"
+        )
         # Without P, corner 2 is known in neither coordinate: it waits.
         self.assertNotIn(2, solve(triangle, dimensions[:2]).y)
 
@@ -157,6 +163,39 @@ class DimensionsTest(unittest.TestCase):
         self.assertFalse(
             _angle_way(Dimension("D", ANGLE, 2, 3, rays=(1, 1)), ways)
         )
+
+    def test_tidy(self) -> None:
+        """Formulas are written without `0 +`, `- 0` or needless
+        brackets (#81)."""
+        self.assertEqual(total("0", "+", "R"), "R")
+        self.assertEqual(total("R", "+", "0"), "R")
+        self.assertEqual(total("0", "-", "W - T"), "-(W - T)")
+        self.assertEqual(total("H", "-", "W - T"), "H - (W - T)")
+        self.assertEqual(total("H", "+", "W - T"), "H + W - T")
+        self.assertEqual(difference("R", "0"), "R")
+        self.assertEqual(difference("W", "W"), "0")
+        self.assertEqual(
+            product("R", "tan(90 deg - A)"), "R * tan(90 deg - A)"
+        )
+        self.assertEqual(product("W - T", "2"), "(W - T) * 2")
+        self.assertEqual(product("0", "tan(A)"), "0")
+        self.assertEqual(grouped("sqrt(a) * b(c)"), "(sqrt(a) * b(c))")
+
+        # The drill's shoulder (half a point from the Y axis).
+        half: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (2.0, 1.2),
+            (2.0, 8.0),
+            (0.0, 8.0),
+        ]
+        solution = solve(
+            half,
+            [
+                Dimension("A", ANGLE, 0, Y_AXIS, rays=(1, 1)),
+                Dimension("R", HORIZONTAL, ORIGIN, 1),
+            ],
+        )
+        self.assertEqual(str(solution.y[1]), "R * tan(90 deg - A)")
 
     def test_extra(self) -> None:
         """A second way to the same point is one too many."""
