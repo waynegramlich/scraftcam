@@ -69,6 +69,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QGraphicsItem,
     QGraphicsRectItem,
     QGraphicsScene,
+    QGraphicsSceneHoverEvent,
     QGraphicsSceneMouseEvent,
     QGraphicsView,
     QHBoxLayout,
@@ -82,6 +83,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -102,6 +104,11 @@ from .dimensions import (  # noqa: E402
     Formula,
     Solution,
     solve,
+)
+from .fillet_panel import (  # noqa: E402
+    NOTE_CHOICE,
+    NOTE_LETTER,
+    FilletPanel,
 )
 from .hides import (  # noqa: E402
     HIDE_X,
@@ -129,6 +136,7 @@ from .outline_file import (  # noqa: E402
 from .values import (  # noqa: E402
     crosses,
     fillet_problems,
+    letter_values,
     real_coordinates,
 )
 from .window import make_application  # noqa: E402
@@ -139,14 +147,13 @@ from .window import make_application  # noqa: E402
 # the outline's and the thin lines' widths (#26), and the least gap
 # between minor grid lines.
 SQUARE_PIXELS: float = 9.0
+
+# A lit corner's square (#199) is this much bigger.
+LIT_SCALE: float = 1.8
 ARROW_PIXELS: float = 9.0
 
 # A fillet is drawn with this share of its shorter edge as radius.
 FILLET_SHARE: float = 0.2
-
-# The letter of every fillet without a radius of its own (#120): the
-# note reads "All undimensioned fillets are radius UDF".
-NOTE_LETTER: str = "UDF"
 
 # How many straight pieces draw an angle's arc.
 ARC_STEPS: int = 48
@@ -498,6 +505,19 @@ class PullSquare(QGraphicsRectItem):
         self.setFlag(flags.ItemIsMovable)
         self.setFlag(flags.ItemSendsGeometryChanges)
         self.setZValue(2.0)
+        self.setAcceptHoverEvents(True)
+
+    # Method `PullSquare.hoverEnterEvent()`:
+    def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
+        """Light its corner (and its [Fillets] row, #199)."""
+        self.editor.light(self.index)
+        super().hoverEnterEvent(event)
+
+    # Method `PullSquare.hoverLeaveEvent()`:
+    def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
+        """Put its corner out."""
+        self.editor.light(-1)
+        super().hoverLeaveEvent(event)
 
     # Method `PullSquare.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
@@ -699,7 +719,9 @@ def shift_at(pieces: list[tuple[float, float, float]], at: float) -> float:
 
 # Function `fillet_radii()`:
 def fillet_radii(drawing: Drawing) -> dict[int, float]:
-    """Return each rounded corner's radius as drawn.
+    """Return each rounded corner's radius as drawn: its letter's value
+    to scale once the drawing has one (#142.3), else a share of its
+    edges (`drawn_radius()`).
 
     Arguments:
     * `drawing` (`Drawing`): The outline.
@@ -707,11 +729,19 @@ def fillet_radii(drawing: Drawing) -> dict[int, float]:
     Returns:
     * (`dict[int, float]`): Radius by corner.
     """
-    return {
-        dimension.start: drawn_radius(drawing.points, dimension.start)
-        for dimension in drawing.dimensions
-        if dimension.kind == RADIUS
-    }
+    values: dict[str, float] = letter_values(drawing.letters)
+    radii: dict[int, float] = {}
+    dimension: Dimension
+    for dimension in drawing.dimensions:
+        if dimension.kind != RADIUS:
+            continue
+        value: float = values.get(dimension.letter, 0.0)
+        radii[dimension.start] = (
+            value * drawing.scale
+            if drawing.scale > 0.0 and value > 0.0
+            else drawn_radius(drawing.points, dimension.start)
+        )
+    return radii
 
 
 # Function `drawn_radius()`:
@@ -1958,6 +1988,12 @@ class OutlineView(QGraphicsView):
     * `band` (`QGraphicsRectItem`): The rectangle being dragged.
     * `cleared` (`Callable[[], None]`): Called when the selection is
       cleared (the window clears the table's, #125).
+    * `restyled` (`Callable[[], None]`): Called after `restyle()`, so
+      the window can follow the selection ([Fillets], #142.2).
+    * `lit` (`int`): The corner pointed at, on the drawing or by its
+      [Fillets] row (-1 for none, #199): drawn bigger and thicker.
+    * `lighted` (`Callable[[int], None]`): Called with `lit` when it
+      changes (the window frames the row).
     * `trouble` (`dict[int, str]`): Fillets too big for their edges,
       by corner (#127; the window finds them).
     * `origin` (`QGraphicsRectItem`): The origin's square.
@@ -2000,6 +2036,9 @@ class OutlineView(QGraphicsView):
         self.band.setVisible(False)
         self.band.setZValue(3.0)
         self.cleared: Callable[[], None] = self.update
+        self.restyled: Callable[[], None] = self.update
+        self.lit: int = -1
+        self.lighted: Callable[[int], None] = self.lit_nothing
         self.trouble: dict[int, str] = {}
         self.snap_on: bool = True
         scene: QGraphicsScene = QGraphicsScene(self)
@@ -2011,20 +2050,10 @@ class OutlineView(QGraphicsView):
         scene.setItemIndexMethod(QGraphicsScene.ItemIndexMethod.NoIndex)
         self.setScene(scene)
 
-        # Y up; zoom about the pointer; drag empty space to pan.
-        self.scale(1.0, -1.0)
-        anchor: QGraphicsView.ViewportAnchor = (
-            QGraphicsView.ViewportAnchor.AnchorUnderMouse
-        )
-        self.setTransformationAnchor(anchor)
         # Panned by hand (`pan_from`), so the pointer stays an arrow
         # for aiming; a closed hand only while panning (#55).
         self.pan_from: QPoint | None = None
-        self.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.set_up_view()
 
         # The origin's square does not move: dragging it pans (#6).
         half: float = SQUARE_PIXELS / 2.0
@@ -2381,6 +2410,7 @@ class OutlineView(QGraphicsView):
         """Draw the dimensioned corners from the values, solve again,
         then draw the dimensions and squares to match."""
         self.apply_values()
+        self.outline.refresh()
         self.solution = solve(self.drawing.points, self.drawing.dimensions)
         self.pinned = solve(
             self.drawing.points, self.drawing.dimensions, drawn=False
@@ -2658,61 +2688,89 @@ class OutlineView(QGraphicsView):
         self.restyle()
         self.letters_changed()
 
-    # Method `OutlineView.fillet_selected()`:
-    def fillet_selected(self, letter: str = "") -> None:
-        """[Fillet]: round the selected corners by a letter (#125): the
-        one whose row is selected in the table, else the note letter
-        (`UDF`, made the first time: "All undimensioned fillets are
-        radius UDF", #116, #120).  Corners already rounded by that
-        letter, all of them, are made sharp again.  One change.
+    # Method `OutlineView.light()`:
+    def light(self, corner: int) -> None:
+        """Light a corner (none for -1), here and in [Fillets] (#199).
 
         Arguments:
-        * `letter` (`str`): The table's selected letter, "" for none.
+        * `corner` (`int`): The corner, or -1.
         """
-        corners: list[int] = [
-            corner for corner in self.chosen_points if corner != ORIGIN
-        ]
-        if not corners:
-            self.message = "Click corners to fillet."
-            self.scene().update()
+        if corner == self.lit:
             return
-        if letter and self.is_angle(letter):
-            self.message = (
-                f"{letter} is an angle: pick a length letter for a fillet."
-            )
-            self.scene().update()
-            return
-        self.history.remember(self.drawing.snapshot())
-        target: str = letter or self.note_letter()
-        rounded: dict[int, Dimension] = {
-            dimension.start: dimension
+        self.lit = corner
+        self.restyle()
+        self.lighted(corner)
+
+    # Method `OutlineView.lit_nothing()`:
+    def lit_nothing(self, _corner: int) -> None:
+        """Do nothing: `lighted` until the window sets it."""
+
+    # Method `OutlineView.fillets()`:
+    def fillets(self) -> dict[int, str]:
+        """Return each rounded corner's letter.
+
+        Returns:
+        * (`dict[int, str]`): Letter by corner.
+        """
+        return {
+            dimension.start: dimension.letter
             for dimension in self.drawing.dimensions
             if dimension.kind == RADIUS
         }
-        if all(
-            corner in rounded and rounded[corner].letter == target
-            for corner in corners
-        ):
-            # Pressed again: sharp again.
-            self.drawing.dimensions[:] = [
-                dimension
-                for dimension in self.drawing.dimensions
-                if not (
-                    dimension.kind == RADIUS and dimension.start in corners
-                )
-            ]
-        else:
+
+    # Method `OutlineView.fillet_letters()`:
+    def fillet_letters(self) -> list[str]:
+        """Return the letters fillets use, in table order.
+
+        Returns:
+        * (`list[str]`): The letters.
+        """
+        used: set[str] = set(self.fillets().values())
+        return [
+            letter.letter
+            for letter in self.drawing.letters
+            if letter.letter in used
+        ]
+
+    # Method `OutlineView.set_fillets()`:
+    def set_fillets(self, corners: list[int], choice: str) -> None:
+        """Give corners a fillet by a letter, or make them sharp; one
+        change (none if nothing would change).
+
+        Arguments:
+        * `corners` (`list[int]`): The corners.
+        * `choice` (`str`): The letter; `NOTE_CHOICE` for the note
+          letter (made the first time: "All undimensioned fillets are
+          radius UDF", #116, #120); "" for sharp.
+        """
+        now: dict[int, str] = self.fillets()
+        target: str = (
+            self.drawing.note_radius or NOTE_CHOICE
+            if choice == NOTE_CHOICE
+            else choice
+        )
+        if all(now.get(corner, "") == target for corner in corners):
+            return
+        self.history.remember(self.drawing.snapshot())
+        if choice == NOTE_CHOICE:
+            target = self.note_letter()
+        self.drawing.dimensions[:] = [
+            dimension
+            for dimension in self.drawing.dimensions
+            if not (dimension.kind == RADIUS and dimension.start in corners)
+        ]
+        if target:
             corner: int
             for corner in corners:
-                if corner in rounded:
-                    rounded[corner].letter = target
-                else:
-                    self.drawing.dimensions.append(
-                        Dimension(target, RADIUS, corner, corner)
-                    )
+                self.drawing.dimensions.append(
+                    Dimension(target, RADIUS, corner, corner)
+                )
+        chosen: list[int] = list(self.chosen_points)
         self.message = ""
         self.make_squares()
+        self.chosen_points = chosen
         self.letters_changed()
+        self.restyle()
 
     # Method `OutlineView.note_letter()`:
     def note_letter(self) -> str:
@@ -2972,6 +3030,10 @@ class OutlineView(QGraphicsView):
             square.setBrush(
                 filled if square.index in self.chosen_points else hollow
             )
+            # Lit (#199): bigger, its ring thick; not by color alone.
+            if square.index == self.lit:
+                square.setPen(thick)
+            square.setScale(LIT_SCALE if square.index == self.lit else 1.0)
             square.setToolTip(self.corner_tip(square.index))
         self.origin.setToolTip("The origin: (0, 0)")
         handle: EdgeHandle
@@ -2996,6 +3058,22 @@ class OutlineView(QGraphicsView):
         # its items are not where they are drawn.
         self.setInteractive(self.overview or not self.drawing.hides)
         self.viewport().update()
+        self.restyled()
+
+    # Method `OutlineView.set_up_view()`:
+    def set_up_view(self) -> None:
+        """Make Y point up, zoom about the pointer, and hide the scroll
+        bars (empty space is dragged to pan)."""
+        self.scale(1.0, -1.0)
+        anchor: QGraphicsView.ViewportAnchor = (
+            QGraphicsView.ViewportAnchor.AnchorUnderMouse
+        )
+        self.setTransformationAnchor(anchor)
+        self.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
 
     # Method `OutlineView.corner_tip()`:
     def corner_tip(self, index: int) -> str:
@@ -3522,6 +3600,8 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
       The mode bar's buttons, by their word (`"Grid"`, `"Fit"`, ...).
     * `keys` (`dict[str, QShortcut]`): Each button's key, by its word.
     * `drawing` (`Drawing`): The outline being drawn.
+    * `fillets` (`FilletPanel`): The [Fillets] tab (#142.2).
+    * `tabs` (`QTabWidget`): [Dimensions] (the letters) and [Fillets].
     * `problems` (`QLabel`): The letters' problems, a line each, red,
       right under the table (#141).
     * `splitter` (`QSplitter`): The drawing over the table.
@@ -3562,6 +3642,8 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         self.splitter.addWidget(self.view)
         self.table: QTableWidget = QTableWidget(0, len(COLUMNS))
         self.problems: QLabel = QLabel("")
+        self.tabs: QTabWidget = QTabWidget()
+        self.fillets: FilletPanel = FilletPanel(self.view)
         self.splitter.addWidget(self.letters_area())
         self.splitter.setSizes([450, 150])
         layout.addWidget(self.splitter)
@@ -3577,7 +3659,6 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             ("Dim. Kind", "K"),
             ("Angle", "A"),
             ("Revolve", "R"),
-            ("Fillet", "F"),
             ("Hide", "H"),
             ("Overview", "O"),
             ("Fit", "Home"),
@@ -3610,7 +3691,6 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             "Dim. Kind": self.view.cycle_kind,
             "Angle": self.view.angle_selected,
             "Revolve": self.toggle_revolve,
-            "Fillet": self.fillet_selected,
             "Hide": self.view.start_hide,
             "Overview": self.toggle_overview,
             "Undo": self.view.undo,
@@ -3625,22 +3705,37 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
         )
         mode_bar.addWidget(self.status, 1)
-        self.view.scene().changed.connect(self.show_message)
-        self.view.letters_changed = self.fill_table
-        self.view.released = self.save
-        self.view.cleared = self.table.clearSelection
+        self.hook_view()
         self.fill_table()
         self.table.itemChanged.connect(self.letter_edited)
         self.show_message()
         self.resize(800, 600)
 
+    # Method `OutlineEditor.hook_view()`:
+    def hook_view(self) -> None:
+        """Have the view tell the window what changed."""
+        self.view.scene().changed.connect(self.show_message)
+        self.view.letters_changed = self.fill_table
+        self.view.released = self.save
+        self.view.cleared = self.table.clearSelection
+        self.view.restyled = self.follow_selection
+        self.view.lighted = self.fillets.light
+
+    # Method `OutlineEditor.follow_selection()`:
+    def follow_selection(self) -> None:
+        """Show the selected corners in [Fillets] (#142.2)."""
+        self.fillets.show_corners(
+            [point for point in self.view.chosen_points if point != ORIGIN]
+        )
+
     # Method `OutlineEditor.letters_area()`:
     def letters_area(self) -> QWidget:
-        """Return the letters' table with its problems right under it,
-        in red, wrapped so the window never widens (#141).
+        """Return the tabs, [Dimensions] (the letters' table) and
+        [Fillets] (#142.2), with the problems right under them, in red,
+        wrapped so the window never widens (#141).
 
         Returns:
-        * (`QWidget`): The table and the problem line.
+        * (`QWidget`): The tabs and the problem line.
         """
         self.table.setHorizontalHeaderLabels([title for title, _ in COLUMNS])
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -3663,7 +3758,9 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         area: QWidget = QWidget()
         stack: QVBoxLayout = QVBoxLayout(area)
         stack.setContentsMargins(0, 0, 0, 0)
-        stack.addWidget(self.table)
+        self.tabs.addTab(self.table, "Dimensions")
+        self.tabs.addTab(self.fillets, "Fillets")
+        stack.addWidget(self.tabs)
         stack.addWidget(self.problems)
         return area
 
@@ -3791,17 +3888,6 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
     def toggle_snap(self) -> None:
         """Turn snapping on or off, as [Snap] now shows."""
         self.view.snap_on = self.buttons["Snap"].isChecked()
-
-    # Method `OutlineEditor.fillet_selected()`:
-    def fillet_selected(self) -> None:
-        """[Fillet]: by the letter whose row is selected, if any."""
-        rows: list[int] = sorted(
-            {index.row() for index in self.table.selectedIndexes()}
-        )
-        letters: list[Letter] = self.drawing.letters
-        self.view.fillet_selected(
-            letters[rows[0]].letter if rows and rows[0] < len(letters) else ""
-        )
 
     # Method `OutlineEditor.toggle_overview()`:
     def toggle_overview(self) -> None:

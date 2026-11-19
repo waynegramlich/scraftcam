@@ -1224,3 +1224,160 @@ checkers clean; picture checked.
   `test_outline_solid`, plus `test_shops`, `test_gui_tree`,
   `test_gui_theme` for the files touched; all pass.  Checkers clean.
 * Transcript: `~/.scraftcam/transcripts/2026-11-18_T.prg_5.1.9.2.md`.
+
+`git`: `f2a3552`, pushed.
+
+## 2026-11-19: #142 fillets made natural; chunk 1: #142.3
+
+* The user: #142.1 [Fillet] greyed until a corner is selected;
+  #142.2 a circle on each fillet's arc selects it, [Dimension] on
+  selected fillets gives them a new letter of their own (shared by
+  those selected together), [Delete] puts one back on `UDF`, then
+  sharp; the table-row way goes; #182 a letter in a hidden stretch
+  moves to the nearest visible part of its line; #9 dropped for good
+  ([Hide] replaces it); #189 (SVG: working view or not) waits for
+  #S5.  Issue numbers continue from #189.
+* #142.3 fixed: `fillet_radii()` drew every fillet at a fifth of its
+  shorter edge (`drawn_radius()`), never its value.  Now, once the
+  drawing has a scale (#148), a fillet is its letter's value to
+  scale (capped by `fillet_ends()` as before); `follow()` refreshes
+  the outline so a value edit redraws.  `test_fillet` checks it.
+  45 tests (editor, values) pass; checkers clean.
+
+## 2026-11-19: Chunk 2: #142.1 [Fillet] greyed
+
+`OutlineView.restyled` hook (called at the end of `restyle()`, which
+every selection change runs); `OutlineEditor.enable_buttons()` enables
+[Fillet] only while a corner (not the origin) is selected; its key
+`F` does nothing while greyed (a disabled button's `click()`).
+`test_fillet` checks it.  42 editor tests pass; checkers clean.
+
+## 2026-11-19: #142.2 the fillet pop-up, chunk 1 (tests not yet fixed)
+
+* The user's choices (#191-#197, "make your best choices"): no row
+  numbers, two-way highlight (row <-> corner) to be seen first; rows
+  of buttons, one down, no drop-downs: [No fillet], [UDF], one per
+  fillet letter; an "All" row; [Fillet] always opens the one pop-up,
+  nothing nested; [New Fillet Dimension] (letter, value; name
+  "Fillet radius") at its bottom; each press applies at once (one
+  undoable change), [Close].  The chunk summaries: no 1-2-3 lists.
+* New `scraftcam/gui/fillet_popup.py`: `sweep_order()` (CCW from +X
+  about the box's middle, nearer first), `FilletPopup(view, corners)`
+  (a non-modal window; rows labelled by `corner_tip()`; `choices()`,
+  `choose()`, `show_choices()`; `closeEvent()` unlocks), `NOTE_LETTER`
+  (moved here), `NOTE_CHOICE`.  `OutlineView.fillets()`,
+  `fillet_letters()`, `open_fillets()`, `set_fillets()`, `locked`
+  (look only while open); the old `fillet_selected()` (table row,
+  press again for sharp) is gone; `OutlineEditor.fillet_selected()`
+  opens the pop-up beside the window; `hook_view()` split out
+  (pylint's statement limit).  `is_angle()` now unused (to drop or
+  reuse in chunk 2).  Checkers clean.
+* Failing, to fix next chunk: `test_fillet`, `test_fillet_letters`,
+  `test_fillet_too_big` (they used the old [Fillet]).
+
+## 2026-11-19: #142.2 chunk 2: tests for the pop-up
+
+`test_fillet` (via the pop-up's "All" and a corner's [No fillet]),
+`test_fillet_letters` (sweep order, buttons, which is down),
+`test_fillet_too_big` reworked; new `test_fillet_scale` (#142.3, split
+out for pylint's statement limit); `press()` helper.  Found: the
+buttons re-read the letters in use after each press, so the list
+changed under them; now `FilletPopup.letters` is fixed when opened.
+43 editor tests, `test_values`, `test_outline_file` pass; checkers
+clean.  Next: [New Fillet Dimension].
+
+## 2026-11-19: #142.2 the pop-up replaced by a [Fillets] tab
+
+* The user: pop-ups always cover something; the letters table gets
+  tabs instead, [Dimensions] (the table) and [Fillets] (the selected
+  corners), more tabs later; no [Fillet] button.  #202: [Fillets]
+  shows only the selected corners (none: a hint).  #199: rows have no
+  formula labels; hover highlighting both ways to come.  #203
+  (switch tab on selection, count in the title), #204 (where a
+  fillet letter's value is edited) not yet decided; for now: no
+  switch, plain title, values in [Dimensions].
+* `scraftcam/gui/fillet_popup.py` -> `fillet_panel.py`:
+  `FilletPanel(view)` (a tab; `show_corners()` rebuilds `body` only
+  when the corners change, so a press never deletes its own button;
+  `EMPTY` hint).  `OutlineEditor.tabs`, `fillets`,
+  `follow_selection()` (the `restyled` hook); [Fillet] button, its
+  `F` key, `enable_buttons()` (#142.1), `open_fillets()` and
+  `OutlineView.locked` gone.  43 editor tests, `test_values`,
+  `test_outline_file` pass; checkers clean.  Next: [New Fillet
+  Dimension] at the tab's bottom, then hover highlighting, then
+  #182.
+
+## 2026-11-19: #206 one corner, two rows; #199 two-way lighting
+
+* #206 (the user): one corner clicked showed two entries, two
+  corners three: the "All" row.  Now "All" only for two or more.
+* #199: each row is a `fillet_panel.Row(QFrame)`; pointing at it
+  (enter/leave) or clicking it lights its corner
+  (`OutlineView.light()`, `lit`: square `LIT_SCALE` 1.8 bigger, thick
+  ring); a `PullSquare` hovered (`setAcceptHoverEvents`) lights itself
+  and frames its row (`lighted` hook -> `FilletPanel.light()`, a 2 px
+  box, no color).  `test_fillet_rows_light`; 44 editor tests,
+  `test_values`, `test_outline_file` pass; checkers clean.
+
+## 2026-11-19: #209 "All" always, a line, rows numbered
+
+The user now knows what "All" is: always shown (with one corner too),
+a horizontal line under it, and corner rows numbered `1:` to `N:` in
+the order the corners were selected (a temporary name).  So rows go
+in selection order; `sweep_order()` is gone (a corner clicked again
+becomes the latest, renumbering the rows).  44 editor tests,
+`test_values`, `test_outline_file` pass; checkers clean.
+
+## 2026-11-19: Where things stand (before `git commit` and `/clear`)
+
+Fillets redesigned again (the pop-up and the per-corner rows were
+tried and are to be replaced); nothing below is coded yet.  The code
+today: [Fillets] tab with per-corner rows (`gui/fillet_panel.py`,
+"All:" row, rows numbered `1:`..`N:` in selection order, two-way
+lighting `OutlineView.light()`/`lit`/`lighted`, `Row(QFrame)`); no
+[Fillet] button; fillets drawn at their values to scale (#142.3).
+Tests pass, checkers clean.
+
+The design agreed (numbers sticky; the next new one is #230):
+* #213 One letters table.  A tab bar over it: [Dimensions] shows
+  every row; [Fillets] shows only rows checked "Fillet" (a new check
+  box column, `fillet = true` on the letter in the file; only length
+  letters; `UDF` checked when made) plus fillet controls.  Same
+  table, so one cell, never out of step.
+* #216 an entry is a number and a type (length, angle, later a plain
+  number); one letter may be a fillet radius and a dimension.
+* #214 letter first: clicking a [Fillets] row arms it (lit; the bar
+  says "Click corners to fillet them by UDF"); each corner clicked
+  takes the armed letter (#228: a different letter is replaced);
+  #220 clicking it again does nothing.  Disarm: click the armed row
+  again, empty space, or switch to [Dimensions]; no `Esc` (#229).
+  Arming only on [Fillets].  #218 arming also applies the letter to
+  corners already selected (to try).  #227 drags keep working while
+  armed; only plain clicks paint.  #223 each painted corner is one
+  undo step.  No entries yet: the tab shows [New Fillet Dimension]
+  (next free letter, checked, named "Fillet radius").
+* #219/#222 a fixed first [Fillets] row "No fillet", value 0, never
+  editable or deletable, not in [Dimensions] nor the file, Letter
+  cell blank; attaching it removes the corner's fillet.  The user:
+  the table may need an "uneditable" marker.
+* #215 an entry in use cannot be deleted (all its fillets cleared
+  first): [Delete] refuses, naming its uses, and lights every one
+  (corners; dimension lines thick).  Unchecking "Fillet" on an entry
+  in use is refused the same way (#225).
+* #224 hovering any row (either tab) lights everything using it;
+  hovering a corner frames its letter's row.  To try.
+* #226 own-letter fillets show their letter by the arc; `UDF`
+  fillets show nothing (the note): drafting practice.
+* #217 for #S8: the path sent to SolidCraft silently drops lines and
+  arcs of zero length (within ~1e-6 mm), so a 0 fillet is a sharp
+  corner and a used-up edge (#114) vanishes; a value through 0
+  changes the segment count, so `SolidCraftLink` rebuilds.
+* Chunk plan (#221): (1) one table, tab bar, "Fillet" column, file;
+  per-corner rows out; (2) "No fillet" row, arming and painting;
+  (3) hover lighting and refused deletes.  Then #182 (a letter in a
+  hidden stretch moves to the nearest visible part of its line);
+  #189 (SVG view) waits for #S5.  #9 dropped ([Hide] replaces it).
+* Work rules this session: one ~3 minute chunk per turn; summaries
+  in sentences or `#N:` issues, never `1. 2. 3.` lists; a top 5 each
+  round with the tokens left as a percentage.
+* Transcript: `~/.scraftcam/transcripts/2026-11-19_T.prg_5.1.9.2.md`.

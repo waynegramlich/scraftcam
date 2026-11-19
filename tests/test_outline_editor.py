@@ -14,6 +14,7 @@ from scraftcam.gui.dimensions import (
     Y_AXIS,
     Dimension,
 )
+from scraftcam.gui.fillet_panel import NOTE_CHOICE
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 from tests import qt_app
@@ -582,20 +583,23 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             again.close()
 
     def test_fillet(self) -> None:
-        """[Fillet (F)] rounds the selected corners by the note letter,
-        made the first time; undone as one change; kept in the file
-        (#116)."""
+        """[Fillets] shows the selected corners; its "All" row rounds the
+        selected corners by the note letter, made the first time; each
+        press is one change (#116, #142.2)."""
         view = self.editor.view
-        button = self.editor.buttons["Fillet"]
-        self.assertIn("(F)", button.text())
+        panel = self.editor.fillets
+        self.assertNotIn("Fillet", self.editor.buttons)
         self.assertIn("(Home)", self.editor.buttons["Fit"].text())
-        button.click()
-        self.assertIn("Click corners", view.message)
+        # Rows only for selected corners, not the origin.
+        self.assertEqual(panel.rows, {})
+        view.select_point(ORIGIN)
+        self.assertEqual(panel.rows, {})
         view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
         view.make_squares()
         view.select_point(1)
+        self.assertEqual(list(panel.rows), ["All", "1"])
         view.select_point(2)
-        button.click()
+        self.press("All", "UDF")
         self.assertEqual(view.drawing.note_radius, "UDF")
         self.assertEqual(view.drawing.letters[0].letter, "UDF")
         self.assertEqual(view.drawing.letters[0].default, "1/16 in")
@@ -609,6 +613,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             outline_editor.fillet_radii(view.drawing)[1], 0.4
         )
         view.drawing.points[2] = (6.0, 4.0)
+
         ends = outline_editor.fillet_ends(view.drawing)
         self.assertEqual(ends[0][0], ends[0][1])
         self.assertAlmostEqual(ends[1][0].x(), 5.2)
@@ -616,9 +621,8 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         box = outline_editor.rounded_path(view.drawing, ends).boundingRect()
         self.assertAlmostEqual(box.right(), 6.0, places=6)
         self.assertFalse(view.grab().isNull())
-        # Pressed again on a UDF corner: sharp again (#125).
-        view.select_point(1)
-        button.click()
+        # [No fillet] on corner 1's row: sharp again.
+        self.press("1", "No fillet")
         self.assertEqual(
             sorted(outline_editor.fillet_radii(view.drawing)), [2]
         )
@@ -627,51 +631,107 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.undo()
         self.assertEqual(view.drawing.note_radius, "")
         self.assertEqual(outline_editor.fillet_radii(view.drawing), {})
-
-    def test_fillet_letters(self) -> None:
-        """A fillet takes the letter whose row is selected; again, it
-        is sharp; an angle letter is refused; an empty click clears the
-        row (#125, #132)."""
-        view = self.editor.view
-        button = self.editor.buttons["Fillet"]
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
-        view.drawing.letters[:] = [
-            Letter("R2", "Big", "1/4 in", ""),
-            Letter("T", "Tilt", "30 deg", ""),
-        ]
-        view.make_squares()
-        self.editor.fill_table()
-        view.select_point(1)
-        view.select_point(2)
-        self.editor.table.selectRow(0)
-        button.click()
-        radii = [
-            (dimension.start, dimension.letter)
-            for dimension in view.drawing.dimensions
-        ]
-        self.assertEqual(radii, [(1, "R2"), (2, "R2")])
-        self.assertEqual(view.drawing.note_radius, "")
-        self.assertFalse(view.grab().isNull())
-
-        # Corner 2 moved to UDF; then pressed again with R2 on corner
-        # 1 alone: corner 1 sharp.
         view.clear_selection()
-        self.assertEqual(self.editor.table.selectedIndexes(), [])
-        view.select_point(2)
-        button.click()
-        self.assertEqual(view.drawing.dimensions[1].letter, "UDF")
-        view.select_point(1)
-        self.editor.table.selectRow(0)
-        button.click()
-        self.assertEqual(
-            [dimension.start for dimension in view.drawing.dimensions], [2]
+        self.assertEqual(panel.rows, {})
+
+    def test_fillet_scale(self) -> None:
+        """Once the drawing has a scale, a fillet is its value to scale,
+        and follows a changed value (#142.3)."""
+        view = self.editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.make_squares()
+        view.set_fillets([1], NOTE_CHOICE)
+        view.drawing.scale = 0.5
+        self.assertAlmostEqual(
+            outline_editor.fillet_radii(view.drawing)[1], 25.4 / 32
+        )
+        view.drawing.letters[0].default = "1/8 in"
+        view.follow()
+        self.assertAlmostEqual(
+            outline_editor.fillet_radii(view.drawing)[1], 25.4 / 16
         )
 
-        # An angle's letter is refused.
+    def test_fillet_rows_light(self) -> None:
+        """One corner has one row (no "All"); a row clicked lights its
+        corner, and a corner lit frames its row (#199)."""
+        from PySide6.QtCore import Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+        from PySide6.QtWidgets import (  # pylint: disable=C0415
+            QFrame,
+            QLabel,
+        )
+
+        view = self.editor.view
+        panel = self.editor.fillets
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.make_squares()
         view.select_point(1)
-        self.editor.table.selectRow(1)
+        self.assertEqual(list(panel.rows), ["All", "1"])
+        view.select_point(2)
+        self.assertEqual(list(panel.rows), ["All", "1", "2"])
+        names = [
+            label.text()
+            for row in ("All", "1", "2")
+            if (label := panel.frames[row].findChild(QLabel)) is not None
+        ]
+        self.assertEqual(names, ["All:", "1:", "2:"])
+        QTest.mouseClick(panel.frames["1"], Qt.MouseButton.LeftButton)
+        self.assertEqual(view.lit, 1)
+        self.assertEqual(view.squares[1].scale(), outline_editor.LIT_SCALE)
+        self.assertEqual(panel.frames["1"].frameShape(), QFrame.Shape.Box)
+        view.light(2)
+        self.assertEqual(view.squares[1].scale(), 1.0)
+        self.assertEqual(panel.frames["1"].frameShape(), QFrame.Shape.NoFrame)
+        self.assertEqual(panel.frames["2"].frameShape(), QFrame.Shape.Box)
+        view.light(-1)
+        self.assertEqual(panel.frames["2"].frameShape(), QFrame.Shape.NoFrame)
+
+    def press(self, row: str, text: str) -> None:
+        """Press a button of the [Fillets] tab.
+
+        Arguments:
+        * `row` (`str`): Its row: "All", or a corner's index.
+        * `text` (`str`): Its text.
+        """
+        button = next(
+            each
+            for each in self.editor.fillets.rows[row]
+            if each.text() == text
+        )
         button.click()
-        self.assertIn("T is an angle", view.message)
+
+    def test_fillet_letters(self) -> None:
+        """The [Fillets] rows go in the order selected, each with a button per
+        fillet letter in use, the one in use down; "All" is down only
+        when every corner has the same (#142.2)."""
+        view = self.editor.view
+        points = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0.0, 4.0)]
+        view.drawing.points[:] = points
+        view.drawing.letters[:] = [Letter("R2", "Big", "1/4 in", "")]
+        view.make_squares()
+        view.set_fillets([1, 2], "R2")
+        view.select_point(1)
+        view.select_point(2)
+        panel = self.editor.fillets
+        self.assertEqual(panel.corners, [1, 2])
+        texts = [each.text() for each in panel.rows["All"]]
+        self.assertEqual(texts, ["No fillet", "UDF", "R2"])
+
+        # Function `down()`:
+        def down(row: str) -> list[str]:
+            return [
+                each.text() for each in panel.rows[row] if each.isChecked()
+            ]
+
+        self.assertEqual(down("All"), ["R2"])
+        self.press("2", "UDF")
+        self.assertEqual(view.fillets(), {1: "R2", 2: "UDF"})
+        self.assertEqual(down("2"), ["UDF"])
+        self.assertEqual(down("All"), [])
+        self.press("All", "No fillet")
+        self.assertEqual(view.fillets(), {})
+        self.assertEqual(down("1"), ["No fillet"])
+        self.assertFalse(view.grab().isNull())
 
     def test_fillet_too_big(self) -> None:
         """A fillet too big for its edges is red in the table, under it,
@@ -685,7 +745,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.drawing.letters[1].default = "1/2 in"
         view.clear_selection()
         view.select_point(2)
-        self.editor.buttons["Fillet"].click()
+        self.press("2", "UDF")
         self.editor.check_letters()
         self.assertEqual(view.trouble, {})
         self.assertEqual(self.editor.problems.text(), "")
