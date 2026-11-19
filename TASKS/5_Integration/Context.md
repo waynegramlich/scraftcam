@@ -1,194 +1,54 @@
 # LLM Agent Context Log
 
-The user expects things to change all over, and missing features to be found as they come.  Work so far is in `T.ctfs~2.5.1`'s log.
+Squeezed 2026-11-19: where things stand; the dated history is in
+`hg` and `git`.  The user expects things to change all over, and
+missing features to be found as they come.  Each sub-task's own
+`Context.md` holds its details.
 
-## 2026-11-02: Where things stand
+## The Tree
 
-The user is writing this task's `Details.md`, and sub-tasks will follow.  Ready to integrate: `SCMachineVise` with `SCJawPlate`, `SCParallel` with optional holes (a set of 1/2 to 1-5/8 in), `SCGridPlate` (chamfers, tooling holes, and kind `grid_plate` in the shop's tooling files), and every cutter kind built from `examples/shop/tools.toml` with holders; all documented in `Tool_Models.md`.  Stock stays blocks of material for a while (`T.sm~2.4` pending).  `T.tm~2.5`, `T.ctfs~2.5.1` and `T.dtm~2.5.2` are suspended, as more tools are coming; vises, jaw plates, parallels and mill tables still have no kinds in the shop files.  `I.phpsa~1` is closed, never reproduced.  The chamfered grid plate takes about 5 minutes to build after any change to `tools.py`, `mount.py` or `scgeometry.py` (cache key), then 1 s from the cache.
-
-## 2026-11-03: One tree (`T.rd~5.1`, closed)
-
-Everything is now one repository, run from its top with `python3 -m`,
-nothing installed: the package `scraftcnc/` (`pybind/`, `lcnc/`,
-`hmi/`, `tooling/`; no `sc` module prefixes, classes keep `SC`),
-`tests/` (`python3 -m unittest discover -s tests -t .`, 519 tests,
-coverage 90.5%), `./show_demo.py` at the top.  `mypy.ini` and
-`ruff.toml` hold the coding rules' settings.  The old `scraftpybind`
-and `scraftlinuxcnc` repositories are archived (`I.amgr~2`).  The CI
-workflow `probe_linuxcnc.yml` passes.  Next: `T.npfetc~5.3` (a path per
-tool change); SolidCraft's hover translucency is a quirk, documented in
-`README.md` (`I.mpgtis~3`).  The LinuxCNC end-to-end suite
+One repository (`T.rd~5.1`, closed), run from its top with `python3
+-m`, nothing installed: package `scraftcam/` (`pybind/`, `lcnc/`,
+`hmi/`, `tooling/`, `gui/`, `catalog/`), `tests/`, `./show_demo.py`.
+`mypy.ini`, `ruff.toml` hold the checkers' settings.  The old
+`scraftpybind`, `scraftlinuxcnc` repositories are archived
+(`I.amgr~2`).  PySide6 comes from `packages.require()`
+(`scraftcam/pins.toml`), no venv; Linux is Wayland only, no macOS;
+to be published on PyPI.  The LinuxCNC end-to-end suite
 (`SCRAFTCNC_LINUXCNC=1`) has not been run since the reorganization.
 
-## 2026-11-04: `T.emsagc~5.2` design questions
+## Done
 
-Designing the `.nc` comment format, by question rounds with the user;
-see `T.emsagc~5.2`'s `Context.md`.  Nothing coded yet.
+* `.nc` setup comments (`T.emsagc~5.2`, closed): the HMI draws the
+  mount from them, picks the origin, steps through items, toggles
+  keep-outs; `./show_demo.py --headless` (`T.hlp~3.3.1`).
+* The HMI is Qt (`T.hs~5.1.5`, closed): `scraftcam/hmi/lcnc_hmi.py`,
+  `hmi_machine.py`, and a panel of the one GUI.
+* The one GUI (`T.osiade~5.1.9`): the user's shop and designs in
+  their own version controlled directories, `~/.scraftcam/` always
+  deletable; any number of windows, each a tree driving panels ([<]
+  [>] Pin [Close]), no tabs, no [Save]; layouts kept per shop in
+  `~/.scraftcam/layouts/`.  Shop item panels edit fields in place
+  with sketches, help and [Enable Editing]; a `machines/` list;
+  controller templates in `controllers/`; the machine panel (core
+  strip over tabs Setup, Tools, G-code, Job, Execute); [Stop All],
+  [Exit].  Tests for windows and panels (#207) were next there.
+* Tooling ready to integrate: `SCMachineVise` with `SCJawPlate`,
+  `SCParallel` with holes, `SCGridPlate` (5 minute build after a
+  change to `tools.py`, `mount.py` or `scgeometry.py`, then 1 s from
+  the cache), every cutter kind from `examples/shop/tools.toml`, all
+  in `Tool_Models.md`.  Stock stays blocks (`T.sm~2.4`).
+* SolidCraft's hover translucency is a quirk (`I.mpgtis~3`, in
+  `README.md`).
 
-## 2026-11-04: `T.emsagc~5.2` design done
+## Under Way
 
-The `.nc` setup comment design is settled (summary at the end of
-`T.emsagc~5.2`'s `Context.md`); coding starts next, in its #39 order.
-`T.sm2~5.5` Standard Materials created, Pending.
-
-## 2026-11-04: `T.emsagc~5.2` closed
-
-The `.nc` setup comments work end to end: the panel draws the mount
-from them, picks the origin from a list, steps through the items, and
-toggles keep-outs; `./show_demo.py --headless` (`T.hlp~3.3.1`, closed)
-lets Claude run everything with no window.  Its summary lists what is
-left open.  Next candidates: `T.npfetc~5.4` (a path per tool change),
-spacers under the part (through cuts), `T.sm2~5.5`.
-
-## 2026-11-05: `T.hs~5.1.5` closed
-
-The HMI work (S1-S14) is done and checked by the user in a GUI run;
-see its `Summary.md`.  Next candidates: `T.npfetc~5.4` (a path per
-tool change), `T.cmt~5.3` (more tools), `T.sm2~5.5`.
-
-## 2026-11-12: Qt, PyPI, no macOS (`T.osiade~5.1.9`)
-
-The GUI toolkit is now Qt (PySide6), not `tkinter`; `scraftcnc` will
-be published on PyPI with a standard-library bootstrap installer into
-`~/.scraftcnc/venv/`; macOS is dropped; Linux is Wayland only.  Next:
-port the HMI to Qt (`T.hs~5.1.5`, to be reopened).  See `T.osiade~5.1.9`'s
-`Context.md`, #18-#63.
-
-## 2026-11-12: `T.hs~5.1.5` closed again: the HMI is Qt
-
-The package is `scraftcam`; the HMI is Qt (`scraftcam/hmi/lcnc_hmi.py`,
-with `hmi_machine.py`), headless as offscreen Qt; PySide6 comes from
-`packages.require()` (`scraftcam/pins.toml`); no venv (the
-`~/.scraftcnc/venv/` plan above is replaced).  Next: `T.osiade~5.1.9`.
-
-## 2026-11-12: `catxtract` in Qt; the GUI's design decided
-
-No `tkinter` code is left (`T.cm~5.1.10`, suspended again).  The
-decisions for the one GUI are done for now (`T.osiade~5.1.9`, #1-#89):
-the user's shop and designs live in their own version controlled
-directories, `~/.scraftcam/` is always deletable, a tree view drives
-the panels, no tabs, no [Save].  Next: step 1, the top line.
-
-## 2026-11-12: `T.osiade~5.1.9` S3.4 done
-
-A shop item's panel shows its fields, edited in place
-(`scraftcam/gui/fields.py`, `views.Panel`); the user liked it in a
-GUI run.  Next: S3.5 (`gui/README.md`).
-
-## 2026-11-13: `T.osiade~5.1.9` steps 3-4 done, step 5 under way
-
-The shop GUI is done (fields, sketches, tooltips, light/dark,
-`stock_materials/`/`tool_materials/`, the grid plate's new API and
-sketches).  Step 5: the HMI is a panel of the GUI (`./show_demo.py`
-starts `scraftcam.run --program`), with machine tabs, a bar to the
-next manual tool task, [Stop All] always shown, a minimal form.  New
-Pending tasks: `T.cpfj~5.7` (carousel planning for a job),
-`T.rslsao~5.8` (several LinuxCNC simulators at once).  Next: the
-inside of a machine tab (see `T.osiade~5.1.9`'s `Context.md`).
-
-## 2026-11-14: `T.osiade~5.1.9` step 5 redesign, #134-#146
-
-A `machines/` list (CNC machines three lines each, others one, tools
-to fetch); a machine's controls only once it is clicked; a start
-guide; [Enable Editing] per panel; controller templates in
-`controllers/` copied into each machine by [New Machine], a template
-change followed up by its editor; vendor version fields; a key left
-out is "not initialized yet"; header-first key order.  All coded,
-awaiting the user's demo run (see `T.osiade~5.1.9`'s `Context.md`).
-
-## 2026-11-14: `T.osiade~5.1.9` #147-#157
-
-Shop and controller panels reworked after the user's demo run: edit
-row in each panel, drop-downs, ▶ help per field, directory
-explanations, `post_processor` as a command; the `machines/` list
-shows active machines first; [Close Panel], [Detach]/[Reattach],
-[Exit Program] with stop questions.  Awaiting the user's demo run.
-
-## 2026-11-14: `T.osiade~5.1.9` #158-#172
-
-The machine panel is smaller: a core (strip, the next tool large,
-progress, position in three lines) over tabs Setup, Tools, G-code,
-Job, Execute, at most 5 widgets to a row; the minimal form is gone,
-as the `machines/` list is the power operator's home.  The user
-liked it in a demo run.  Next: see `T.osiade~5.1.9`'s `Context.md`.
-
-## 2026-11-15: `T.osiade~5.1.9` windows and panels
-
-Any number of windows, each with its tree, [+ Panel], [New Window],
-[Stop All] and [Exit]; panels with [<] [>] [ ] Pin [Close]; a tree
-click skips pinned panels; the layout (windows, panels, pins) is
-kept per shop in `~/.scraftcam/layouts/` and comes back at start.
-The machine panel's tabs and every top line are narrower.  The user:
-"it just works".  Detach/attach designs were tried and dropped.
-Next: tests for it (#207), see `T.osiade~5.1.9`'s `Context.md`.
-
-## 2026-11-15: `T.cm~5.1.10` reopened: catalogs in the shop
-
-Catalogs are `catalogs/VENDOR/EDITION/catalog.toml` in the shop, the
-PDF and `catxtract`'s pages unversioned in `pages/`; [New Catalog]
-and [Open Pages] (a pop-up `catxtract`) in the GUI.  Only purchased
-products go under version control.  First tool from a catalog page:
-the Shars Z setter, `tooling/setters.py` `z_setter(imperial)`, shown
-in SolidCraft.  McMaster-Carr web pages are on hold (their rules).
-See `T.cm~5.1.10`'s `Context.md`.
-
-## 2026-11-15: `T.cm~5.1.10` suspended; `T.ant~5.9` opened
-
-Catalogs wait until an end user can model a tool and hook it in
-easily: `T.ant~5.9` (Adding a New Tool), Open.
-
-## 2026-11-15: `T.cmt~5.3`: the parametric model library
-
-5.3 now builds the library for parametric parts and assemblies:
-plain editable dataclasses, `update()` passes until stable, a
-separate `build()`, `Placement` with quaternion `Rotation`,
-native-unit `Length`, field metadata driving schema, GUI and docs;
-no `SC` prefixes.  `attrs` was tried and rejected.  Next:
-`scraftcam/model.py`, then the drill vise (the user measures it).
-See `T.cmt~5.3`'s `Context.md`.
-
-## 2026-11-16: Live SolidCraft parameters (`T.cmt~5.3`)
-
-Tested: SolidCraft parameters drive sketches and extrudes, rebuild in
-milliseconds, work inside an assembly beside cached STEP parts, and
-several off-screen SolidCrafts can run at once.  Decided: models
-subclass `SolidModel`; our GUI edits go one way to SolidCraft
-parameters; one visible design window unless the user allows more,
-plus simulation windows per machine.  `T.cm~5.1.10` is Reference
-until 5.3 has tools.  See `T.cmt~5.3`'s `Context.md`.
-
-## 2026-11-16: `scraftcam/model.py` and a live `JawPlate`
-
-`T.cmt~5.3`: the model library's first steps are coded (`Length`,
-`Angle`, quaternion `Rotation`, `Placement`, `SolidModel` settling
-by passes within a wall clock limit) and `JawPlate` builds in
-SolidCraft driven by parameters.  Next: `SolidCraftLink`, then the
-Kurt vise.  See `T.cmt~5.3`'s `Context.md`.
-
-## 2026-11-16: `SolidCraftLink` (`T.cmt~5.3`)
-
-The `JawPlate` was shown live in a SolidCraft window; the link that
-keeps models up to date in SolidCraft (`scraftcam/solidcraft_link.py`)
-has its first chunk.  Next: models inside models (#69), then the Kurt
-vise.  See `T.cmt~5.3`'s `Context.md`.
-
-## 2026-11-16: Two new sub-tasks; GUI by layers
-
-`T.sdfm~2.5.2.1` (SVG diagrams from models) and `T.oacv~5.1.9.1`
-(original and changed values) are created, Open, for the user's
-review.  The user's idea: a model's panel organized by layers (a
-global layer plus a sub-panel per layer, each with its SVG); tools
-are the dry run for the end products.  See `T.cmt~5.3`.
-
-## 2026-11-17: SolidCraft's 2D solver tested; `Profile`, `Parallel`
-
-`T.sdfm~2.5.2.1`: SolidCraft sketches were pushed hard (polygons,
-fillets, free arcs, wavy staircases, holes, 204 segments, tiny and
-huge sizes, inches, pockets, a window); it is good, but takes some
-bad outlines silently, so `scraftcam/outline.py` `Profile` checks
-them first, with messages in the user's units.  Every point and arc
-center is its own SolidCraft parameter.  `scraftcam/tooling/parallel.py`
-`Parallel` is the first `SolidModel` drawn from a `Profile`;
-`SolidCraftLink` now compares `solidcraft_values()` and rebuilds when
-the names change.  New: `T.prg~5.1.9.2` (Parametric RoundedPolygon
-GUI), Open.  Next: SVG from a `Profile`.
+* `T.cmt~5.3`: the parametric model library (`scraftcam/model.py`,
+  `SolidModel`, `SolidCraftLink`, live SolidCraft parameters;
+  `JawPlate`, `Parallel`).
+* `T.sdfm~2.5.2.1`: `scraftcam/outline.py` `Profile`; SVG next.
+* `T.prg~5.1.9.2`: the outline editor (the current focus).
+* `T.cm~5.1.10` Reference until 5.3 has tools; `T.ant~5.9` Open.
+* Pending: `T.npfetc~5.4` (a path per tool change), `T.sm2~5.5`,
+  `T.cpfj~5.7`, `T.rslsao~5.8`, `T.cett2e~5.1.9.2.1`.
+  `T.oacv~5.1.9.1` is Open but left as it is.
