@@ -15,9 +15,11 @@ from scraftcam.gui.dimensions import (
     Dimension,
     drawn_marks,
 )
+from scraftcam.gui.hides import HIDE_Y, Hide
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 from scraftcam.gui.outline_file import outline_text
+from scraftcam.gui.values import crossings
 from tests import qt_app
 
 # Only for the type: `PySide6` is on `sys.path` once `tests` is in.
@@ -722,6 +724,185 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.undo()
         self.assertEqual(view.fillets(), {2: "R2"})
 
+    def test_drag_obeys_marks(self) -> None:
+        """A drag carries the corners a corner's marks chain it to, and
+        stops at an axis mark (#243)."""
+        view = self.editor.view
+        view.snap_on = False
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.make_squares()
+        view.select_edge(0)
+        view.toggle_mark(VERTICAL)  # Edge 0 level.
+        view.clear_selection()
+        view.select_edge(1)
+        view.toggle_mark(HORIZONTAL)  # Edge 1 upright.
+        self.assertEqual(view.mark_chain(1, 1), {0, 1})
+        self.assertEqual(view.mark_chain(1, 0), {1, 2})
+        view.squares[1].setPos(7.0, 1.0)
+        self.assertEqual(view.drawing.points[0], (0.0, 1.0))
+        self.assertEqual(view.drawing.points[1], (7.0, 1.0))
+        self.assertEqual(view.drawing.points[2], (7.0, 4.0))
+        self.assertEqual(view.squares[0].pos().y(), 1.0)
+
+        # On the X axis, corner 0 holds the chain's Y at 0.
+        view.clear_selection()
+        view.select_point(0)
+        view.toggle_mark(VERTICAL)
+        view.squares[1].setPos(8.0, 3.0)
+        self.assertEqual(view.drawing.points[1], (8.0, 0.0))
+        self.assertEqual(view.drawing.points[0], (0.0, 0.0))
+
+    def test_right_angle(self) -> None:
+        """[Right Angle (Shift+L)] makes the selected corners right
+        angles, a square glyph in each; again takes them off; one the
+        drawing breaks is red (#236, #241)."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtGui import QColor
+
+        from scraftcam.gui import theme
+
+        editor = self.editor
+        view = editor.view
+        button = editor.buttons["Right Angle"]
+        self.assertEqual(button.text(), "Right Angle (Shift+L)")
+        button.click()
+        self.assertIn("Select corners", view.message)
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.make_squares()
+        view.select_point(1)
+        button.click()
+        right = view.drawing.dimensions[-1]
+        self.assertEqual((right.letter, right.kind), ("", ANGLE))
+        self.assertEqual({right.start, right.end}, {0, 1})
+        self.assertEqual(view.drawing.letters, [])
+        self.assertFalse(view.measures[0].shape().isEmpty())
+        self.assertFalse(view.circles[0].isVisible())
+        problem: str = QColor(theme.colors().problem).name()
+        self.assertNotEqual(view.measures[0].pen().color().name(), problem)
+        view.drawing.points[2] = (7.0, 4.0)
+        self.assertEqual(view.measures[0].pen().color().name(), problem)
+        view.drawing.points[2] = (6.0, 4.0)
+        self.assertFalse(view.grab().isNull())
+        button.click()
+        self.assertEqual(view.drawing.dimensions, [])
+
+        # The solver takes it as 90 degrees: the level bottom edge
+        # directs the right edge, which then gives corner 2's X.
+        view.drawing.dimensions[:] = [
+            Dimension("", VERTICAL, ORIGIN, 0),
+            Dimension("", HORIZONTAL, ORIGIN, 0),
+            Dimension("", VERTICAL, 0, 1),
+            Dimension("W", HORIZONTAL, 0, 1),
+            Dimension("H", VERTICAL, ORIGIN, 2),
+        ]
+        view.follow()
+        self.assertNotIn(2, view.solution.x)
+        view.clear_selection()
+        view.select_point(1)
+        button.click()
+        self.assertIn("90 deg", str(view.solution.x[2]))
+        self.assertEqual(view.solution.extra, [])
+
+    def test_letters_in_use(self) -> None:
+        """[Delete] takes an unused letter (armed in [Fillets], or the
+        table's current row) and refuses one in use, naming its uses;
+        "Fillet" stays checked while it rounds a corner (#215, #225).
+        """
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        from PySide6.QtCore import Qt  # pylint: disable=C0415
+
+        editor = self.editor
+        view = editor.view
+        view.drawing.letters[:] = [
+            Letter("R2", "Big", "1/4 in", "", fillet=True),
+            Letter("S", "Spare", "1/8 in", "", fillet=True),
+        ]
+        editor.fill_table()
+        view.set_fillets([0, 1], "R2")
+        editor.tabs.setCurrentIndex(outline_editor.FILLETS_TAB)
+        editor.row_clicked(outline_editor.LETTER_ROW, 1)
+        view.clear_selection()
+        editor.row_clicked(outline_editor.LETTER_ROW, 1)
+        delete = editor.buttons["Delete"]
+        delete.click()
+        self.assertIn("R2 is used by 2 fillets", editor.status.text())
+        self.assertEqual(len(view.drawing.letters), 2)
+
+        # Unchecking "Fillet" while it rounds corners is refused.
+        box = cell(editor, 0, 3)
+        box.setCheckState(Qt.CheckState.Unchecked)
+        self.assertEqual(box.checkState(), Qt.CheckState.Checked)
+        self.assertTrue(view.drawing.letters[0].fillet)
+        self.assertIn("it stays a fillet radius", editor.status.text())
+
+        # The spare letter goes, by its row; undo brings it back.
+        editor.tabs.setCurrentIndex(outline_editor.DIMENSIONS_TAB)
+        editor.table.setCurrentCell(outline_editor.LETTER_ROW + 1, 0)
+        view.setFocus()
+        delete.click()
+        self.assertEqual(
+            [each.letter for each in view.drawing.letters], ["R2"]
+        )
+        view.undo()
+        self.assertEqual(len(view.drawing.letters), 2)
+
+    def test_hover_lighting(self) -> None:
+        """Pointing at a row lights its letter's dimensions and the
+        corners it rounds; pointing at a corner makes its letter's row
+        bold; a refused delete lights the uses (#224, #245)."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QEvent
+
+        editor = self.editor
+        view = editor.view
+        view.dimension_between(ORIGIN, 1, HORIZONTAL)
+        view.drawing.letters.append(Letter("R2", "", "1/16 in", "", True))
+        editor.fill_table()
+        view.set_fillets([2], "R2")
+        thin: float = view.measures[0].pen().widthF()
+        editor.hover_row(outline_editor.LETTER_ROW, 0)
+        self.assertEqual(view.lit_letter, "A")
+        self.assertGreater(view.measures[0].pen().widthF(), thin)
+        self.assertFalse(view.corner_lit(2))
+        editor.hover_row(outline_editor.LETTER_ROW + 1, 0)
+        self.assertTrue(view.corner_lit(2))
+        self.assertEqual(view.squares[2].scale(), outline_editor.LIT_SCALE)
+        editor.eventFilter(editor.table.viewport(), QEvent(QEvent.Type.Leave))
+        self.assertEqual(view.lit_letter, "")
+        self.assertEqual(view.squares[2].scale(), 1.0)
+
+        # A corner pointed at makes its letter's row bold.
+        view.light(2)
+        self.assertTrue(cell(editor, 1, 0).font().bold())
+        self.assertFalse(cell(editor, 0, 0).font().bold())
+        view.light(-1)
+        self.assertFalse(cell(editor, 1, 0).font().bold())
+
+        # A refused delete shows what uses the letter.
+        view.clear_selection()
+        editor.table.setCurrentCell(outline_editor.LETTER_ROW + 1, 0)
+        view.setFocus()
+        editor.buttons["Delete"].click()
+        self.assertEqual(view.lit_letter, "R2")
+
+    def test_crossings(self) -> None:
+        """Crossing edges are found, drawn red and named in the bar
+        (#242)."""
+        editor = self.editor
+        view = editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 4.0), (6.0, 0.0), (0, 4)]
+        view.make_squares()
+        editor.show_message()
+        crossed = crossings(view.drawing.points)
+        self.assertEqual(crossed, [(0, 2)])
+        self.assertIn("Edges cross", editor.status.text())
+        self.assertFalse(view.grab().isNull())
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        editor.show_message()
+        self.assertEqual(editor.status.text(), "")
+
     def test_split_mark(self) -> None:
         """A corner pulled out of a marked edge drops its mark (#233);
         a mark has no circle, only its glyph's box to click."""
@@ -795,6 +976,13 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             view.measures[4].pen().color().name(),
             QColor(theme.colors().problem).name(),
         )
+
+        # A drag nothing pins that breaks a mark turns it red (#241).
+        problem: str = QColor(theme.colors().problem).name()
+        self.assertNotEqual(view.measures[0].pen().color().name(), problem)
+        view.drawing.points[1] = (6.0, 0.25)
+        self.assertEqual(view.measures[0].pen().color().name(), problem)
+        view.drawing.points[1] = (6.0, 0.0)
 
         # Clicked, a glyph selects its mark; [Delete] takes it away.
         view.clear_selection()
@@ -895,6 +1083,25 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         # A fixed coordinate does not move when dragged (#152 to come).
         view.squares[1].setPos(view.squares[1].pos() + QPointF(5.0, 0.0))
         self.assertAlmostEqual(view.drawing.points[1][0], 12.0)
+
+    def test_hide_covers(self) -> None:
+        """A strip covering a mark's glyph (or a letter) is found and
+        named in the bar; moved off, it is not (#182)."""
+        editor = self.editor
+        view = editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        view.make_squares()
+        view.fit()
+        view.select_edge(1)
+        view.toggle_mark(HORIZONTAL)  # The shank upright: glyph at Y 4.6.
+        view.drawing.hides.append(Hide(HIDE_Y, 1, 2, 1.0, 1.0))
+        self.assertEqual(view.covering(), {0})
+        editor.show_message()
+        self.assertIn("hide strip covers", editor.status.text())
+        view.toggle_overview()
+        self.assertFalse(view.grab().isNull())
+        view.drawing.hides[0] = Hide(HIDE_Y, 1, 2, 4.0, 1.0)
+        self.assertEqual(view.covering(), set())
 
     def test_hide(self) -> None:
         """[Hide], then a wide drag over the shank: a strip hiding a

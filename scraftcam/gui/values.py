@@ -350,7 +350,23 @@ def crosses(points: list[tuple[float, float]]) -> bool:
     Returns:
     * (`bool`): Whether two edges not side by side cross.
     """
+    return bool(crossings(points))
+
+
+# Function `crossings()`:
+def crossings(points: list[tuple[float, float]]) -> list[tuple[int, int]]:
+    """Return each pair of edges that cross (#242), not counting side
+    by side ones meeting at their shared corner.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+
+    Returns:
+    * (`list[tuple[int, int]]`): The pairs, each edge by the corner it
+      leaves, the lower first.
+    """
     count: int = len(points)
+    pairs: list[tuple[int, int]] = []
     first: int
     for first in range(count):
         second: int
@@ -363,8 +379,8 @@ def crosses(points: list[tuple[float, float]]) -> bool:
                 points[second],
                 points[(second + 1) % count],
             ):
-                return True
-    return False
+                pairs.append((first, second))
+    return pairs
 
 
 # Function `_segments_cross()`:

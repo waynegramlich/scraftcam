@@ -14,6 +14,7 @@ yet, and a dimension between two coordinates already tied another way
 is one too many (over-dimensioned).
 """
 
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -56,6 +57,10 @@ NEXT_KIND: dict[str, str] = {
 # A corner drawn this close to an axis is on it (snapped corners are
 # exactly on it), so that coordinate is 0 (#23).
 ON_AXIS: float = 1e-9
+
+# A mark the drawing is off by more than this (drawing steps) is
+# broken (#241).
+BROKEN: float = 1e-6
 
 
 # Class `Dimension`:
@@ -315,10 +320,11 @@ def solve(
 # Function `is_mark()`:
 def is_mark(dimension: Dimension) -> bool:
     """Return whether a dimension is a mark (#233): letterless, a
-    horizontal or vertical dimension of nothing.  A vertical one
-    across an edge marks it level (horizontal, `—`), a horizontal one
-    upright (vertical, `|`); from the origin to a corner, it puts the
-    corner on the X (Y) axis.
+    horizontal or vertical dimension of nothing, or an angle of 90
+    degrees (#236).  A vertical one across an edge marks it level
+    (horizontal, `—`), a horizontal one upright (vertical, `|`); from
+    the origin to a corner, it puts the corner on the X (Y) axis; an
+    angle between a corner's edges makes it a right angle (`└`).
 
     Arguments:
     * `dimension` (`Dimension`): The dimension.
@@ -326,7 +332,7 @@ def is_mark(dimension: Dimension) -> bool:
     Returns:
     * (`bool`): Whether it is a mark.
     """
-    return not dimension.letter and dimension.kind in AXIS
+    return not dimension.letter and dimension.kind in (*AXIS, ANGLE)
 
 
 # Function `mark_edge()`:
@@ -341,7 +347,11 @@ def mark_edge(dimension: Dimension, corners: int) -> int:
     Returns:
     * (`int`): The edge, or -1.
     """
-    if not is_mark(dimension) or min(dimension.start, dimension.end) < 0:
+    if (
+        not is_mark(dimension)
+        or dimension.kind not in AXIS
+        or min(dimension.start, dimension.end) < 0
+    ):
         return -1
     start: int = dimension.start
     end: int = dimension.end
@@ -350,6 +360,43 @@ def mark_edge(dimension: Dimension, corners: int) -> int:
     if start == (end + 1) % corners:
         return end
     return -1
+
+
+# Function `mark_broken()`:
+def mark_broken(
+    points: list[tuple[float, float]], dimension: Dimension
+) -> bool:
+    """Return whether the drawing breaks a mark (#241): its edge no
+    longer level (upright), or its corner off its axis, after a drag
+    no dimension pinned.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `dimension` (`Dimension`): The mark (any other: `False`).
+
+    Returns:
+    * (`bool`): Whether it is broken.
+    """
+    if not is_mark(dimension):
+        return False
+    if dimension.kind == ANGLE:
+        # A right angle: its edges' directions square to each other.
+        ways: list[tuple[float, float]] = [
+            (
+                points[(edge + 1) % len(points)][0] - points[edge][0],
+                points[(edge + 1) % len(points)][1] - points[edge][1],
+            )
+            for edge in (dimension.start, dimension.end)
+        ]
+        size: float = math.hypot(*ways[0]) * math.hypot(*ways[1])
+        dot: float = ways[0][0] * ways[1][0] + ways[0][1] * ways[1][1]
+        return size <= 0.0 or abs(dot) / size > BROKEN
+    axis: int = AXIS[dimension.kind]  # The coordinate it keeps.
+    ends: list[float] = [
+        0.0 if end == ORIGIN else points[end][axis]
+        for end in (dimension.start, dimension.end)
+    ]
+    return abs(ends[0] - ends[1]) > BROKEN
 
 
 # Function `drawn_marks()`:
@@ -565,6 +612,7 @@ def _angle_way(  # pylint: disable=too-many-arguments,too-many-positional-argume
     """
     start: int = dimension.start
     end: int = dimension.end
+    turn: str = dimension.letter or "90 deg"  # A right angle (#236).
 
     # Both edges directed already, by angles or by both their corners
     # known in full: the angle is one too many (#33, #230).
@@ -579,11 +627,11 @@ def _angle_way(  # pylint: disable=too-many-arguments,too-many-positional-argume
     flips: int = (dimension.rays[0] != 1) - (dimension.rays[1] != 1)
     if start in ways:
         half: str = {1: " + 180 deg", -1: " - 180 deg", 0: ""}[flips]
-        ways[end] = f"{ways[start]} + {dimension.letter}{half}"
+        ways[end] = f"{ways[start]} + {turn}{half}"
         return True
     if end in ways:
         back: str = {1: " - 180 deg", -1: " + 180 deg", 0: ""}[flips]
-        ways[start] = f"{ways[end]} - {dimension.letter}{back}"
+        ways[start] = f"{ways[end]} - {turn}{back}"
         return True
     return False
 
