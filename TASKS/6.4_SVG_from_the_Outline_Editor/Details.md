@@ -1,4 +1,4 @@
-# 6.2.2 SVG from the Outline Editor
+# 6.4 SVG from the Outline Editor
 
 (Draft by Claude, 2026-11-19, from the user's request in
 `T.oe~6.2` (#S5); the user's to revise.)

@@ -21,3 +21,11 @@ dimensions and marks (`DimensionItem`: `paint_angle()`,
 (`draw_cut()`) and the UDF note (`drawForeground()`); `values.py`
 has the real coordinates; `theme.py` the light and dark colors.
 Related: `T.sdfm~2.5.2.1` (`Profile` to SVG, not started).
+
+## 2026-11-20: Renumbered
+
+The GUI became top-level task `T.g~6` (was 5.1.9); this item moved
+from 5.1.9.2.2 to 6.4, its parent editor is `T.oe~6.2`.  Still
+nothing coded; next is to settle #247 and #248 above.  Numbers on
+from #257 (#250-#256 were the reorganization and the transcript
+rule, all done).

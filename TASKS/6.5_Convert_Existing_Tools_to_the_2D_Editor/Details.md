@@ -1,4 +1,4 @@
-# 6.2.1 Convert Existing Tools to the 2D Editor
+# 6.5 Convert Existing Tools to the 2D Editor
 
 (Draft by Claude, 2026-11-17, from the user's request in
 `T.oe~6.2`; the user's to revise.)
