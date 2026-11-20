@@ -125,9 +125,16 @@ unittest ...`).  Example: `examples/shop/tools/drill.outline.toml`.
   letter); a "Fillet" check column (`fillet = true` in the file,
   `fillet_kind_problem()` refuses angles; `UDF` made checked);
   `fillet_panel.py` deleted (`NOTE_LETTER`, `NOTE_CHOICE` now in
-  `outline_editor.py`), so no GUI way to fillet until chunk 2;
-  `view.set_fillets(corners, letter)` remains.  Hover code
-  (`OutlineView.light()`, `lit`, `lighted`) kept for chunk 3.
+  `outline_editor.py`).  Chunk 2 done: table row 0 is the fixed
+  "No fillet" row (`NO_FILLET`, shown only in [Fillets], never
+  saved), letters from `LETTER_ROW` 1 on (`keep()` takes table
+  rows); in [Fillets] one click arms a row (`OutlineEditor.arm()`,
+  `view.armed`, `""` = sharp; hint in the bar; selected corners
+  take it at once, #218), cells edit only by double click there; a
+  plain click on a corner paints it (`CornerCircle.paint_fillet()`
+  by `QTimer.singleShot`, one undo step); disarm by the row again,
+  empty space or [Dimensions].  Hover code (`OutlineView.light()`,
+  `lit`, `lighted`) kept for chunk 3.
 * Hides (`gui/hides.py`, `Hide(axis, below, above, low, high, under,
   over)`, `[[hides]]` in the file): [Hide (H)] lays a strip by a
   drag in the [Overview (O)] (straight stretches only: no corner, no
@@ -156,7 +163,7 @@ until #S7.
 
 ## Next: the Fillet Design Agreed (2026-11-19, chunk 1 coded)
 
-Numbers sticky; the next new one is #237.
+Numbers sticky; the next new one is #238.
 * #213 One letters table.  A tab bar over it: [Dimensions] shows
   every row; [Fillets] shows only rows checked "Fillet" (a new check
   box column, `fillet = true` on the letter in the file; only length
@@ -194,7 +201,16 @@ Numbers sticky; the next new one is #237.
   drawn red while it covers a dimension letter; the user's placement
   of letters is respected, never moved (the user, 2026-11-19).
 
-## Marks and One-Handle Selection (agreed 2026-11-19, not coded)
+## Marks and One-Handle Selection (agreed 2026-11-19)
+
+Done 2026-11-19: #231, #232, #234 (`dimension_selected()` works
+from the selection, else `dimension_points()`; [Angle] and its `A`
+key gone; the user confirmed lengths and angles work); #235
+(`CornerCircle`, edge circles 7 px); #237 every circle in
+`theme.Colors.handle` (yellow), selected filled yellow, the
+not-dimensioned ring now `warning` orange.  Next #233 in chunks:
+(A) marks in the solver and file, old files given their marks; (B)
+toggle buttons and glyphs; then #236.
 
 After the fillets (chunks 2-3), one Step; the user tests the GUI
 again only after #233.

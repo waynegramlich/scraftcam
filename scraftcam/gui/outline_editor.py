@@ -9,13 +9,12 @@ edge ends in a small arrowhead showing the winding, counterclockwise
 empty space pans the view (#6).  There are no modes (#58): dragging
 moves (a corner, a dimension's line); each click adds to the
 selection (empty space clears it), and the bar's buttons act on it.
-[Dimension (N)] takes the last two points clicked, before or after
-it is pressed, in any order (#60).
+[Dimension (N)] dimensions what is selected (#234): one edge's
+length, the angle at one corner, the angle between two edges, or the
+last two points clicked, before or after it is pressed (#60).
 The bar has a keyed button for each action, no menus (#11): [Grid
-(G)], [Snap (S)], [Delete (Del)], [Dimension (N)] (the two selected
-points), [Dim. Kind \u21bb (K)] (horizontal, length, vertical),
-[Angle (A)] (between the last two edges clicked),
-[Fit (F)],
+(G)], [Snap (S)], [Delete (Del)], [Dimension (N)], [Dim. Kind
+\u21bb (K)] (horizontal, length, vertical), [Fit (F)],
 [Undo (Ctrl+Z)] and [Redo
 (Ctrl+Shift+Z)] (#18), a whole drag being one change, [New Letter
 (L)].  Below the drawing, past a bar dragged up and down, the
@@ -46,6 +45,7 @@ from PySide6.QtCore import (  # noqa: E402
     QRect,
     QRectF,
     Qt,
+    QTimer,
 )
 from PySide6.QtGui import (  # noqa: E402
     QBrush,
@@ -139,7 +139,7 @@ from .window import make_application  # noqa: E402
 
 # pylint: enable=wrong-import-position,wrong-import-order
 
-# Screen sizes, in pixels: a pull square's side, an arrowhead's length,
+# Screen sizes, in pixels: a corner circle's width, an arrowhead's length,
 # the outline's and the thin lines' widths (#26), and the least gap
 # between minor grid lines.
 SQUARE_PIXELS: float = 9.0
@@ -177,6 +177,12 @@ NOTE_CHOICE: str = "*note*"
 DIMENSIONS_TAB: int = 0
 FILLETS_TAB: int = 1
 
+# The table's first row, shown only in [Fillets]: "No fillet", a
+# fixed entry never edited, deleted or saved (#219, #222); the letters
+# follow it, letter `i` in row `i + LETTER_ROW`.
+LETTER_ROW: int = 1
+NO_FILLET: tuple[str, ...] = ("", "No fillet", "0", "", "(No Edit Allowed)")
+
 # The letters' table: its columns, each with its `Letter` field.
 COLUMNS: tuple[tuple[str, str], ...] = (
     ("Letter", "letter"),
@@ -192,9 +198,9 @@ OVERSHOOT_PIXELS: float = 4.0
 LETTER_GAP_PIXELS: float = 4.0
 LETTER_POINTS: int = 11
 
-# An edge handle's size, and the least length on screen of an edge
-# that shows one (pixels).
-HANDLE_PIXELS: float = 9.0
+# An edge handle's size, smaller than a corner's circle (#235), and
+# the least length on screen of an edge that shows one (pixels).
+HANDLE_PIXELS: float = 7.0
 GRIP_PIXELS: float = 11.0
 
 # The working view (#170, #172): the gap at a cut, and a long break
@@ -473,13 +479,15 @@ class History:
         return self.undone.pop()
 
 
-# Class `PullSquare`:
-class PullSquare(QGraphicsRectItem):
-    """A corner's square, the same size on screen at any zoom.
+# Class `CornerCircle`:
+class CornerCircle(QGraphicsEllipseItem):
+    """A corner's circle (a square until #235), the same size on
+    screen at any zoom; where it sits (on a corner, mid-edge) tells
+    it from an edge's smaller circle.
 
-    In [Move] it is dragged, moving its corner, snapped to the grid
-    when [Snap] is on and Shift is not held.  In [Add] or [Delete] a
-    click adds a corner after it or deletes its corner.
+    Dragged, it moves its corner, snapped to the grid when [Snap] is
+    on and Shift is not held; a click selects it, or while a fillet
+    letter is armed fillets its corner (#214).
 
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
@@ -488,7 +496,7 @@ class PullSquare(QGraphicsRectItem):
       The drawing when a drag began (`None` between drags).
     """
 
-    # Method `PullSquare.__init__()`:
+    # Method `CornerCircle.__init__()`:
     def __init__(self, editor: "OutlineView", index: int) -> None:
         """Make the square of one corner.
 
@@ -514,36 +522,47 @@ class PullSquare(QGraphicsRectItem):
         self.setZValue(2.0)
         self.setAcceptHoverEvents(True)
 
-    # Method `PullSquare.hoverEnterEvent()`:
+    # Method `CornerCircle.hoverEnterEvent()`:
     def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
         """Light its corner (and its [Fillets] row, #199)."""
         self.editor.light(self.index)
         super().hoverEnterEvent(event)
 
-    # Method `PullSquare.hoverLeaveEvent()`:
+    # Method `CornerCircle.hoverLeaveEvent()`:
     def hoverLeaveEvent(self, event: QGraphicsSceneHoverEvent) -> None:
         """Put its corner out."""
         self.editor.light(-1)
         super().hoverLeaveEvent(event)
 
-    # Method `PullSquare.mousePressEvent()`:
+    # Method `CornerCircle.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         """Select its corner, then start a drag."""
         self.editor.select_point(self.index)
         self.before = self.editor.drawing.snapshot()
         super().mousePressEvent(event)
 
-    # Method `PullSquare.mouseReleaseEvent()`:
+    # Method `CornerCircle.mouseReleaseEvent()`:
     def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-        """End a drag: remember it, if it moved the corner."""
+        """End a drag: remember it, if it moved the corner; a plain
+        click while a letter is armed fillets the corner by it (#214,
+        #227), after this event, as it remakes the squares."""
         super().mouseReleaseEvent(event)
-        if self.before is not None and self.before.points != tuple(
-            self.editor.drawing.points
-        ):
+        moved: bool = self.before is not None and self.before.points != (
+            tuple(self.editor.drawing.points)
+        )
+        if moved and self.before is not None:
             self.editor.history.remember(self.before)
         self.before = None
+        if not moved and self.editor.armed is not None:
+            QTimer.singleShot(0, self.paint_fillet)
 
-    # Method `PullSquare.itemChange()`:
+    # Method `CornerCircle.paint_fillet()`:
+    def paint_fillet(self) -> None:
+        """Fillet its corner by the armed letter: one undo step."""
+        if self.editor.armed is not None:
+            self.editor.set_fillets([self.index], self.editor.armed)
+
+    # Method `CornerCircle.itemChange()`:
     def itemChange(
         self, change: QGraphicsItem.GraphicsItemChange, value: object
     ) -> object:
@@ -1159,7 +1178,7 @@ class EdgeHandle(QGraphicsEllipseItem):
 
     Dragged, it pulls out a new corner there, snapped as corners are,
     the whole drag one change; a click that does not move selects
-    the edge (for [Angle], #S2).
+    the edge (for [Dimension], #231, #234).
 
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
@@ -1984,6 +2003,8 @@ class OutlineView(QGraphicsView):
       Where the pointer was, while empty space is dragged.
     * `letters_changed` (`Callable[[], None]`):
       Called after a new dimension adds a letter (the window sets it).
+    * `armed` (`str | None`): The fillet letter a corner clicked takes
+      ("" makes it sharp), armed in [Fillets] (#214); `None`: none.
     * `released` (`Callable[[], None]`):
       Called after a mouse button comes up (the window saves).
     * `placing` (`bool`): Whether the squares are being put where the
@@ -2006,7 +2027,7 @@ class OutlineView(QGraphicsView):
     * `origin` (`QGraphicsRectItem`): The origin's square.
     * `outline` (`OutlineItem`): The outline.
     * `snap_on` (`bool`): Whether drags snap to the grid.
-    * `squares` (`list[PullSquare]`): The corners' squares.
+    * `squares` (`list[CornerCircle]`): The corners' squares.
     * `measures` (`list[DimensionItem]`): The dimensions' items.
     * `handles` (`list[EdgeHandle]`): The edges' handles.
     * `circles` (`list[DimensionHandle]`): The dimensions' circles.
@@ -2045,6 +2066,7 @@ class OutlineView(QGraphicsView):
         self.cleared: Callable[[], None] = self.update
         self.restyled: Callable[[], None] = self.update
         self.lit: int = -1
+        self.armed: str | None = None
         self.lighted: Callable[[int], None] = self.lit_nothing
         self.trouble: dict[int, str] = {}
         self.snap_on: bool = True
@@ -2076,7 +2098,7 @@ class OutlineView(QGraphicsView):
         self.outline: OutlineItem = OutlineItem(drawing)
         scene.addItem(self.outline)
         scene.addItem(self.band)
-        self.squares: list[PullSquare] = []
+        self.squares: list[CornerCircle] = []
         self.handles: list[EdgeHandle] = []
         self.circles: list[DimensionHandle] = []
         self.grips: list[StripHandle] = []
@@ -2098,13 +2120,13 @@ class OutlineView(QGraphicsView):
         self.chosen_points = []
         self.chosen_dimensions = []
         self.chosen_edges = []
-        square: PullSquare
+        square: CornerCircle
         for square in self.squares:
             self.scene().removeItem(square)
         self.squares = []
         index: int
         for index in range(len(self.drawing.points)):
-            square = PullSquare(self, index)
+            square = CornerCircle(self, index)
             self.scene().addItem(square)
             self.squares.append(square)
         handle: EdgeHandle
@@ -2176,7 +2198,7 @@ class OutlineView(QGraphicsView):
         self.chosen_points.append(which)
         self.message = ""
         if self.wanted:
-            self.dimension_selected()
+            self.dimension_points()
         self.restyle()
 
     # Method `OutlineView.select_dimension()`:
@@ -2464,7 +2486,7 @@ class OutlineView(QGraphicsView):
             return
         self.drawing.points[:] = placed
         self.placing = True
-        square: PullSquare
+        square: CornerCircle
         for square in self.squares:
             square.setPos(*placed[square.index])
         self.placing = False
@@ -2591,6 +2613,34 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.dimension_selected()`:
     def dimension_selected(self) -> None:
+        """[Dimension]: dimension what is selected (#234): two edges
+        (or an axis and an edge) give the angle between them; one edge
+        alone its length (#231); one corner alone the angle there,
+        between its two edges (#232); else points (`dimension_points()`).
+        """
+        edges: list[int] = self.chosen_edges
+        points: list[int] = self.chosen_points
+        if len(edges) >= 2:
+            self.angle_selected()
+            return
+        if len(edges) == 1 and edges[0] not in AXES and not points:
+            edge: int = edges[0]
+            self.dimension_between(
+                edge, (edge + 1) % len(self.drawing.points), LENGTH
+            )
+            return
+        if not edges and len(points) == 1 and points[0] != ORIGIN:
+            corner: int = points[0]
+            self.chosen_edges = [
+                (corner - 1) % len(self.drawing.points),
+                corner,
+            ]
+            self.angle_selected()
+            return
+        self.dimension_points()
+
+    # Method `OutlineView.dimension_points()`:
+    def dimension_points(self) -> None:
         """Dimension the last two points clicked, in that order.
 
         With fewer, wait for the rest: the next clicks make it.  An
@@ -2614,7 +2664,7 @@ class OutlineView(QGraphicsView):
             self.message = (
                 "Click a second point."
                 if self.chosen_points
-                else "Click two points to dimension."
+                else "Select an edge, a corner, two edges or two points."
             )
             self.scene().update()
             return
@@ -2633,7 +2683,7 @@ class OutlineView(QGraphicsView):
         """[Angle]: an angle between the last two edges clicked, its
         letter's default the angle as drawn, to a whole degree."""
         if len(self.chosen_edges) < 2:
-            self.message = "Click two edges' circles for an angle."
+            self.message = "Select two edges' circles for an angle."
             self.scene().update()
             return
         first: int
@@ -2998,19 +3048,19 @@ class OutlineView(QGraphicsView):
         self.setBackgroundBrush(QColor(scheme.paper))
         pen: QPen = QPen(QColor(scheme.ink), THIN_PIXELS)
         pen.setCosmetic(True)
-        # Squares and circles alike (#124, #129): hollow, so the edges
-        # show through; filled when selected, not told by color alone
-        # (some people do not see colors).  A corner not dimensioned
-        # yet has a thick ring, in the warning color too (dashes left
-        # gaps on so small a square, #133).
-        ring: QPen = QPen(QColor(scheme.ink), 1.5)
+        # Every circle alike, in the handle color (yellow, #237): hollow,
+        # so the edges show through; filled when selected, not told by
+        # color alone (#124, #129).  A corner not dimensioned yet has a
+        # thick ring in the warning color (orange; dashes left gaps on
+        # so small a circle, #133).
+        ring: QPen = QPen(QColor(scheme.handle), 2.0)
         ring.setCosmetic(True)
         warned: QPen = QPen(QColor(scheme.warning), 3.0)
         bad: QPen = QPen(QColor(scheme.problem), 3.0)
         bad.setCosmetic(True)
         warned.setCosmetic(True)
         warned.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
-        filled: QBrush = QBrush(QColor(scheme.ink))
+        chosen: QBrush = QBrush(QColor(scheme.handle))
         hollow: QBrush = QBrush(Qt.BrushStyle.NoBrush)
 
         # The origin is a filled square, a fixed point; selected, its
@@ -3018,12 +3068,12 @@ class OutlineView(QGraphicsView):
         thick: QPen = QPen(QColor(scheme.ink), 3.0)
         thick.setCosmetic(True)
         self.origin.setPen(thick if ORIGIN in self.chosen_points else pen)
-        self.origin.setBrush(filled)
+        self.origin.setBrush(QBrush(QColor(scheme.ink)))
         missing: set[int] = {
             corner
             for corner, _ in self.solution.missing(len(self.drawing.points))
         }
-        square: PullSquare
+        square: CornerCircle
         for square in self.squares:
             loose: bool = bool(self.drawing.dimensions) and (
                 square.index in missing
@@ -3036,7 +3086,7 @@ class OutlineView(QGraphicsView):
                 else ring
             )
             square.setBrush(
-                filled if square.index in self.chosen_points else hollow
+                chosen if square.index in self.chosen_points else hollow
             )
             # Lit (#199): bigger, its ring thick; not by color alone.
             if square.index == self.lit:
@@ -3048,7 +3098,7 @@ class OutlineView(QGraphicsView):
         for handle in self.handles:
             handle.setPen(ring)
             handle.setBrush(
-                filled if handle.index in self.chosen_edges else hollow
+                chosen if handle.index in self.chosen_edges else hollow
             )
         # A strip's circles have a paper inside, so the hatching does
         # not run through them (#177); they look hollow all the same.
@@ -3060,7 +3110,7 @@ class OutlineView(QGraphicsView):
         for circle in self.circles:
             circle.setPen(ring)
             circle.setBrush(
-                filled if circle.index in self.chosen_dimensions else hollow
+                chosen if circle.index in self.chosen_dimensions else hollow
             )
         # The working view with cuts: look and pan only (#171), since
         # its items are not where they are drawn.
@@ -3667,7 +3717,6 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             ("Delete", "Del"),
             ("Dimension", "N"),
             ("Dim. Kind", "K"),
-            ("Angle", "A"),
             ("Revolve", "R"),
             ("Hide", "H"),
             ("Overview", "O"),
@@ -3699,7 +3748,6 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             "Delete": self.view.delete_selected,
             "Dimension": self.view.dimension_selected,
             "Dim. Kind": self.view.cycle_kind,
-            "Angle": self.view.angle_selected,
             "Revolve": self.toggle_revolve,
             "Hide": self.view.start_hide,
             "Overview": self.toggle_overview,
@@ -3727,18 +3775,93 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         self.view.scene().changed.connect(self.show_message)
         self.view.letters_changed = self.fill_table
         self.view.released = self.save
-        self.view.cleared = self.table.clearSelection
+        self.view.cleared = self.cleared
+        self.table.cellClicked.connect(self.row_clicked)
+
+    # Method `OutlineEditor.cleared()`:
+    def cleared(self) -> None:
+        """The drawing's selection is cleared: the table's too, and
+        any armed letter (#214)."""
+        self.table.clearSelection()
+        self.arm(None)
+
+    # Method `OutlineEditor.row_clicked()`:
+    def row_clicked(self, row: int, _column: int) -> None:
+        """A click on a [Fillets] row arms it, or disarms it if armed
+        (#214).
+
+        Arguments:
+        * `row` (`int`): The table row.
+        """
+        if self.tabs.currentIndex() != FILLETS_TAB:
+            return
+        letter: str = (
+            ""
+            if row < LETTER_ROW
+            else self.drawing.letters[row - LETTER_ROW].letter
+        )
+        self.arm(None if letter == self.view.armed else letter)
+
+    # Method `OutlineEditor.arm()`:
+    def arm(self, letter: str | None) -> None:
+        """Arm a fillet letter ("" for "No fillet"), or disarm (`None`);
+        arming also fillets the corners already selected (#218).
+
+        Arguments:
+        * `letter` (`str | None`): The letter.
+        """
+        self.view.armed = letter
+        if letter is not None:
+            corners: list[int] = [
+                point for point in self.view.chosen_points if point != ORIGIN
+            ]
+            if corners:
+                self.view.set_fillets(corners, letter)
+        self.light_armed()
+        self.show_message()
+
+    # Method `OutlineEditor.light_armed()`:
+    def light_armed(self) -> None:
+        """Select the armed letter's row, and only it."""
+        self.table.clearSelection()
+        armed: str | None = self.view.armed
+        if armed is None:
+            return
+        rows: list[int] = [0] + [
+            LETTER_ROW + index
+            for index, letter in enumerate(self.drawing.letters)
+            if letter.letter == armed
+        ]
+        self.table.selectRow(rows[-1] if armed else 0)
 
     # Method `OutlineEditor.show_rows()`:
     def show_rows(self) -> None:
         """Show every letter in [Dimensions], only the fillet radii in
         [Fillets], with [New Fillet Dimension] there (#213, #214)."""
         fillets: bool = self.tabs.currentIndex() == FILLETS_TAB
-        row: int
+        self.table.setRowHidden(0, not fillets)
+        index: int
         letter: Letter
-        for row, letter in enumerate(self.drawing.letters):
-            self.table.setRowHidden(row, fillets and not letter.fillet)
+        for index, letter in enumerate(self.drawing.letters):
+            self.table.setRowHidden(
+                LETTER_ROW + index, fillets and not letter.fillet
+            )
         self.new_fillet.setVisible(fillets)
+        # In [Fillets] a click arms a row (#214), so a cell is edited
+        # only by a double click there.
+        triggers: type[QAbstractItemView.EditTrigger] = (
+            QAbstractItemView.EditTrigger
+        )
+        self.table.setEditTriggers(
+            triggers.DoubleClicked | triggers.EditKeyPressed
+            if fillets
+            else triggers.CurrentChanged
+            | triggers.SelectedClicked
+            | triggers.DoubleClicked
+            | triggers.EditKeyPressed
+        )
+        if not fillets:
+            self.arm(None)
 
     # Method `OutlineEditor.add_fillet()`:
     def add_fillet(self) -> None:
@@ -3752,7 +3875,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             )
         )
         self.fill_table()
-        self.table.setCurrentCell(len(self.drawing.letters) - 1, 1)
+        self.table.setCurrentCell(len(self.drawing.letters), 1)
 
     # Method `OutlineEditor.letters_area()`:
     def letters_area(self) -> QWidget:
@@ -3803,17 +3926,25 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         edits), taking the keys the buttons answer to.
         """
         self.table.blockSignals(True)
-        self.table.setRowCount(len(self.drawing.letters))
-        row: int
+        self.table.setRowCount(LETTER_ROW + len(self.drawing.letters))
+        column: int
+        text: str
+        for column, text in enumerate(NO_FILLET):
+            fixed: QTableWidgetItem = QTableWidgetItem(text)
+            fixed.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.table.setItem(0, column, fixed)
+        index: int
         letter: Letter
-        for row, letter in enumerate(self.drawing.letters):
-            column: int
+        for index, letter in enumerate(self.drawing.letters):
             attribute: str
             for column, (_, attribute) in enumerate(COLUMNS):
-                self.table.setItem(row, column, self.cell(letter, attribute))
+                self.table.setItem(
+                    LETTER_ROW + index, column, self.cell(letter, attribute)
+                )
         self.table.setCurrentCell(-1, -1)
         self.table.blockSignals(False)
         self.show_rows()
+        self.light_armed()
         self.view.setFocus()
         self.check_letters()
 
@@ -3850,8 +3981,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             return
         self.drawing.letters.append(next_letter(self.drawing.letters))
         self.fill_table()
-        row: int = len(self.drawing.letters) - 1
-        self.table.setCurrentCell(row, 1)
+        self.table.setCurrentCell(len(self.drawing.letters), 1)
 
     # Method `OutlineEditor.letter_edited()`:
     def letter_edited(self, item: QTableWidgetItem) -> None:
@@ -3860,8 +3990,10 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         Arguments:
         * `item` (`QTableWidgetItem`): The cell.
         """
+        if item.row() < LETTER_ROW:
+            return
         if COLUMNS[item.column()][1] == "fillet":
-            self.drawing.letters[item.row()].fillet = (
+            self.drawing.letters[item.row() - LETTER_ROW].fillet = (
                 item.checkState() == Qt.CheckState.Checked
             )
             self.check_letters()
@@ -3874,12 +4006,14 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         """Keep a cell's text in its letter, then check the letters.
 
         Arguments:
-        * `row` (`int`): The letter's row.
+        * `row` (`int`): The letter's table row (see `LETTER_ROW`).
         * `column` (`int`): The cell's column (see `COLUMNS`).
         * `text` (`str`): The cell's text so far.
         """
         attribute: str = COLUMNS[column][1]
-        setattr(self.drawing.letters[row], attribute, text.strip())
+        setattr(
+            self.drawing.letters[row - LETTER_ROW], attribute, text.strip()
+        )
         self.check_letters()
         self.save()
 
@@ -3910,7 +4044,9 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
                 ),
                 (fillet_kind_problem(letter, kinds), 3),
             ):
-                cell: QTableWidgetItem | None = self.table.item(row, column)
+                cell: QTableWidgetItem | None = self.table.item(
+                    LETTER_ROW + row, column
+                )
                 if cell is not None:
                     cell.setBackground(bad if found else QColor(0, 0, 0, 0))
                     cell.setToolTip(found)
@@ -3995,8 +4131,16 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         self.buttons["Revolve"].setChecked(self.view.drawing.revolve)
         self.buttons["Overview"].setChecked(self.view.overview)
         self.save()
-        self.status.setText(self.view.message)
-        self.status.setStyleSheet(f"color: {theme.colors().problem}")
+        # A refusal in red; else the armed letter's hint (#214).
+        hint: str = ""
+        if self.view.armed == "":
+            hint = "Click corners to make them sharp"
+        elif self.view.armed is not None:
+            hint = f"Click corners to fillet them by {self.view.armed}"
+        self.status.setText(self.view.message or hint)
+        self.status.setStyleSheet(
+            f"color: {theme.colors().problem}" if self.view.message else ""
+        )
 
 
 # Function `file_text()`:
