@@ -1,6 +1,6 @@
 """The GUI's tree: the shop's and the design's files, with no Qt in it.
 
-One tree with two roots (`T.osiade~5.1.9` #121):
+One tree with two roots (`T.g~6` #121):
 
 * The shop: its directory, `shop.toml` being the root itself.  Each
   directory below is a branch, and each `.toml` file one item (#19),
@@ -300,7 +300,7 @@ def about_item(item: dict[str, object]) -> str:
     return _wrapped(lines)
 
 
-# What a shop directory's panel says it holds (`T.osiade~5.1.9`
+# What a shop directory's panel says it holds (`T.g~6`
 # #150); the tree's ▶ lists what is in it.  `controllers` is the
 # user's; the rest are Claude's drafts, for the user to revise.
 EXPLANATIONS: dict[str, str] = {
@@ -468,7 +468,7 @@ def shop_children(directory: Path, skip: Path | None = None) -> list[Node]:
     path: Path
     for path in entries(directory):
         # A catalog's `pages/` is its PDF and `catxtract`'s working
-        # files, shown in the catalog's panel (`T.cm~5.1.10` #59).
+        # files, shown in the catalog's panel (`T.cm~6.3` #59).
         if path.name == CATALOG_PAGES and (directory / CATALOG).is_file():
             continue
         if path.is_dir():

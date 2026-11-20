@@ -5,7 +5,7 @@
 * `MachineTab`: a machine panel's header, its name over a `DueBar`,
   the bar that fills as the operator's next task comes (#102).
 * `MachinesView`: what a panel shows for the shop's `machines/`
-  directory (`T.osiade~5.1.9` #134): three lines per CNC machine (its
+  directory (`T.g~6` #134): three lines per CNC machine (its
   kind, controller and state; a detail or two; its bar), a line per
   other machine, and the next tools to fetch across all machines.
   A machine's name button shows its own panel (#135).

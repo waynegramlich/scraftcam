@@ -20,7 +20,7 @@ from scraftcam.pybind.scraftpybind import JSON, PyBind, connect
 
 HAVE_SOLIDCRAFT: bool = shutil.which("solidcraft-cli") is not None
 
-# Half a 1/4 in drill (`T.prg~5.1.9.2` #S4).
+# Half a 1/4 in drill (`T.oe~6.2` #S4).
 DRILL: Path = Path("examples/shop/tools/drill.outline.toml")
 
 

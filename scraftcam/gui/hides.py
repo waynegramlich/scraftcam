@@ -1,4 +1,4 @@
-"""Hide strips (`T.prg~5.1.9.2` #157, #164-#168), no Qt.
+"""Hide strips (`T.oe~6.2` #157, #164-#168), no Qt.
 
 Long, boring stretches of a drawing (a drill's shank) are hidden by a
 strip across the whole drawing, as the grid plate's sketch hides its

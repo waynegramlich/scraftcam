@@ -1,4 +1,4 @@
-"""Light and dark: the GUI follows the desktop (`T.osiade~5.1.9` #24).
+"""Light and dark: the GUI follows the desktop (`T.g~6` #24).
 
 The desktop's choice comes from `QStyleHints.colorScheme()` (Qt 6.5
 and later; on Linux, from the desktop portal).  The GUI uses Qt's

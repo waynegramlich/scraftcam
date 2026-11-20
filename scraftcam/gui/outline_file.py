@@ -1,4 +1,4 @@
-"""Outline files (`T.prg~5.1.9.2` #S4): an outline as TOML, no Qt.
+"""Outline files (`T.oe~6.2` #S4): an outline as TOML, no Qt.
 
 An outline drawn in the editor is kept in the shop as
 `tools/NAME.outline.toml` (#31), under version control, so each field

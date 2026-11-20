@@ -2,7 +2,7 @@
 """JSON Schemas of the shop files, made from `shops.KINDS`.
 
 `shops.KINDS` is the one description of every kind of shop file
-(`T.osiade~5.1.9` #129); this writes it as JSON Schema, so that
+(`T.g~6` #129); this writes it as JSON Schema, so that
 editors which check TOML against a schema (VS Code's Even Better TOML,
 Taplo) check hand edits too.  Each shop file starts with a line naming
 its kind's schema (`schema_line()`):

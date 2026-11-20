@@ -1,4 +1,4 @@
-"""The outline editor's letters (`T.prg~5.1.9.2` #27): no Qt here.
+"""The outline editor's letters (`T.oe~6.2` #27): no Qt here.
 
 Each letter names a size of the outline (`W`, `T1`, `OAL`): one to
 three letters or digits, a letter first, with a long name, a default value

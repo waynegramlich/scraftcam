@@ -154,7 +154,7 @@ BARE_KEY: re.Pattern[str] = re.compile(r"[A-Za-z0-9_-]+")
 VERSION: re.Pattern[str] = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 
-# How to fill in a controller's `tool_change` (`T.osiade~5.1.9`
+# How to fill in a controller's `tool_change` (`T.g~6`
 # #151).
 TOOL_CHANGE_HOW: str = """\
 The G-code written at every tool change: one or more lines, each \
@@ -179,7 +179,7 @@ T{number:02d} M6 G43 H{number:02d}
 * `G43 H03` turns on tool 3's length offset."""
 
 
-# How to fill in a controller's `post_processor` (`T.osiade~5.1.9`
+# How to fill in a controller's `post_processor` (`T.g~6`
 # #151).
 POST_PROCESSOR_HOW: str = """\
 LinuxCNC (`linuxcnc`, the default when it is left out) needs none: \
@@ -213,7 +213,7 @@ class TableField:  # pylint: disable=too-many-instance-attributes
     * `required` (`bool`): True if it must be there.
     * `needed` (`bool`): True if it is needed only to run a program:
       left out, it is "not initialized yet", not a problem
-      (`T.osiade~5.1.9` #145).
+      (`T.g~6` #145).
     * `of` (`str`): The kind of a `"table"` or `"list"`.
     * `choices` (`tuple[str, ...]`):
       The strings a `"choice"` takes, whatever their capitals.
@@ -226,7 +226,7 @@ class TableField:  # pylint: disable=too-many-instance-attributes
       `Tool_Models.md`, or `""`; a letter means the same size on every
       sketch.
     * `how` (`str`): How to fill it in, in Markdown, shown under the
-      field's ▶ (`T.osiade~5.1.9` #149), or `""`.
+      field's ▶ (`T.g~6` #149), or `""`.
 
     Constructor:
     * `TableField(key, form, meaning, required, of, choices, open, letter,
@@ -468,10 +468,10 @@ SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 # Where a directory's items are, when not its own `*.toml` files: a
-# catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.cm~5.1.10` #43).
+# catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.cm~6.3` #43).
 CATALOG: str = "catalog.toml"
 
-# The outline editor's files (`T.prg~5.1.9.2` #S4), kept beside the
+# The outline editor's files (`T.oe~6.2` #S4), kept beside the
 # items in `tools/` and `tooling/`; not items themselves.
 OUTLINE_SUFFIX: str = ".outline.toml"
 CATALOG_PAGES: str = "pages"
@@ -1901,7 +1901,7 @@ speed_factor = "250 %"
             "`catalogs/VENDOR/EDITION/catalog.toml`.  The catalog's "
             "PDF (or a link to it) and `catxtract`'s working files are "
             "in `pages/` beside it, never under version control "
-            "(`T.cm~5.1.10` #50, #58).",
+            "(`T.cm~6.3` #50, #58).",
             (
                 TableField("vendor", "string", "Who publishes it.", True),
                 TableField(
@@ -2706,7 +2706,7 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
 
         A table is given in place, never by a name: a machine holds its
         own copy of its controller, copied from a template in
-        `controllers/` (`T.osiade~5.1.9` #141).
+        `controllers/` (`T.g~6` #141).
 
         Arguments:
         * `value` (`object`): The table.
@@ -2940,7 +2940,7 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
 def tool_label(item: dict[str, object]) -> str:
     """Return how a tool is listed: its function, then its key sizes.
 
-    `T.osiade~5.1.9` #21: e.g. `End mill (1/2in 2-flute HSS)`, a
+    `T.g~6` #21: e.g. `End mill (1/2in 2-flute HSS)`, a
     measurement written without its space (`1/2in`, `90deg`), so that
     tools sort by what they do, then by size.
 
@@ -3011,7 +3011,7 @@ def tool_order(item: dict[str, object]) -> tuple[str, float]:
 def dimension_letters(keys: list[str]) -> dict[str, str]:
     """Return the letters that label sizes on a sketch.
 
-    `T.osiade~5.1.9` #20: a size's letter is the first letter of its
+    `T.g~6` #20: a size's letter is the first letter of its
     name, in capitals (`free_letters()`).  A size of a part
     (`part.size`, #26) is the part's letters and then the size's,
     lower case (`base.width` is `Bw`); a part named after another
@@ -3521,7 +3521,7 @@ def not_initialized(item: dict[str, object], kind: str) -> list[str]:
     """Return the fields an item needs to run that it does not have yet.
 
     A field `needed` but left out is "not initialized yet", not a
-    problem (`T.osiade~5.1.9` #145); its tables and lists are looked
+    problem (`T.g~6` #145); its tables and lists are looked
     into, the ones that are there.
 
     Arguments:

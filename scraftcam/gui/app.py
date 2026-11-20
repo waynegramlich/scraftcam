@@ -2,7 +2,7 @@
 
 Every window of the GUI draws from one `App`, and redraws when it
 changes, so two windows showing the same thing always agree
-(`T.osiade~5.1.9` #3).  Keeping Qt out of it lets the tests run with
+(`T.g~6` #3).  Keeping Qt out of it lets the tests run with
 no display.  It holds:
 
 * The shop: the `shop.toml` named with `--shop`, or else the first one
@@ -82,7 +82,7 @@ VERSION_CONTROLS: tuple[tuple[str, str], ...] = (
     ("hg", ".hg"),
 )
 
-# A catalog's `pages/` is never under version control (`T.cm~5.1.10`
+# A catalog's `pages/` is never under version control (`T.cm~6.3`
 # #50, #58): the line that keeps it out, per ignore file, for any
 # catalog wherever the shop is in the repository.
 IGNORE_LINES: dict[str, str] = {
@@ -293,7 +293,7 @@ def pdf_pages(pdf: Path) -> int:
 
 # Function `new_catalog_text()`:
 def new_catalog_text(vendor: str, edition: str, pdf: str, pages: int) -> str:
-    """Write a new catalog's `catalog.toml` (`T.cm~5.1.10` #61).
+    """Write a new catalog's `catalog.toml` (`T.cm~6.3` #61).
 
     Arguments:
     * `vendor` (`str`): Who publishes it (not empty).

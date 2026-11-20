@@ -1,7 +1,7 @@
 """The GUI's command port: one JSON line in, one JSON line out.
 
 Each request is one line of JSON, shaped like JSON-RPC 2.0
-(`T.osiade~5.1.9` #110), so that an MCP server can wrap the port
+(`T.g~6` #110), so that an MCP server can wrap the port
 later (#86):
 
 ```

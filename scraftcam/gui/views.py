@@ -1,6 +1,6 @@
 """The views in a window: the tree, and the panels beside it.
 
-* `TreeView`: the one tree (`T.osiade~5.1.9` #121), the shop's and
+* `TreeView`: the one tree (`T.g~6` #121), the shop's and
   the design's files, as `tree.py` reads them; an item that does not
   read cleanly is red, with the problem as its tooltip (#125).  The
   roots open one level (#128); when the tree is read again, what was
@@ -109,7 +109,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 # [Edit TOML File]'s label (#148).
 EDIT: str = "Edit TOML File"
 
-# A catalog's button, beside [Edit TOML File] (`T.cm~5.1.10` #68).
+# A catalog's button, beside [Edit TOML File] (`T.cm~6.3` #68).
 OPEN_PAGES: str = "Open Pages"
 
 # A splitter's handle: wide enough to see and grab, in the palette's
@@ -409,7 +409,7 @@ class Panel(QFrame):
     * `edit_file` (`Callable[[], None]`): What [Edit TOML File] calls
       (set by the window).
     * `pages_button` (`QPushButton`): [Open Pages], for a catalog
-      (`T.cm~5.1.10` #68), never greyed: marking pages does not
+      (`T.cm~6.3` #68), never greyed: marking pages does not
       change the catalog's file.
     * `open_pages` (`Callable[[], None]`): What [Open Pages] calls
       (set by the window).

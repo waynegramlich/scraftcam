@@ -183,7 +183,7 @@ numbers are sticky (code comments cite them); new ones continue after
   Z<height>` (#80, #81); our data keeps the offsets and shows them
   for other controllers (#83).  `lcnc_hmi.py` goes once all of it is
   in the GUI (#57).  Later: the GUI starts LinuxCNC itself (#64), one
-  command port (#65), the catalog work (#66, `T.cm~5.1.10`).
+  command port (#65), the catalog work (#66, `T.cm~6.3`).
 
 ## Step Order (#13)
 
@@ -334,7 +334,7 @@ Tests run this session: `test_gui_window`, `test_gui_machines`,
 `test_gui_port` (two stale expectations fixed), `test_lcnc_hmi`;
 all pass.  Not run: the whole suite; the LinuxCNC end-to-end suite.
 
-## 2026-11-15: Changes from `T.cm~5.1.10`
+## 2026-11-15: Changes from `T.cm~6.3`
 
 A shop item's panel may have [Open Pages] beside [Edit TOML File]
 (catalogs only, `Panel.pages_button`); the action rows gained

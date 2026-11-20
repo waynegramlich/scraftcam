@@ -2,7 +2,7 @@
 
 ## 2026-11-15: Created and opened
 
-Created by the user's request from the end of `T.cm~5.1.10`
+Created by the user's request from the end of `T.cm~6.3`
 (suspended); `Details.md` holds the ideas (one place per kind; a
 parametric model or a STEP file; assemblies and parts, meaning not yet
 settled) and the user's 12 steps to add a tool.  First case: the Shars
@@ -43,5 +43,5 @@ SolidCraft from its panel") will call its `send()`.  See `T.cmt~5.3`.
 
 A model may now draw its sketch from a `scraftcam/outline.py`
 `Profile` (checked lines and arcs, holes), as `Parallel` does; a GUI
-for making such outlines without Python is `T.prg~5.1.9.2`.  See
+for making such outlines without Python is `T.oe~6.2`.  See
 `T.sdfm~2.5.2.1`.

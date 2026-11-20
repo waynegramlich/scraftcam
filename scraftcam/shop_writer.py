@@ -1,6 +1,6 @@
 """Write shop files: TOML, the header first, then the rest alphabetically.
 
-`tomllib` reads shop files; this writes them (`T.osiade~5.1.9` #18),
+`tomllib` reads shop files; this writes them (`T.g~6` #18),
 for the GUI.  The header keys (`name`, `kind`, `language`, `version`,
 `notes`) come first, so a file says what it is at its top; then the
 other keys alphabetically, then the tables alphabetically (#146).  A

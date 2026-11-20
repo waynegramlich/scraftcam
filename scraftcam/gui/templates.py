@@ -1,4 +1,4 @@
-"""Following up a controller template's change (`T.osiade~5.1.9` #142).
+"""Following up a controller template's change (`T.g~6` #142).
 
 A machine holds its own copy of a controller template (#141).  When
 someone changes a template, the GUI shows them, at once and in the

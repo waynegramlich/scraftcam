@@ -1,9 +1,9 @@
 # 5.9 Adding a New Tool
 
 (Draft by Claude, 2026-11-15, from the user's discussion at the end of
-`T.cm~5.1.10`; the user's to revise.)
+`T.cm~6.3`; the user's to revise.)
 
-Catalogs (`T.cm~5.1.10`) are of no use until an end user can model a
+Catalogs (`T.cm~6.3`) are of no use until an end user can model a
 tool and hook it in.  Claude may model the tools for the user, but
 hooking one in must be easy.  The end user also needs to model their
 assemblies and the parts in them.
@@ -41,7 +41,7 @@ those places.
    from parts (a vise with jaws and parallels, a fixture plate with
    clamps).  For (b), the same mechanism: an assembly kind listing
    parts, each a parametric model or a STEP file, each placed.
-4. **Catalogs afterwards.**  `T.cm~5.1.10`'s S3 ([New Tool from Row])
+4. **Catalogs afterwards.**  `T.cm~6.3`'s S3 ([New Tool from Row])
    needs a kind to fill in; with idea 1, any kind can be offered, so it
    stays generic.
 

@@ -4,7 +4,7 @@
 revise.)
 
 The GUI shows one tab per machine, each with its own controls and a
-bar showing the time to its next operator intervention (`T.osiade~5.1.9`
+bar showing the time to its next operator intervention (`T.g~6`
 #101, #102).  Testing that needs more than one machine running at
 once, so more than one LinuxCNC simulator.
 

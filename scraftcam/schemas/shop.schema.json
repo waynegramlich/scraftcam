@@ -2579,7 +2579,7 @@
       "additionalProperties": false
     },
     "catalog": {
-      "description": "A vendor's catalog, one edition of it: `catalogs/VENDOR/EDITION/catalog.toml`.  The catalog's PDF (or a link to it) and `catxtract`'s working files are in `pages/` beside it, never under version control (`T.cm~5.1.10` #50, #58).",
+      "description": "A vendor's catalog, one edition of it: `catalogs/VENDOR/EDITION/catalog.toml`.  The catalog's PDF (or a link to it) and `catxtract`'s working files are in `pages/` beside it, never under version control (`T.cm~6.3` #50, #58).",
       "type": "object",
       "properties": {
         "name": {

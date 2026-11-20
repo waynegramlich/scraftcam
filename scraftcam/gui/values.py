@@ -1,4 +1,4 @@
-"""Real sizes of an outline (`T.prg~5.1.9.2` #127), no Qt.
+"""Real sizes of an outline (`T.oe~6.2` #127), no Qt.
 
 The drawing is in unitless steps; its real sizes come from the letters'
 defaults.  Here the corners' formulas (`dimensions.solve()`) are worked

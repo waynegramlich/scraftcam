@@ -2,7 +2,7 @@
 """3D models of the setters that set a machine's zero, for SolidCraft.
 
 So far, a magnetic Z-axis zero setter (Shars 303-3104, page 414 of the
-2026 catalog; `T.cm~5.1.10`): a blue block, a silver cylinder out of
+2026 catalog; `T.cm~6.3`): a blue block, a silver cylinder out of
 its top that the tool pushes down, and a dial on its front whose
 pointer is straight up when the cylinder's top is exactly the
 setter's height above its base.  Run as a program, it shows one in

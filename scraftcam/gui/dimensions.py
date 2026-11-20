@@ -1,4 +1,4 @@
-"""The outline editor's dimensions (`T.prg~5.1.9.2` #24): no Qt here.
+"""The outline editor's dimensions (`T.oe~6.2` #24): no Qt here.
 
 A dimension ties two points, the origin (`ORIGIN`) or corners (by
 index), with a letter: horizontal (the letter is their difference in

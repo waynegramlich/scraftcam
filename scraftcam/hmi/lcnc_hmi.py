@@ -8,7 +8,7 @@ position and the tool in the spindle, LinuxCNC's last message, how
 much of the setup is drawn, and toggles that show or hide, in
 SolidCraft, the keep-outs, the stock outline, SolidCraft's origin and
 the tools' holders (`TOGGLES`); under the tabs, Quit.  The tabs
-(`T.osiade~5.1.9` #63, a first cut of the GUI's machine panel):
+(`T.g~6` #63, a first cut of the GUI's machine panel):
 
 * Configure: Next Step (the setup's items, one at a time), Set
   Origin, Home to the work origin, Set X, Set Y and Set Z (the current
@@ -365,7 +365,7 @@ def row(
 
 # Function `narrow()`:
 def narrow(*buttons: QPushButton) -> None:
-    """Make buttons only as wide as their text (`T.osiade~5.1.9` #176).
+    """Make buttons only as wide as their text (`T.g~6` #176).
 
     Qt's buttons are at least 80 pixels wide, however short their
     text; only for buttons whose text never changes.
@@ -507,7 +507,7 @@ class HMI(QWidget):
     * `plan` (`QLabel`): The tool cutting now, the next few, and the
       end (`tool_plan()`).
     * `quit_button` (`QPushButton`): Quit, hidden when the HMI is a
-      panel of the GUI (`T.osiade~5.1.9` #56).
+      panel of the GUI (`T.g~6` #56).
     * `on_quit` (`Callable[[], None] | None`): What Quit (or the
       port's `quit`) does in the GUI: close its windows; `None` closes
       this window.
@@ -573,7 +573,7 @@ class HMI(QWidget):
         layout: QVBoxLayout = QVBoxLayout(self)
 
         # At the very top, on every tab: the one run button, Skip Tool
-        # and Stop (`T.osiade~5.1.9` #85, #96, #97; no minimal form,
+        # and Stop (`T.g~6` #85, #96, #97; no minimal form,
         # #168).
         self.ended: bool = False
         self.at: int = 0
@@ -784,7 +784,7 @@ class HMI(QWidget):
         slider_line.addWidget(self.speed_text)
         execute.addLayout(slider_line)
 
-        # Execute: what SolidCraft shows (`T.osiade~5.1.9` #70, #73,
+        # Execute: what SolidCraft shows (`T.g~6` #70, #73,
         # #159), two to a row (#176).
         self.toggles: dict[str, QCheckBox] = {}
         shown: bool
@@ -1960,7 +1960,7 @@ def make_hmi(  # pylint: disable=too-many-arguments
     """Start the machine, read the shop, and make the HMI.
 
     Used by `main()` and by the GUI, which shows it in a panel
-    (`T.osiade~5.1.9` #52); a `QApplication` must exist.
+    (`T.g~6` #52); a `QApplication` must exist.
 
     Arguments:
     * `port` (`int`): The command port, or 0 for none.

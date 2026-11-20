@@ -586,7 +586,7 @@ class HMIStatus:  # pylint: disable=too-many-instance-attributes
     * `state` (`str`): `idle`, `running` or `paused` (`""` for a dry
       run, where the HMI's own idea of it stands).
     * `spindle` (`bool`): True while a spindle turns (or is on), so
-      that nothing closes until it stops (`T.osiade~5.1.9` #56).
+      that nothing closes until it stops (`T.g~6` #56).
     * `rpm` (`float`): The spindle's speed (#98).
     * `feed` (`float`): How fast the tool moves (machine units, inches,
       a minute).
@@ -750,7 +750,7 @@ def tool_plan(
     """Return the tool cutting now, and the next few with their times.
 
     So the operator can fetch tools while the machine cuts
-    (`T.osiade~5.1.9` #85, #87, #91).
+    (`T.g~6` #85, #87, #91).
 
     Arguments:
     * `lines` (`list[str]`): The program's lines.

@@ -1,4 +1,4 @@
-"""An outline in SolidCraft (`T.prg~5.1.9.2` #108), no Qt.
+"""An outline in SolidCraft (`T.oe~6.2` #108), no Qt.
 
 A revolved outline file (`outline_file.py`) is built in SolidCraft:
 each letter becomes a SolidCraft parameter with its default, and each

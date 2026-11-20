@@ -17,7 +17,7 @@ SolidCraft from its `(SCC: ...)` lines alone:
 Press Start in the HMI; the tool cuts the plate in SolidCraft.  The
 HMI's slider starts at `SPEED`.  Closing the GUI (or SolidCraft, or
 Control-C here) closes everything; the GUI does not close until the
-machine is stopped with its spindle off (`T.osiade~5.1.9` #56).
+machine is stopped with its spindle off (`T.g~6` #56).
 What each program prints goes to
 `~/.cache/scraftcam/show/`, and the end of it is shown after a failure.
 
@@ -657,7 +657,7 @@ class DemoShow:  # pylint: disable=too-many-public-methods
         """Start the GUI, its panel the HMI, stopped, with the program open.
 
         The HMI (a panel of the GUI, `scraftcam.run --program`,
-        `T.osiade~5.1.9` step 5) draws the program's setup in
+        `T.g~6` step 5) draws the program's setup in
         SolidCraft, and answers its line commands on `--port`.
 
         Raises:

@@ -15,3 +15,6 @@ The Claude Code Session rules are:
   do not get reused.  When asked for a prioritized issue list, just list the
   issues from most important to least important without prefixing by priority
   number.  A common request is to ask for the top N issues (e.g. 5).
+* Save a session transcript in `~/.claude_transcriptions/` using the start
+  time as `YYYY-MM-DD_HH:MM.md`  After each git commit, update the current
+  transcript content.

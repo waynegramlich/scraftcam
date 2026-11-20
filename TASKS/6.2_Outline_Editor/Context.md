@@ -145,7 +145,7 @@ skip them until #S7.
 ## Steps Left and Open Items
 
 Numbers sticky; the next new one is #247.
-* #S5 SVG: now its own sub-task, `T.sfoe~5.1.9.2.2` (an SVG that
+* #S5 SVG: now its own sub-task, `T.sfoe~6.2.2` (an SVG that
   resembles the GUI; the user leans to an [SVG] tab, #189).
 * #S7 opened from the GUI tree with [Show in SolidCraft] (#115,
   after #S5).  #S8 a separate class extruding a planar outline
@@ -164,6 +164,8 @@ Numbers sticky; the next new one is #247.
   teeth not planned (#8); only the user edits letter values (#152).
 * Work rules: ~3 minute chunks (longer when the user says), a top 5
   each round with tokens left; `#N:` issues, never `1. 2. 3.`.
-  Transcripts in `~/.scraftcam/transcripts/`, one per session (this
-  one `2026-11-19_3_T.prg_5.1.9.2.md`), made by `transcript.py`
-  there, not versioned; regenerate before each commit and `/clear`.
+  Transcripts per the session rules (`R.ccsr~6`): one per session in
+  `~/.claude_transcriptions/`, `YYYY-MM-DD_HH-MM_scraftcam.md` (the
+  start time, `-` for `:`), made by `transcript.py` there, not
+  versioned; regenerate before each commit and `/clear`.  Older ones
+  stay in `~/.scraftcam/transcripts/`.

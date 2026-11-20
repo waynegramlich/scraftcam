@@ -3206,7 +3206,7 @@ class GridPlate:
 
     The grid is `rows` by `columns` holes, with the same pitch along X
     and Y, its outer holes `edge` in from all four sides; the plate's
-    length and width follow (`T.osiade~5.1.9` #29).  Each hole's top
+    length and width follow (`T.g~6` #29).  Each hole's top
     edge may be chamfered at 45 degrees, `chamfer_width` wide, and the
     plate's top outer edge too, `edge_chamfer` wide (#37).
 

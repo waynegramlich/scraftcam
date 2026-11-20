@@ -1,4 +1,4 @@
-# 5.1.9.2 Parametric RoundedPolygon GUI
+# 6.2 Outline Editor
 
 (Draft by Claude, 2026-11-17, from the user's #43 in `T.sdfm~2.5.2.1`;
 the user's to revise.)

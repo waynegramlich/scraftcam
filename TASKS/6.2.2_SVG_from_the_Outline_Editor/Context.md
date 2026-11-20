@@ -2,11 +2,11 @@
 
 ## 2026-11-19: Created and opened
 
-Created at the user's request from `T.prg~5.1.9.2` (#S5) and opened;
+Created at the user's request from `T.oe~6.2` (#S5) and opened;
 `Details.md` is Claude's draft.  The editor it draws from is described
-in `T.prg~5.1.9.2`'s `Context.md` ("The Editor Today").  Nothing coded.
+in `T.oe~6.2`'s `Context.md` ("The Editor Today").  Nothing coded.
 
-Open questions (numbers continue `T.prg~5.1.9.2`'s, next new #250):
+Open questions (numbers continue `T.oe~6.2`'s, next new #250):
 * #247 drawn how: (a) from the outline file in plain Python, no Qt
   (Claude leans here: documents without a display), or (b) Qt
   painting the scene through `QSvgGenerator` (looks like the screen,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The 2D outline editor (`T.prg~5.1.9.2`).
+"""The 2D outline editor (`T.oe~6.2`).
 
 A window with X and Y axes, an origin square, a grid that gets finer
 as one zooms in (#12, #13), and an outline whose corners are pull

@@ -1,6 +1,6 @@
 """The fields of a shop item, as its panel edits them (no Qt).
 
-`T.osiade~5.1.9` S3.4 (#72, #132): a row per field, in the order
+`T.g~6` S3.4 (#72, #132): a row per field, in the order
 `shops.KINDS` gives, with its value as typed, what is wrong with it,
 and (for a measurement) the value in the shop's units.  A value is
 checked as it is typed and never written while bad (#15); a good one
@@ -388,7 +388,7 @@ def sketches(item: dict[str, object]) -> list[Path]:
     A kind with one sketch has `KIND.svg`; one with several views
     (e.g. `grid_plate_top.svg`, `grid_plate_section.svg`) has them
     all, the view from above first, then the rest alphabetically
-    (`T.osiade~5.1.9` #5, #14, #42).
+    (`T.g~6` #5, #14, #42).
 
     Arguments:
     * `item` (`dict[str, object]`): The shop item, as read.

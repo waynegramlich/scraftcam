@@ -509,7 +509,7 @@ tool).  The directory was renamed with `aic`.
 
 ## 2026-11-12: Reopened: port the HMI to Qt
 
-`T.osiade~5.1.9` chose Qt (PySide6) over `tkinter` (#18-#68 in its
+`T.g~6` chose Qt (PySide6) over `tkinter` (#18-#68 in its
 `Context.md`).  The user agreed these steps:
 
 * S1: rename `scraftcnc` to `scraftcam` (package, imports, tests,
@@ -565,7 +565,7 @@ The user: a venv only sets a few variables, so skip it.
 `packages.require()` already installs with `pip --target` into
 `~/.scraftcam/packages/<cache_tag>/` and puts that first on
 `sys.path`; the HMI calls it for `PySide6-Essentials==6.12.0` before
-importing Qt.  Decided: no venv anywhere (replaces `T.osiade~5.1.9`
+importing Qt.  Decided: no venv anywhere (replaces `T.g~6`
 #55; the bootstrap installer also installs `scraftcam` with
 `--target`, its launcher sets `sys.path`) (#8).  PySide6 is checked
 by SHA-256 now (`--require-hashes`, pinned hashes) (#9).  Downloads
@@ -692,12 +692,12 @@ HMI's download (about 250 MB, SHA-256 checked), and the `hmi/` files.
 (mypy 86 files); 104 HMI, carousel and packages tests pass;
 `./show_demo.py --headless` fine after the rename.  End-to-end last
 run before the rename (10 OK).  Left: `catxtract.py` still uses
-`tkinter` (its own window; for `T.osiade~5.1.9`).  S1-S5 of the Qt
+`tkinter` (its own window; for `T.g~6`).  S1-S5 of the Qt
 port are done; `T.hs~5.1.5` can be closed when the user says so.
 
 ## 2026-11-12: Closed again
 
 The user ran `./show_demo.py` (GUI) under the new names: fine.  #26
-agreed (`catxtract.py`'s `tkinter` waits for `T.osiade~5.1.9`).
+agreed (`catxtract.py`'s `tkinter` waits for `T.g~6`).
 `Summary.md` has a paragraph for the Qt port.  Next: the user
-commits and pushes, then `T.osiade~5.1.9` is reopened and resumed.
+commits and pushes, then `T.g~6` is reopened and resumed.

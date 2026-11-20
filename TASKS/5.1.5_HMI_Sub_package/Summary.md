@@ -21,7 +21,7 @@ translucent boxes.  The user checked it all in a GUI run of
 center finder, tool setter), `T.npfetc~5.4`, `T.sm2~5.5`.
 
 Reopened and done again 2026-11-12: the HMI was ported from `tkinter`
-to Qt (`PySide6`), in five steps, as `T.osiade~5.1.9` chose (#21).
+to Qt (`PySide6`), in five steps, as `T.g~6` chose (#21).
 S1 renamed the package `scraftcnc` to `scraftcam` (and
 `~/.scraftcnc/` to `~/.scraftcam/`).  S2 needed no venv: each fetched
 package gets its own directory, `~/.scraftcam/packages/<tag>/<module>/`,
@@ -35,5 +35,5 @@ then deleted the `tkinter` HMI and `lcnc_hmi_headless.py`.  Now
 `scraftcam/hmi/lcnc_hmi.py` is the Qt HMI and `hmi_machine.py` the
 part with no toolkit.  The user checked a GUI run of `./show_demo.py`.
 Not done: `catxtract.py` still has a `tkinter` window, left for
-`T.osiade~5.1.9`, where the HMI becomes a tab of the larger GUI.
-Related: `T.osiade~5.1.9`.
+`T.g~6`, where the HMI becomes a tab of the larger GUI.
+Related: `T.g~6`.

@@ -119,7 +119,7 @@ class Dimension:  # pylint: disable=too-many-instance-attributes
     * `bracket` (`bool`):
       True for a count (a grid's rows or columns) rather than a size:
       a bracket over what it counts, its ends ticked toward the tool,
-      with no arrows and no extension lines (`T.osiade~5.1.9` #36).
+      with no arrows and no extension lines (`T.g~6` #36).
 
     Constructor:
     * `Dimension(key, across, low, high, at, reach, letter_shift,
@@ -1274,7 +1274,7 @@ class Cut:
 
     A thick long and short dashed line, with a short leg at each end
     whose arrow points the way the section is seen, and the section's
-    name beside it (`T.osiade~5.1.9` #38).
+    name beside it (`T.g~6` #38).
 
     Attributes:
     * `name` (`str`): The section's name (`A` for "Section A-A").
@@ -2057,7 +2057,7 @@ def size_letters(views: list[View], kind: str = "") -> dict[str, str]:
     """Return the letters of each size drawn, in the order drawn.
 
     The letters follow the names (`shops.dimension_letters()`,
-    `T.osiade~5.1.9` #18, #20, #26); a kind in `KINDS` uses its
+    `T.g~6` #18, #20, #26); a kind in `KINDS` uses its
     fields' letters, so its sketches and its panel agree.
 
     Arguments:
@@ -2972,7 +2972,7 @@ def _grid_section() -> View:
     The cut (A-A on the top view) runs through the centers of the top
     row, across the upper left corner only: from the plate's side,
     across its `BREAK_COLUMNS` holes, to the corner's long break line
-    (`T.osiade~5.1.9` #32, #37, #42): the edge's chamfer, and each
+    (`T.g~6` #32, #37, #42): the edge's chamfer, and each
     hole's.
 
     Returns:

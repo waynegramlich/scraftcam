@@ -51,7 +51,7 @@ the full history (scratchpad experiments) is in `hg` and `git`.
 ## Decisions and Next
 
 * #42 diagrams light and dark.  #43 where dimension letters come
-  from: being answered by the outline editor (`T.prg~5.1.9.2`).
+  from: being answered by the outline editor (`T.oe~6.2`).
 * #45 the old `tools.Parallel` is not replaced until the GUI is
   debugged.
 * Next: #38, `Profile` to SVG (lines and arcs as path commands, holes

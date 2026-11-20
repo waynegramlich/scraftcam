@@ -24,7 +24,7 @@ to be published on PyPI.  The LinuxCNC end-to-end suite
   keep-outs; `./show_demo.py --headless` (`T.hlp~3.3.1`).
 * The HMI is Qt (`T.hs~5.1.5`, closed): `scraftcam/hmi/lcnc_hmi.py`,
   `hmi_machine.py`, and a panel of the one GUI.
-* The one GUI (`T.osiade~5.1.9`): the user's shop and designs in
+* The one GUI (`T.g~6`): the user's shop and designs in
   their own version controlled directories, `~/.scraftcam/` always
   deletable; any number of windows, each a tree driving panels ([<]
   [>] Pin [Close]), no tabs, no [Save]; layouts kept per shop in
@@ -47,8 +47,8 @@ to be published on PyPI.  The LinuxCNC end-to-end suite
   `SolidModel`, `SolidCraftLink`, live SolidCraft parameters;
   `JawPlate`, `Parallel`).
 * `T.sdfm~2.5.2.1`: `scraftcam/outline.py` `Profile`; SVG next.
-* `T.prg~5.1.9.2`: the outline editor (the current focus).
-* `T.cm~5.1.10` Reference until 5.3 has tools; `T.ant~5.9` Open.
+* `T.oe~6.2`: the outline editor (the current focus).
+* `T.cm~6.3` Reference until 5.3 has tools; `T.ant~5.9` Open.
 * Pending: `T.npfetc~5.4` (a path per tool change), `T.sm2~5.5`,
-  `T.cpfj~5.7`, `T.rslsao~5.8`, `T.cett2e~5.1.9.2.1`.
-  `T.oacv~5.1.9.1` is Open but left as it is.
+  `T.cpfj~5.7`, `T.rslsao~5.8`, `T.cett2e~6.2.1`.
+  `T.oacv~6.1` is Open but left as it is.

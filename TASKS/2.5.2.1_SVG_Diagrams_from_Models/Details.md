@@ -6,7 +6,7 @@ user's to revise.)
 Each `SolidModel` (a part or an assembly, `scraftcam/model.py`) should
 have a 2D diagram in `.svg`, with dimension letters that match its
 fields, for its documentation (`T.dtm~2.5.2`) and for the GUI's panels
-(`T.osiade~5.1.9`): a global panel and one sub-panel per layer, each
+(`T.g~6`): a global panel and one sub-panel per layer, each
 with its diagram.
 
 * The models are built from SolidCraft sketches (dimensions tied to

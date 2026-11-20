@@ -1,4 +1,4 @@
-# 5.1.9 Organize Shop Information and Data Entry
+# 6 GUI
 
 Currently, shop information is organized into hierarchical TOML files.  This
 is actually a pretty good design.  There are some follow on issues:

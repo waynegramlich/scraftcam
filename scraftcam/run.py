@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start the `scraftcam` GUI (`T.osiade~5.1.9`).
+"""Start the `scraftcam` GUI (`T.g~6`).
 
 ```
 python3 -m scraftcam.run [--shop=SHOP] [--design=DESIGN] [--port=PORT]
@@ -18,7 +18,7 @@ echo '{"id": 1, "method": "status"}' | nc -q 1 127.0.0.1 5010
 ```
 
 With `--program`, the first panel controls the machine (step 5,
-`T.osiade~5.1.9` #52, #53): the HMI (`scraftcam.hmi.lcnc_hmi`), a
+`T.g~6` #52, #53): the HMI (`scraftcam.hmi.lcnc_hmi`), a
 client of a `serve_linuxcnc` already running (`--lcnc-port`), opens
 the program, stopped; it answers its own line commands on
 `--hmi-port`, and draws the program's setup in the SolidCraft on
