@@ -81,9 +81,9 @@ from PySide6.QtWidgets import (  # noqa: E402
     QStyledItemDelegate,
     QStyleOptionGraphicsItem,
     QStyleOptionViewItem,
+    QTabBar,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -105,11 +105,6 @@ from .dimensions import (  # noqa: E402
     Solution,
     solve,
 )
-from .fillet_panel import (  # noqa: E402
-    NOTE_CHOICE,
-    NOTE_LETTER,
-    FilletPanel,
-)
 from .hides import (  # noqa: E402
     HIDE_X,
     HIDE_Y,
@@ -122,6 +117,7 @@ from .hides import (  # noqa: E402
 )
 from .letters import (  # noqa: E402
     Letter,
+    fillet_kind_problem,
     letter_problem,
     next_letter,
     use_problem,
@@ -171,11 +167,22 @@ MAJOR_EVERY: int = 5
 ZOOM_PER_NOTCH: float = 1.25
 ZOOM_LIMITS: tuple[float, float] = (1e-3, 1e5)
 
+# The note's letter (#120): "All undimensioned fillets are radius UDF",
+# and its choice, standing for it before it is made.
+NOTE_LETTER: str = "UDF"
+NOTE_CHOICE: str = "*note*"
+
+# The tabs over the letters' table: every letter, or only the fillet
+# radii (#213).
+DIMENSIONS_TAB: int = 0
+FILLETS_TAB: int = 1
+
 # The letters' table: its columns, each with its `Letter` field.
 COLUMNS: tuple[tuple[str, str], ...] = (
     ("Letter", "letter"),
     ("Name", "name"),
     ("Value", "default"),  # Its value (#147); `default` in files.
+    ("Fillet", "fillet"),  # A check box: a fillet radius (#213).
     ("Help", "help"),
 )
 
@@ -2787,6 +2794,7 @@ class OutlineView(QGraphicsView):
             name="Undimensioned fillet radius",
             default="1/16 in",
             help="Every fillet without a radius of its own.",
+            fillet=True,
         )
         if not any(
             each.letter == NOTE_LETTER for each in self.drawing.letters
@@ -3600,8 +3608,10 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
       The mode bar's buttons, by their word (`"Grid"`, `"Fit"`, ...).
     * `keys` (`dict[str, QShortcut]`): Each button's key, by its word.
     * `drawing` (`Drawing`): The outline being drawn.
-    * `fillets` (`FilletPanel`): The [Fillets] tab (#142.2).
-    * `tabs` (`QTabWidget`): [Dimensions] (the letters) and [Fillets].
+    * `new_fillet` (`QPushButton`): [New Fillet Dimension], shown
+      in [Fillets] only (#214).
+    * `tabs` (`QTabBar`): [Dimensions] (every letter) and [Fillets]
+      (only those checked "Fillet", #213), over the one table.
     * `problems` (`QLabel`): The letters' problems, a line each, red,
       right under the table (#141).
     * `splitter` (`QSplitter`): The drawing over the table.
@@ -3642,8 +3652,8 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         self.splitter.addWidget(self.view)
         self.table: QTableWidget = QTableWidget(0, len(COLUMNS))
         self.problems: QLabel = QLabel("")
-        self.tabs: QTabWidget = QTabWidget()
-        self.fillets: FilletPanel = FilletPanel(self.view)
+        self.tabs: QTabBar = QTabBar()
+        self.new_fillet: QPushButton = QPushButton("New Fillet Dimension")
         self.splitter.addWidget(self.letters_area())
         self.splitter.setSizes([450, 150])
         layout.addWidget(self.splitter)
@@ -3718,21 +3728,37 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         self.view.letters_changed = self.fill_table
         self.view.released = self.save
         self.view.cleared = self.table.clearSelection
-        self.view.restyled = self.follow_selection
-        self.view.lighted = self.fillets.light
 
-    # Method `OutlineEditor.follow_selection()`:
-    def follow_selection(self) -> None:
-        """Show the selected corners in [Fillets] (#142.2)."""
-        self.fillets.show_corners(
-            [point for point in self.view.chosen_points if point != ORIGIN]
+    # Method `OutlineEditor.show_rows()`:
+    def show_rows(self) -> None:
+        """Show every letter in [Dimensions], only the fillet radii in
+        [Fillets], with [New Fillet Dimension] there (#213, #214)."""
+        fillets: bool = self.tabs.currentIndex() == FILLETS_TAB
+        row: int
+        letter: Letter
+        for row, letter in enumerate(self.drawing.letters):
+            self.table.setRowHidden(row, fillets and not letter.fillet)
+        self.new_fillet.setVisible(fillets)
+
+    # Method `OutlineEditor.add_fillet()`:
+    def add_fillet(self) -> None:
+        """[New Fillet Dimension]: a new letter, checked "Fillet",
+        ready to be named (#214)."""
+        self.drawing.letters.append(
+            replace(
+                next_letter(self.drawing.letters),
+                name="Fillet radius",
+                fillet=True,
+            )
         )
+        self.fill_table()
+        self.table.setCurrentCell(len(self.drawing.letters) - 1, 1)
 
     # Method `OutlineEditor.letters_area()`:
     def letters_area(self) -> QWidget:
-        """Return the tabs, [Dimensions] (the letters' table) and
-        [Fillets] (#142.2), with the problems right under them, in red,
-        wrapped so the window never widens (#141).
+        """Return the tab bar, [Dimensions] and [Fillets], over the
+        letters' table (#213), with the problems right under them, in
+        red, wrapped so the window never widens (#141).
 
         Returns:
         * (`QWidget`): The tabs and the problem line.
@@ -3758,9 +3784,14 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         area: QWidget = QWidget()
         stack: QVBoxLayout = QVBoxLayout(area)
         stack.setContentsMargins(0, 0, 0, 0)
-        self.tabs.addTab(self.table, "Dimensions")
-        self.tabs.addTab(self.fillets, "Fillets")
+        self.tabs.addTab("Dimensions")
+        self.tabs.addTab("Fillets")
+        self.tabs.currentChanged.connect(self.show_rows)
+        self.new_fillet.clicked.connect(self.add_fillet)
+        self.new_fillet.setVisible(False)
         stack.addWidget(self.tabs)
+        stack.addWidget(self.table)
+        stack.addWidget(self.new_fillet, 0, Qt.AlignmentFlag.AlignLeft)
         stack.addWidget(self.problems)
         return area
 
@@ -3779,17 +3810,44 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             column: int
             attribute: str
             for column, (_, attribute) in enumerate(COLUMNS):
-                self.table.setItem(
-                    row, column, QTableWidgetItem(getattr(letter, attribute))
-                )
+                self.table.setItem(row, column, self.cell(letter, attribute))
         self.table.setCurrentCell(-1, -1)
         self.table.blockSignals(False)
+        self.show_rows()
         self.view.setFocus()
         self.check_letters()
 
+    # Method `OutlineEditor.cell()`:
+    @staticmethod
+    def cell(letter: Letter, attribute: str) -> QTableWidgetItem:
+        """Return a letter's cell: its text, or for "Fillet" a check
+        box that a click flips, never edited as text (#213).
+
+        Arguments:
+        * `letter` (`Letter`): The letter.
+        * `attribute` (`str`): Its field shown (see `COLUMNS`).
+
+        Returns:
+        * (`QTableWidgetItem`): The cell.
+        """
+        if attribute != "fillet":
+            return QTableWidgetItem(getattr(letter, attribute))
+        item: QTableWidgetItem = QTableWidgetItem()
+        item.setFlags(
+            Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
+        )
+        item.setCheckState(
+            Qt.CheckState.Checked if letter.fillet else Qt.CheckState.Unchecked
+        )
+        return item
+
     # Method `OutlineEditor.new_letter()`:
     def new_letter(self) -> None:
-        """Add a row for the first free letter, ready to be named."""
+        """Add a row for the first free letter, ready to be named; in
+        [Fillets], a fillet radius (#214)."""
+        if self.tabs.currentIndex() == FILLETS_TAB:
+            self.add_fillet()
+            return
         self.drawing.letters.append(next_letter(self.drawing.letters))
         self.fill_table()
         row: int = len(self.drawing.letters) - 1
@@ -3802,7 +3860,14 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
         Arguments:
         * `item` (`QTableWidgetItem`): The cell.
         """
-        self.keep(item.row(), item.column(), item.text())
+        if COLUMNS[item.column()][1] == "fillet":
+            self.drawing.letters[item.row()].fillet = (
+                item.checkState() == Qt.CheckState.Checked
+            )
+            self.check_letters()
+            self.save()
+        else:
+            self.keep(item.row(), item.column(), item.text())
 
     # Method `OutlineEditor.keep()`:
     def keep(self, row: int, column: int, text: str) -> None:
@@ -3843,6 +3908,7 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
                     or trouble.get(letter.letter, ""),
                     2,
                 ),
+                (fillet_kind_problem(letter, kinds), 3),
             ):
                 cell: QTableWidgetItem | None = self.table.item(row, column)
                 if cell is not None:

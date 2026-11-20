@@ -26,6 +26,7 @@ HALF_DRILL: Outline = Outline(
     [
         Letter("A", "Half point angle", "59 deg", 'The "half" angle.'),
         Letter("D", "Radius", "1/8 in", ""),
+        Letter("R", "Corner radius", "1/32 in", "", fillet=True),
     ],
     [
         Dimension("A", ANGLE, 0, Y_AXIS, 0.6, 0.5, rays=(1, -1)),
@@ -55,6 +56,7 @@ class OutlineFileTest(unittest.TestCase):
         self.assertIn('to = "y_axis"', text)
         self.assertIn('from = "origin"', text)
         self.assertIn("rays = [1, -1]", text)
+        self.assertEqual(text.count("fillet = true"), 1)
         back: Outline = outline_from_text(text, "drill.outline.toml")
         self.assertEqual(back, HALF_DRILL)
         self.assertEqual(outline_text(back), text)
@@ -86,6 +88,13 @@ class OutlineFileTest(unittest.TestCase):
             [(0.0, 0.0)], [], [Dimension("L", LENGTH, 0, 0)]
         )
         self.assertNotIn("rays", outline_text(lengthy))
+        with self.assertRaises(OutlineError) as caught:
+            outline_from_text(
+                'kind = "outline"\n[letters.R]\nname = ""\n'
+                'default = "1 in"\nhelp = ""\nfillet = 1',
+                "x",
+            )
+        self.assertIn("letters.R.fillet", str(caught.exception))
 
     def test_checks(self) -> None:
         """Every problem is reported, naming the file and the entry

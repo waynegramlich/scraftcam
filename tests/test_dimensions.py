@@ -151,18 +151,36 @@ class DimensionsTest(unittest.TestCase):
         self.assertIn(1, solution.y)
         self.assertNotIn(1, solve(half, dimensions[1:]).y)
 
-        # The direction carried on to a second angle.
+        # The direction carried on to a second angle; a third between
+        # edges already directed is one too many (#230).
         ways: dict[int, str] = {Y_AXIS: "90 deg"}
-        self.assertTrue(
-            _angle_way(Dimension("B", ANGLE, Y_AXIS, 1, rays=(-1, 1)), ways)
-        )
+        known: tuple[dict[int, Formula], dict[int, Formula]] = ({}, {})
+        extra: list[int] = []
+
+        # Function `way()`:
+        def way(dimension: Dimension, index: int) -> bool:
+            return _angle_way(half, dimension, ways, known, extra, index)
+
+        self.assertTrue(way(Dimension("B", ANGLE, Y_AXIS, 1, rays=(-1, 1)), 0))
         self.assertEqual(ways[1], "90 deg + B + 180 deg")
-        self.assertTrue(
-            _angle_way(Dimension("C", ANGLE, Y_AXIS, 1, rays=(1, 1)), ways)
-        )
-        self.assertFalse(
-            _angle_way(Dimension("D", ANGLE, 2, 3, rays=(1, 1)), ways)
-        )
+        self.assertEqual(extra, [])
+        self.assertTrue(way(Dimension("C", ANGLE, Y_AXIS, 1, rays=(1, 1)), 1))
+        self.assertEqual(extra, [1])
+        self.assertFalse(way(Dimension("D", ANGLE, 2, 3, rays=(1, 1)), 2))
+
+        # In full: an angle repeating what the corners say is extra.
+        square: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+        ]
+        given: list[Dimension] = [
+            Dimension("W", HORIZONTAL, ORIGIN, 1),
+            Dimension("H", VERTICAL, ORIGIN, 3),
+            Dimension("A", ANGLE, 0, 1, rays=(-1, 1)),
+        ]
+        self.assertEqual(solve(square, given).extra, [2])
 
     def test_tidy(self) -> None:
         """Formulas are written without `0 +`, `- 0` or needless

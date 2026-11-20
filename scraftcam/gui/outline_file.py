@@ -126,6 +126,8 @@ def outline_text(outline: Outline) -> str:
             f"default = {_string(letter.default)}",
             f"help = {_string(letter.help)}",
         ]
+        if letter.fillet:
+            lines.append("fillet = true")
 
     # The corners, then the dimensions.
     x: float
@@ -344,7 +346,7 @@ class _Reader:
 
     # Method `_Reader.letters()`:
     def letters(self, found: object) -> list[Letter]:
-        """Read the letters, each with `name`, `default` and `help`.
+        """Read the letters: `name`, `default`, `help`, maybe `fillet`.
 
         Arguments:
         * `found` (`object`): The file's `letters`.
@@ -363,8 +365,23 @@ class _Reader:
                 table.get(key) if isinstance(table, dict) else None
                 for key in ("name", "default", "help")
             ]
-            if all(isinstance(text, str) for text in texts):
-                letters.append(Letter(name, *(str(text) for text in texts)))
+            fillet: object = (
+                table.get("fillet", False)
+                if isinstance(table, dict)
+                else False
+            )
+            if not isinstance(fillet, bool):
+                self.note(f"letters.{name}.fillet", "is not true or false")
+            elif all(isinstance(text, str) for text in texts):
+                letters.append(
+                    Letter(
+                        name,
+                        str(texts[0]),
+                        str(texts[1]),
+                        str(texts[2]),
+                        fillet,
+                    )
+                )
             else:
                 self.note(
                     f"letters.{name}", "needs name, default and help (text)"

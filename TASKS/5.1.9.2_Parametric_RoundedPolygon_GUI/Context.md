@@ -17,7 +17,7 @@ SolidCraft except `test_outline_solid`.
 
 Files: `scraftcam/gui/outline_editor.py` (Qt), `letters.py`,
 `dimensions.py`, `outline_file.py`, `values.py`, `hides.py`,
-`outline_solid.py` (no Qt), `fillet_panel.py` (Qt); tests
+`outline_solid.py` (no Qt); tests
 `test_outline_editor`, `test_letters`, `test_dimensions`,
 `test_outline_file`, `test_values`, `test_hides`,
 `test_outline_solid`, plus `test_shops`, `test_gui_tree`,
@@ -119,11 +119,15 @@ unittest ...`).  Example: `examples/shop/tools/drill.outline.toml`.
   fillet radius"), with "All undimensioned fillets are radius UDF"
   lower left; `UDF` fillets show no letter, own-letter fillets show
   it past the arc's middle.  Too big: red ring and red table cell.
-  Today a [Fillets] tab (`fillet_panel.FilletPanel`) lists the
-  selected corners ("All:" row, a line, rows `1:`..`N:` in selection
-  order, one-down buttons [No fillet], [UDF], each fillet letter),
-  with two-way hover lighting (`OutlineView.light()`, `lit`,
-  `lighted`); this is to be replaced (below).
+  Chunk 1 done (2026-11-19): one letters table under a `QTabBar`
+  ([Dimensions] every row, [Fillets] only `Letter.fillet` rows plus
+  [New Fillet Dimension]; [New Letter] there makes a fillet
+  letter); a "Fillet" check column (`fillet = true` in the file,
+  `fillet_kind_problem()` refuses angles; `UDF` made checked);
+  `fillet_panel.py` deleted (`NOTE_LETTER`, `NOTE_CHOICE` now in
+  `outline_editor.py`), so no GUI way to fillet until chunk 2;
+  `view.set_fillets(corners, letter)` remains.  Hover code
+  (`OutlineView.light()`, `lit`, `lighted`) kept for chunk 3.
 * Hides (`gui/hides.py`, `Hide(axis, below, above, low, high, under,
   over)`, `[[hides]]` in the file): [Hide (H)] lays a strip by a
   drag in the [Overview (O)] (straight stretches only: no corner, no
@@ -150,9 +154,9 @@ shop's own directories (`tools/NAME.outline.toml`) under version
 control; the shop reader and tree skip them (`shops.OUTLINE_SUFFIX`)
 until #S7.
 
-## Next: the Fillet Design Agreed (2026-11-19, not coded)
+## Next: the Fillet Design Agreed (2026-11-19, chunk 1 coded)
 
-Numbers sticky; the next new one is #231.
+Numbers sticky; the next new one is #237.
 * #213 One letters table.  A tab bar over it: [Dimensions] shows
   every row; [Fillets] shows only rows checked "Fillet" (a new check
   box column, `fillet = true` on the letter in the file; only length
@@ -184,10 +188,38 @@ Numbers sticky; the next new one is #231.
   through 0 changes the segment count, so `SolidCraftLink` rebuilds.
 * Chunk plan (#221): (1) one table, tab bar, "Fillet" column, file;
   per-corner rows out; (2) "No fillet" row, arming and painting;
-  (3) hover lighting and refused deletes.  #230 (an extra angle not
-  drawn red, a bug) is fixed in chunk 1.  Then #182: a hide strip is
+  (3) hover lighting and refused deletes.  #230 fixed: an angle
+  whose two edges are already directed (by angles, or both corners
+  known in full, `dimensions._edge_known()`) is extra.  Then #182: a hide strip is
   drawn red while it covers a dimension letter; the user's placement
   of letters is respected, never moved (the user, 2026-11-19).
+
+## Marks and One-Handle Selection (agreed 2026-11-19, not coded)
+
+After the fillets (chunks 2-3), one Step; the user tests the GUI
+again only after #233.
+* #233 Marks as in other sketchers: horizontal `—` and vertical `|`
+  on an edge (`∥` parallel, `=` equal, `⊥` perpendicular kept free
+  for later two-edge relations).  Made and removed only by toggle
+  buttons on the selected edge, never by a drag or a value (no
+  "grid lock": values that land an edge level lock nothing).  The
+  solver directs only marked edges (0/90 deg, as the axes) and
+  replaces today's guess from the drawing (#100, `_level_edges`);
+  likewise a corner on an axis becomes a mark.  A mark repeating or
+  fighting a dimension is red.  Old files get the marks they relied
+  on when read (`drill.outline.toml`).  Keys Claude's choice
+  (suggested `-`, `|`, `Shift+L`; `H` is [Hide]).
+* #236 [Right Angle] on a selected corner: `└` drawn in the sector
+  it is in (the four ways), meaning 90 deg with no letter.
+* #234 [Angle] folds into [Dimension (N)], which works from the
+  selection: #231 one edge circle -> its length ([Dim. Kind]
+  length/horizontal/vertical); #232 one corner -> the angle there
+  (under 180 as drawn); two edge circles -> angle between; axis +
+  edge -> angle to the axis; axis + corner -> across the axis; two
+  points -> between them (still needed, e.g. the drill's R).
+* #235 corners become circles like edges (where a circle sits says
+  what it is); the origin stays a filled square; edge circles a bit
+  smaller; hollow vs filled for selection.
 
 ## Steps Left and Open Items
 

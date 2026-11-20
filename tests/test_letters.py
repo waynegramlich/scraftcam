@@ -4,6 +4,7 @@ import unittest
 
 from scraftcam.gui.letters import (
     Letter,
+    fillet_kind_problem,
     letter_problem,
     next_letter,
     use_problem,
@@ -21,6 +22,16 @@ class LettersTest(unittest.TestCase):
             self.assertEqual(value_problem(text), "", text)
         for text in ("6", "", "six in", "3 furlongs", "x deg"):
             self.assertIn("is not a value with a unit", value_problem(text))
+
+    def test_fillet_kind_problem(self) -> None:
+        """Only a length letter may be a fillet radius (#213)."""
+        radius: Letter = Letter("R", default="1/8 in", fillet=True)
+        self.assertEqual(fillet_kind_problem(radius, {"length"}), "")
+        self.assertIn("is an angle", fillet_kind_problem(radius, {"angle"}))
+        angle: Letter = Letter("A", default="30 deg", fillet=True)
+        self.assertIn("is an angle", fillet_kind_problem(angle, set()))
+        angle.fillet = False
+        self.assertEqual(fillet_kind_problem(angle, set()), "")
 
     def test_use_problem(self) -> None:
         """A value must fit what its dimensions measure (#58, #62)."""

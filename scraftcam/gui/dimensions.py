@@ -285,7 +285,9 @@ def solve(
             if index in used:
                 continue
             if dimension.kind == ANGLE:
-                done: bool = _angle_way(dimension, ways)
+                done: bool = _angle_way(
+                    points, dimension, ways, known, solution.extra, index
+                )
             else:
                 done = _apply(points, dimension, known, solution.extra, index)
             if done:
@@ -491,22 +493,41 @@ def _along_length(
 
 
 # Function `_angle_way()`:
-def _angle_way(dimension: Dimension, ways: dict[int, str]) -> bool:
+def _angle_way(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    points: list[tuple[float, float]],
+    dimension: Dimension,
+    ways: dict[int, str],
+    known: tuple[dict[int, Formula], dict[int, Formula]],
+    extra: list[int],
+    index: int,
+) -> bool:
     """An angle from an edge already directed gives the other edge's
     direction (counterclockwise from its first ray to its second).
 
     Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
     * `dimension` (`Dimension`): The angle.
     * `ways` (`dict[int, str]`): Each edge's direction (from the
       corner it leaves), an expression in degrees; added to.
+    * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
+      The X and Y formulas found so far.
+    * `extra` (`list[int]`): Given the angle if one too many (#230).
+    * `index` (`int`): The angle's index.
 
     Returns:
-    * (`bool`): Whether it is done with.
+    * (`bool`): Whether it is done with (used or extra).
     """
     start: int = dimension.start
     end: int = dimension.end
-    if start in ways and end in ways:
-        return True  # One too many: not marked yet (#33).
+
+    # Both edges directed already, by angles or by both their corners
+    # known in full: the angle is one too many (#33, #230).
+    if all(
+        edge in ways or _edge_known(points, edge, known)
+        for edge in (start, end)
+    ):
+        extra.append(index)
+        return True
 
     # A ray against its edge is half a turn from the edge's direction.
     flips: int = (dimension.rays[0] != 1) - (dimension.rays[1] != 1)
@@ -519,6 +540,30 @@ def _angle_way(dimension: Dimension, ways: dict[int, str]) -> bool:
         ways[start] = f"{ways[end]} - {dimension.letter}{back}"
         return True
     return False
+
+
+# Function `_edge_known()`:
+def _edge_known(
+    points: list[tuple[float, float]],
+    edge: int,
+    known: tuple[dict[int, Formula], dict[int, Formula]],
+) -> bool:
+    """Return whether both corners of an edge are known in full, so
+    its direction is known too.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `edge` (`int`): The corner the edge leaves (an axis: never).
+    * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
+      The X and Y formulas found so far.
+
+    Returns:
+    * (`bool`): Whether the edge is known.
+    """
+    if edge in AXES:
+        return False
+    ends: tuple[int, int] = (edge, (edge + 1) % len(points))
+    return all(end in table for end in ends for table in known)
 
 
 # Function `_along_edge()`:

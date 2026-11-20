@@ -42,9 +42,11 @@ class Letter:
     * `name` (`str`): Its long name ("Overall width").
     * `default` (`str`): Its default value, with a unit (`6 in`).
     * `help` (`str`): One line of help, for tooltips and documents.
+    * `fillet` (`bool`): Listed in the [Fillets] tab as a fillet
+      radius (#213; only a length letter).
 
     Constructor:
-    * `Letter(letter, name, default, help)`
+    * `Letter(letter, name, default, help, fillet)`
     """
 
     # Constructor arguments:
@@ -52,6 +54,7 @@ class Letter:
     name: str = field(init=True, default="")
     default: str = field(init=True, default="1 in")
     help: str = field(init=True, default="")
+    fillet: bool = field(init=True, default=False)
 
 
 # Function `value_problem()`:
@@ -107,6 +110,26 @@ def use_problem(letter: str, text: str, kinds: set[str]) -> str:
     if not kinds:
         return ""
     return _range_problem(letter, text, angle)
+
+
+# Function `fillet_kind_problem()`:
+def fillet_kind_problem(letter: Letter, kinds: set[str]) -> str:
+    """Return what is wrong with a letter checked "Fillet" ("" if
+    nothing): a fillet radius is a length (#213).
+
+    Arguments:
+    * `letter` (`Letter`): The letter.
+    * `kinds` (`set[str]`): What its dimensions measure (see
+      `use_problem()`).
+
+    Returns:
+    * (`str`): The problem, as the user should read it.
+    """
+    words: list[str] = letter.default.split()
+    angle: bool = bool(words) and words[-1] in ANGLE_UNITS
+    if letter.fillet and (angle or "angle" in kinds):
+        return f"{letter.letter} is an angle: a fillet radius is a length."
+    return ""
 
 
 # Function `_range_problem()`:
