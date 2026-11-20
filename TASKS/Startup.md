@@ -17,6 +17,7 @@
 @5.1.9.2_Parametric_RoundedPolygon_GUI/Context.md
 @5.1.9.2.1_Convert_Existing_Tools_to_the_2D_Editor/Details.md
 @5.1.9.2.2_SVG_from_the_Outline_Editor/Details.md
+@5.1.9.2.2_SVG_from_the_Outline_Editor/Context.md
 @5.1.10_Catalog_Management/Details.md
 @5.1.10_Catalog_Management/Context.md
 @5.3_Create_More_Tools/Details.md

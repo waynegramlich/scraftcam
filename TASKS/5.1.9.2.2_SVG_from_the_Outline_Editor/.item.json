@@ -1,11 +1,15 @@
 {
-  "state": "Pending",
+  "state": "Open",
   "created": "2026-11-20T03:01:13Z",
-  "updated": "2026-11-20T03:01:13Z",
+  "updated": "2026-11-20T03:05:14Z",
   "history": [
     {
       "state": "Pending",
       "time": "2026-11-20T03:01:13Z"
+    },
+    {
+      "state": "Open",
+      "time": "2026-11-20T03:05:14Z"
     }
   ],
   "tag": "sfoe"
