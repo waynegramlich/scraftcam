@@ -47,6 +47,7 @@ from .dimensions import (
     X_AXIS,
     Y_AXIS,
     Dimension,
+    drawn_marks,
 )
 from .hides import Hide
 from .letters import Letter
@@ -61,6 +62,10 @@ ENDS: dict[int, str] = {
 
 # A hide strip's axis, as written (`HIDE_X`, `HIDE_Y`).
 AXES: tuple[str, ...] = ("x", "y")
+
+# The file format's version: 2 since marks (#233); a file without one
+# is 1, and gets the marks its drawing showed.
+VERSION: int = 2
 
 # The kinds of dimension a file may hold.
 KINDS: tuple[str, ...] = (HORIZONTAL, VERTICAL, LENGTH, ANGLE, RADIUS)
@@ -111,6 +116,7 @@ def outline_text(outline: Outline) -> str:
     """
     lines: list[str] = [
         'kind = "outline"',
+        f"version = {VERSION}",
         f"revolve = {'true' if outline.revolve else 'false'}",
     ]
     if outline.note_radius:
@@ -269,6 +275,16 @@ class _Reader:
             if dimension is not None:
                 outline.dimensions.append(dimension)
         self.hides(data.get("hides", []), outline)
+
+        # A file from before marks (#233) took its level and upright
+        # edges and its corners on an axis from the drawing: they are
+        # its marks now.
+        version: object = data.get("version", 1)
+        if version not in (1, VERSION):
+            self.note("version", f"is not 1 or {VERSION}")
+        elif version == 1:
+            # First, as the old solving took them before any dimension.
+            outline.dimensions[:0] = drawn_marks(outline.points)
         return outline
 
     # Method `_Reader.hides()`:
@@ -410,7 +426,10 @@ class _Reader:
         if kind not in KINDS:
             self.note(where, f"kind {kind!r} is not one of {', '.join(KINDS)}")
         letter: object = table.get("letter")
-        if letter not in {each.letter for each in outline.letters}:
+        if letter != "" and letter not in {
+            each.letter for each in outline.letters
+        }:
+            # A mark is letterless (#233).
             self.note(where, f"letter {letter!r} is not in [letters]")
         ends: list[int] = [
             self.end(where, key, table.get(key), kind == ANGLE, outline)

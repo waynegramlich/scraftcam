@@ -11,9 +11,13 @@ from scraftcam.gui.dimensions import (
     Y_AXIS,
     Dimension,
     Formula,
+    Solution,
     _angle_way,
     difference,
+    drawn_marks,
     grouped,
+    is_mark,
+    mark_edge,
     product,
     solve,
     total,
@@ -29,6 +33,21 @@ L_BRACKET: list[tuple[float, float]] = [
     (1.0, 4.0),
     (0.0, 4.0),
 ]
+
+
+# Function `marked()`:
+def marked(
+    points: list[tuple[float, float]], dimensions: list[Dimension]
+) -> Solution:
+    """Solve with the marks the drawing shows put first (as an old
+    file is read, #233), the extras given by the dimensions' own
+    indices."""
+    marks: list[Dimension] = drawn_marks(points)
+    solution: Solution = solve(points, marks + dimensions)
+    solution.extra[:] = [
+        index - len(marks) for index in solution.extra if index >= len(marks)
+    ]
+    return solution
 
 
 class DimensionsTest(unittest.TestCase):
@@ -51,7 +70,7 @@ class DimensionsTest(unittest.TestCase):
             Dimension("T", VERTICAL, ORIGIN, 2),
             Dimension("H", VERTICAL, 2, 4),
         ]
-        solution = solve(L_BRACKET, dimensions)
+        solution = marked(L_BRACKET, dimensions)
         self.assertEqual(str(solution.x[1]), "W")
         self.assertEqual(solution.extra, [])
         self.assertEqual(str(solution.x[3]), "W - T")
@@ -71,7 +90,7 @@ class DimensionsTest(unittest.TestCase):
             (6.0, 0.0),
             (5.0, 3.0),
         ]
-        solution = solve(slanted, [Dimension("W", HORIZONTAL, ORIGIN, 1)])
+        solution = marked(slanted, [Dimension("W", HORIZONTAL, ORIGIN, 1)])
         self.assertEqual(str(solution.y[1]), "0")
         self.assertNotIn(2, solution.x)
         box: list[tuple[float, float]] = [
@@ -80,7 +99,7 @@ class DimensionsTest(unittest.TestCase):
             (6.0, 4.0),
             (1.0, 4.0),
         ]
-        solution = solve(
+        solution = marked(
             box,
             [
                 Dimension("X", HORIZONTAL, ORIGIN, 0),
@@ -97,7 +116,7 @@ class DimensionsTest(unittest.TestCase):
     def test_on_axis(self) -> None:
         """A corner on an axis has that coordinate 0 (the one at the
         origin both), and a dimension to it is one too many."""
-        solution = solve(L_BRACKET, [Dimension("H", VERTICAL, ORIGIN, 5)])
+        solution = marked(L_BRACKET, [Dimension("H", VERTICAL, ORIGIN, 5)])
         self.assertEqual(str(solution.x[0]), "0")
         self.assertEqual(str(solution.y[0]), "0")
         self.assertEqual(str(solution.y[1]), "0")
@@ -105,7 +124,7 @@ class DimensionsTest(unittest.TestCase):
         self.assertNotIn(1, solution.x)
         self.assertEqual(solution.extra, [])
         self.assertEqual(str(solution.y[5]), "H")
-        solution = solve(L_BRACKET, [Dimension("Z", VERTICAL, ORIGIN, 1)])
+        solution = marked(L_BRACKET, [Dimension("Z", VERTICAL, ORIGIN, 1)])
         self.assertEqual(solution.extra, [0])
 
     def test_length(self) -> None:
@@ -121,16 +140,16 @@ class DimensionsTest(unittest.TestCase):
             Dimension("W", HORIZONTAL, ORIGIN, 1),
             Dimension("P", HORIZONTAL, ORIGIN, 2),
         ]
-        solution = solve(triangle, dimensions)
+        solution = marked(triangle, dimensions)
         self.assertEqual(str(solution.x[2]), "P")
         self.assertEqual(str(solution.y[2]), "sqrt(S^2 - (P - W)^2)")
         self.assertEqual(solution.missing(3), [])
         below = [(0.0, 0.0), (4.0, 0.0), (1.0, -3.0)]
         self.assertEqual(
-            str(solve(below, dimensions).y[2]), "-sqrt(S^2 - (P - W)^2)"
+            str(marked(below, dimensions).y[2]), "-sqrt(S^2 - (P - W)^2)"
         )
         # Without P, corner 2 is known in neither coordinate: it waits.
-        self.assertNotIn(2, solve(triangle, dimensions[:2]).y)
+        self.assertNotIn(2, marked(triangle, dimensions[:2]).y)
 
     def test_angle(self) -> None:
         """Half a drill point: an angle from the Y axis directs the tip
@@ -145,11 +164,11 @@ class DimensionsTest(unittest.TestCase):
             Dimension("A", ANGLE, 0, Y_AXIS, rays=(1, 1)),
             Dimension("R", HORIZONTAL, ORIGIN, 1),
         ]
-        solution = solve(half, dimensions)
+        solution = marked(half, dimensions)
         self.assertEqual(str(solution.x[1]), "R")
         self.assertIn("tan(90 deg - A)", str(solution.y[1]))
         self.assertIn(1, solution.y)
-        self.assertNotIn(1, solve(half, dimensions[1:]).y)
+        self.assertNotIn(1, marked(half, dimensions[1:]).y)
 
         # The direction carried on to a second angle; a third between
         # edges already directed is one too many (#230).
@@ -180,7 +199,59 @@ class DimensionsTest(unittest.TestCase):
             Dimension("H", VERTICAL, ORIGIN, 3),
             Dimension("A", ANGLE, 0, 1, rays=(-1, 1)),
         ]
-        self.assertEqual(solve(square, given).extra, [2])
+        self.assertEqual(marked(square, given).extra, [2])
+
+    def test_marks(self) -> None:
+        """Nothing is guessed from the drawing; marks lock edges and
+        corners, direct edges for angles, and an extra one shows
+        (#233)."""
+        square: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+        ]
+        given: list[Dimension] = [
+            Dimension("W", HORIZONTAL, ORIGIN, 1),
+            Dimension("H", VERTICAL, ORIGIN, 3),
+        ]
+        self.assertEqual(
+            solve(square, given).missing(4),
+            [(0, "x"), (0, "y"), (1, "y"), (2, "x"), (2, "y"), (3, "x")],
+        )
+        marks: list[Dimension] = drawn_marks(square)
+        self.assertTrue(all(is_mark(mark) for mark in marks))
+        self.assertEqual(
+            [mark_edge(mark, 4) for mark in marks], [-1] * 4 + [1, 2]
+        )
+        self.assertEqual(solve(square, given + marks).missing(4), [])
+        self.assertFalse(is_mark(given[0]))
+        self.assertEqual(mark_edge(given[0], 4), -1)
+
+        # A level edge directs a slanted one through an angle.
+        slant: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (3.0, 2.0),
+            (0.0, 2.0),
+        ]
+        dimensions: list[Dimension] = [
+            Dimension("", VERTICAL, ORIGIN, 0),
+            Dimension("", HORIZONTAL, ORIGIN, 0),
+            Dimension("", VERTICAL, 0, 1),
+            Dimension("W", HORIZONTAL, 0, 1),
+            Dimension("A", ANGLE, 1, 0, rays=(1, -1)),
+            Dimension("", VERTICAL, 2, 3),
+            Dimension("", HORIZONTAL, ORIGIN, 3),
+            Dimension("H", VERTICAL, ORIGIN, 3),
+        ]
+        solution: Solution = solve(slant, dimensions)
+        self.assertEqual(solution.missing(4), [])
+        self.assertIn("tan", str(solution.x[2]))
+        self.assertEqual(solution.extra, [])
+        # A second level mark on the bottom edge is one too many.
+        twice: Solution = solve(slant, dimensions + [dimensions[2]])
+        self.assertEqual(twice.extra, [len(dimensions)])
 
     def test_tidy(self) -> None:
         """Formulas are written without `0 +`, `- 0` or needless
@@ -206,7 +277,7 @@ class DimensionsTest(unittest.TestCase):
             (2.0, 8.0),
             (0.0, 8.0),
         ]
-        solution = solve(
+        solution = marked(
             half,
             [
                 Dimension("A", ANGLE, 0, Y_AXIS, rays=(1, 1)),
@@ -223,11 +294,11 @@ class DimensionsTest(unittest.TestCase):
             Dimension("B", HORIZONTAL, 3, 1),
             Dimension("H", VERTICAL, 5, ORIGIN),
         ]
-        solution = solve(L_BRACKET, dimensions)
+        solution = marked(L_BRACKET, dimensions)
         self.assertEqual(solution.extra, [2])
         self.assertEqual(str(solution.y[5]), "H")
         self.assertEqual(
-            solve([(-2.0, -3.0)], [Dimension("D", VERTICAL, ORIGIN, 0)])
+            marked([(-2.0, -3.0)], [Dimension("D", VERTICAL, ORIGIN, 0)])
             .y[0]
             .terms,
             ((-1, "D"),),

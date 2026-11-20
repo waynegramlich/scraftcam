@@ -211,6 +211,26 @@ key gone; the user confirmed lengths and angles work); #235
 not-dimensioned ring now `warning` orange.  Next #233 in chunks:
 (A) marks in the solver and file, old files given their marks; (B)
 toggle buttons and glyphs; then #236.
+* #233A done: a mark is a letterless HORIZONTAL/VERTICAL dimension
+  (`dimensions.is_mark()`, `mark_edge()`): VERTICAL across an edge =
+  level `—`, HORIZONTAL = upright `|`, from `ORIGIN` = corner on the
+  X/Y axis.  `solve(points, dimensions)` guesses nothing (no `drawn`
+  parameter; `pinned` is the solution); marked edges are directed
+  (`_drawn_way()`) for angles but not followed by `_along_edge()`.
+  Files write `version = 2`; a file without one gets
+  `drawn_marks(points)` (axis corners first, then edges, none
+  repeating) ahead of its dimensions.  `Drawing.insert()` drops a
+  mark on the split edge.  The starting triangle has no marks (#238
+  open: the user to say).
+* #233B done: [Horizontal (-)] and [Vertical (|)] call
+  `view.toggle_mark(VERTICAL|HORIZONTAL)` on the selected edges, or
+  corners (#239: onto the X/Y axis), moving the far corner at once;
+  pressed again with all marked, removes them.  Glyph: a
+  `MARK_PIXELS` box `MARK_GAP_PIXELS` out from the edge's middle (or
+  the corner), away from the outline's middle
+  (`DimensionItem.mark_spot()`, `paint_mark()`), red when extra;
+  clicking it selects the mark, [Delete] removes it.  Not placed
+  for hide cuts yet.
 
 After the fillets (chunks 2-3), one Step; the user tests the GUI
 again only after #233.

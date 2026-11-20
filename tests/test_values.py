@@ -9,6 +9,7 @@ from scraftcam.gui.dimensions import (
     RADIUS,
     VERTICAL,
     Dimension,
+    drawn_marks,
 )
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.values import (
@@ -25,7 +26,8 @@ PLATE: list[tuple[float, float]] = [
     (6.0, 4.0),
     (0.0, 4.0),
 ]
-SIZES: list[Dimension] = [
+# Its marks (#233) first, then its dimensions.
+SIZES: list[Dimension] = drawn_marks(PLATE) + [
     Dimension("W", HORIZONTAL, ORIGIN, 1),
     Dimension("H", VERTICAL, ORIGIN, 2),
     Dimension("R", RADIUS, 2, 2),

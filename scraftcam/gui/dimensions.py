@@ -233,7 +233,6 @@ class Solution:
 def solve(
     points: list[tuple[float, float]],
     dimensions: list[Dimension],
-    drawn: bool = True,
 ) -> Solution:
     """Find each corner's coordinates from the dimensions.
 
@@ -241,9 +240,12 @@ def solve(
     directed); an edge directed and known at one end gives its other
     end from one coordinate there.
 
-    Starting from the origin and the corners drawn on an axis, each
-    pass takes every dimension that can tell something new, until
-    none can: a horizontal (vertical) one from a point whose X (Y)
+    Nothing is guessed from the drawing (#233): an edge is level or
+    upright, or a corner on an axis, only by a mark (`is_mark()`), a
+    letterless dimension the user placed, so values that land an
+    edge level lock nothing.  Starting from the origin, each pass
+    takes every dimension that can tell something new, until none
+    can: a horizontal (vertical) one from a point whose X (Y)
     is known, a length from a point known in full to a corner known
     in one coordinate (#37: the drawing picks the side).  A
     horizontal or vertical dimension between two points already known
@@ -253,11 +255,6 @@ def solve(
     * `points` (`list[tuple[float, float]]`):
       The corners as drawn, for the signs.
     * `dimensions` (`list[Dimension]`): The dimensions.
-    * `drawn` (`bool`): Whether what the drawing says counts too:
-      corners on an axis (#23), level and upright edges (#100).
-      Without it, only the dimensions fix coordinates (what pins a
-      drag, #176).
-
     Returns:
     * (`Solution`): The formulas, and the extra dimensions.
     """
@@ -266,21 +263,27 @@ def solve(
         solution.x,
         solution.y,
     )
-    _seed(points if drawn else [], known)
+    known[0][ORIGIN] = Formula()
+    known[1][ORIGIN] = Formula()
 
     # Pass after pass, until nothing more is found: the dimensions,
-    # then the edges whose directions angles gave.
+    # then the edges whose directions angles gave.  A marked edge is
+    # directed from the start, as the axes are (#233); the mark itself
+    # gives its far end, so it is not followed as a directed edge.
     ways: dict[int, str] = {X_AXIS: "0 deg", Y_AXIS: "90 deg"}
+    marked: set[int] = set()
+    dimension: Dimension
+    for dimension in dimensions:
+        edge: int = mark_edge(dimension, len(points))
+        if edge >= 0:
+            marked.add(edge)
+            ways[edge] = _drawn_way(points, edge, AXIS[dimension.kind])
     used: set[int] = set()
-    # Level and upright edges first: a dimension saying again what
-    # one says is the one too many.
-    level: list[Dimension] = _level_edges(points) if drawn else []
-    every: list[Dimension] = level + dimensions
+    every: list[Dimension] = dimensions
     found: bool = True
     while found:
         found = False
         index: int
-        dimension: Dimension
         for index, dimension in enumerate(every):
             if index in used:
                 continue
@@ -295,59 +298,82 @@ def solve(
                 used.add(index)
                 found = True
                 break
-        edge: int
         way: str
         for edge, way in ways.items():
-            if edge not in AXES and _along_edge(points, edge, way, known):
+            if (
+                edge not in AXES
+                and edge not in marked
+                and _along_edge(points, edge, way, known)
+            ):
                 found = True
     known[0].pop(ORIGIN)
     known[1].pop(ORIGIN)
-
-    # The extras by the dimensions' own indices.
-    solution.extra[:] = sorted(
-        index - len(level) for index in solution.extra if index >= len(level)
-    )
+    solution.extra.sort()
     return solution
 
 
-# Function `_seed()`:
-def _seed(
-    points: list[tuple[float, float]],
-    known: tuple[dict[int, Formula], dict[int, Formula]],
-) -> None:
-    """Start from what is known before any dimension: the origin, and
-    each corner drawn on an axis (#23).
+# Function `is_mark()`:
+def is_mark(dimension: Dimension) -> bool:
+    """Return whether a dimension is a mark (#233): letterless, a
+    horizontal or vertical dimension of nothing.  A vertical one
+    across an edge marks it level (horizontal, `—`), a horizontal one
+    upright (vertical, `|`); from the origin to a corner, it puts the
+    corner on the X (Y) axis.
 
     Arguments:
-    * `points` (`list[tuple[float, float]]`): The corners as drawn.
-    * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
-      The X and Y formulas, filled in.
+    * `dimension` (`Dimension`): The dimension.
+
+    Returns:
+    * (`bool`): Whether it is a mark.
     """
-    axis: int
-    for axis in (0, 1):
-        known[axis][ORIGIN] = Formula()
-        corner: int
-        point: tuple[float, float]
-        for corner, point in enumerate(points):
-            if abs(point[axis]) <= ON_AXIS:
-                known[axis][corner] = Formula()
+    return not dimension.letter and dimension.kind in AXIS
 
 
-# Function `_level_edges()`:
-def _level_edges(points: list[tuple[float, float]]) -> list[Dimension]:
-    """Return an edge drawn level (upright) as a vertical (horizontal)
-    dimension of nothing between its corners (#100): they share Y (X),
-    as a corner drawn on an axis is on it (#23).
+# Function `mark_edge()`:
+def mark_edge(dimension: Dimension, corners: int) -> int:
+    """Return the edge a mark lies along (the corner it leaves), or
+    -1 when it is not a mark across an edge.
+
+    Arguments:
+    * `dimension` (`Dimension`): The dimension.
+    * `corners` (`int`): How many corners the outline has.
+
+    Returns:
+    * (`int`): The edge, or -1.
+    """
+    if not is_mark(dimension) or min(dimension.start, dimension.end) < 0:
+        return -1
+    start: int = dimension.start
+    end: int = dimension.end
+    if end == (start + 1) % corners:
+        return start
+    if start == (end + 1) % corners:
+        return end
+    return -1
+
+
+# Function `drawn_marks()`:
+def drawn_marks(points: list[tuple[float, float]]) -> list[Dimension]:
+    """Return the marks the drawing itself shows: a mark across each
+    edge drawn exactly level or upright (#100), and from the origin
+    to each corner drawn on an axis (#23).  Only for files from before
+    marks (#233), whose solving took these from the drawing.
 
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
 
     Returns:
-    * (`list[Dimension]`): One per level or upright edge, letter "".
+    * (`list[Dimension]`): The marks, corners on an axis first, none
+      repeating another (as the old solving took them).
     """
-    edges: list[Dimension] = []
+    marks: list[Dimension] = []
     corner: int
     here: tuple[float, float]
+    for corner, here in enumerate(points):
+        if abs(here[1]) <= ON_AXIS:
+            marks.append(Dimension("", VERTICAL, ORIGIN, corner))
+        if abs(here[0]) <= ON_AXIS:
+            marks.append(Dimension("", HORIZONTAL, ORIGIN, corner))
     for corner, here in enumerate(points):
         after: int = (corner + 1) % len(points)
         apart: tuple[float, float] = (
@@ -355,10 +381,30 @@ def _level_edges(points: list[tuple[float, float]]) -> list[Dimension]:
             abs(points[after][1] - here[1]),
         )
         if apart[1] <= ON_AXIS < apart[0]:
-            edges.append(Dimension("", VERTICAL, corner, after))
+            marks.append(Dimension("", VERTICAL, corner, after))
         elif apart[0] <= ON_AXIS < apart[1]:
-            edges.append(Dimension("", HORIZONTAL, corner, after))
-    return edges
+            marks.append(Dimension("", HORIZONTAL, corner, after))
+    extra: list[int] = solve(points, marks).extra
+    return [mark for index, mark in enumerate(marks) if index not in extra]
+
+
+# Function `_drawn_way()`:
+def _drawn_way(points: list[tuple[float, float]], edge: int, axis: int) -> str:
+    """Return a marked edge's direction, from the corner it leaves:
+    along X for a level mark, Y for an upright one, the sign as drawn.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `edge` (`int`): The corner the edge leaves.
+    * `axis` (`int`): 1 for a level mark (Y kept), 0 for an upright.
+
+    Returns:
+    * (`str`): Its direction, in degrees.
+    """
+    after: int = (edge + 1) % len(points)
+    if axis == 1:
+        return "0 deg" if points[after][0] >= points[edge][0] else "180 deg"
+    return "90 deg" if points[after][1] >= points[edge][1] else "-90 deg"
 
 
 # Function `_apply()`:

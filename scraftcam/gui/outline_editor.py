@@ -29,6 +29,7 @@ import math
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 
 from ..packages import require
@@ -92,6 +93,7 @@ from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
     AXES,
+    AXIS,
     HORIZONTAL,
     LENGTH,
     NEXT_KIND,
@@ -103,6 +105,8 @@ from .dimensions import (  # noqa: E402
     Dimension,
     Formula,
     Solution,
+    is_mark,
+    mark_edge,
     solve,
 )
 from .hides import (  # noqa: E402
@@ -143,6 +147,11 @@ from .window import make_application  # noqa: E402
 # the outline's and the thin lines' widths (#26), and the least gap
 # between minor grid lines.
 SQUARE_PIXELS: float = 9.0
+
+# A mark's glyph (#233): its box's side, and how far its middle sits
+# out from its edge's middle or its corner (pixels).
+MARK_PIXELS: float = 14.0
+MARK_GAP_PIXELS: float = 16.0
 
 # A lit corner's square (#199) is this much bigger.
 LIT_SCALE: float = 1.8
@@ -383,12 +392,19 @@ class Drawing(Outline):
 
     # Method `Drawing.insert()`:
     def insert(self, index: int, point: tuple[float, float]) -> None:
-        """Insert a corner; the dimensions keep to their corners.
+        """Insert a corner; the dimensions keep to their corners, and
+        a mark on the edge it splits goes (#233).
 
         Arguments:
         * `index` (`int`): Where the new corner goes.
         * `point` (`tuple[float, float]`): The new corner.
         """
+        split: int = (index - 1) % len(self.points)
+        self.dimensions[:] = [
+            dimension
+            for dimension in self.dimensions
+            if mark_edge(dimension, len(self.points)) != split
+        ]
         self.points.insert(index, point)
         dimension: Dimension
         for dimension in self.dimensions:
@@ -1473,8 +1489,9 @@ class DimensionHandle(QGraphicsEllipseItem):
         """Sit on the line, where the letter is (hidden for a fillet,
         for now)."""
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        self.setVisible(dimension.kind != RADIUS)
-        if dimension.kind != RADIUS:
+        lined: bool = dimension.kind != RADIUS and not is_mark(dimension)
+        self.setVisible(lined)
+        if lined:
             self.setPos(self.editor.measures[self.index].at())
 
     # Method `DimensionHandle.mousePressEvent()`:
@@ -1625,6 +1642,9 @@ class DimensionItem(QGraphicsItem):
             return path
         if self.editor.drawing.dimensions[self.index].kind == RADIUS:
             return path  # Drawn as its outline's arc (#116).
+        if is_mark(self.editor.drawing.dimensions[self.index]):
+            path.addRect(self.mark_box())  # Its glyph's box (#233).
+            return path
         if self.editor.drawing.dimensions[self.index].kind == ANGLE:
             path = self.arc_path()
         else:
@@ -1642,6 +1662,86 @@ class DimensionItem(QGraphicsItem):
         """Select the dimension (its circle moves it, #64)."""
         self.editor.select_dimension(self.index)
         event.accept()
+
+    # Method `DimensionItem.mark_spot()`:
+    def mark_spot(self) -> QPointF:
+        """Return where a mark's glyph sits: out from its edge's middle
+        (#233), or from its corner for one on an axis, away from the
+        outline's middle, `MARK_GAP_PIXELS` on screen.
+
+        Returns:
+        * (`QPointF`): The glyph's middle, in drawing steps.
+        """
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        points: list[tuple[float, float]] = self.editor.drawing.points
+        middle: QPointF = QPointF(
+            sum(x for x, _ in points) / len(points),
+            sum(y for _, y in points) / len(points),
+        )
+        edge: int = mark_edge(dimension, len(points))
+        here: QPointF
+        out: QPointF
+        if edge >= 0:
+            start: QPointF = QPointF(*points[edge])
+            end: QPointF = QPointF(*points[(edge + 1) % len(points)])
+            here = (start + end) / 2.0
+            out = QPointF(start.y() - end.y(), end.x() - start.x())
+            if QPointF.dotProduct(out, here - middle) < 0.0:
+                out = -out
+        else:
+            corner: int = max(dimension.start, dimension.end)
+            here = QPointF(*points[corner])
+            out = here - middle
+        size: float = math.hypot(out.x(), out.y())
+        if size <= 0.0:
+            out, size = QPointF(1.0, 1.0), math.sqrt(2.0)
+        gap: float = MARK_GAP_PIXELS / max(self.editor.zoom(), 1e-12)
+        return here + out * (gap / size)
+
+    # Method `DimensionItem.mark_box()`:
+    def mark_box(self) -> QRectF:
+        """Return a mark's glyph box, `MARK_PIXELS` on screen.
+
+        Returns:
+        * (`QRectF`): The box, in drawing steps.
+        """
+        side: float = MARK_PIXELS / max(self.editor.zoom(), 1e-12)
+        box: QRectF = QRectF(0.0, 0.0, side, side)
+        box.moveCenter(self.mark_spot())
+        return box
+
+    # Method `DimensionItem.paint_mark()`:
+    def paint_mark(self, painter: QPainter) -> None:
+        """Draw a mark (#233): a small box holding `—` for a level one
+        (or a corner on the X axis), `|` for an upright one (or on the
+        Y axis); red when one too many, as any dimension.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, its pen set.
+        """
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        world: QTransform = painter.worldTransform()
+        box: QRectF = world.mapRect(self.mark_box())
+        painter.save()
+        painter.resetTransform()
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(box)
+        stroke: QPen = QPen(painter.pen())
+        stroke.setWidthF(2.0)
+        painter.setPen(stroke)
+        inset: float = box.width() * 0.25
+        middle: QPointF = box.center()
+        if dimension.kind == VERTICAL:  # Level: the same Y.
+            painter.drawLine(
+                QPointF(box.left() + inset, middle.y()),
+                QPointF(box.right() - inset, middle.y()),
+            )
+        else:
+            painter.drawLine(
+                QPointF(middle.x(), box.top() + inset),
+                QPointF(middle.x(), box.bottom() - inset),
+            )
+        painter.restore()
 
     # Method `DimensionItem.at()`:
     def at(self) -> QPointF:
@@ -1661,6 +1761,10 @@ class DimensionItem(QGraphicsItem):
         # already gone (an undo).
         if self.index >= len(self.editor.drawing.dimensions):
             return QRectF()
+        if is_mark(self.editor.drawing.dimensions[self.index]):
+            box: QRectF = self.mark_box()
+            grow: float = 2.0 / max(self.editor.zoom(), 1e-12)
+            return box.adjusted(-grow, -grow, grow, grow)
         if self.editor.drawing.dimensions[self.index].kind == RADIUS:
             # Room around its arc's middle for its letter.
             middle: tuple[QPointF, QPointF] | None = fillet_middle(
@@ -1727,6 +1831,9 @@ class DimensionItem(QGraphicsItem):
         scale: float = max(abs(painter.worldTransform().m11()), 1e-12)
         if self.editor.drawing.dimensions[self.index].kind == RADIUS:
             self.paint_radius(painter)
+            return
+        if is_mark(self.editor.drawing.dimensions[self.index]):
+            self.paint_mark(painter)
             return
         if self.editor.drawing.dimensions[self.index].kind == ANGLE:
             self.paint_angle(painter, scale)
@@ -2104,9 +2211,8 @@ class OutlineView(QGraphicsView):
         self.grips: list[StripHandle] = []
         self.measures: list[DimensionItem] = []
         self.solution: Solution = solve(drawing.points, drawing.dimensions)
-        self.pinned: Solution = solve(
-            drawing.points, drawing.dimensions, drawn=False
-        )
+        # Only dimensions and marks pin a dragged corner (#176, #233).
+        self.pinned: Solution = self.solution
         self.make_squares()
         self.resize(800, 600)
         self.fit()
@@ -2322,7 +2428,7 @@ class OutlineView(QGraphicsView):
         index: int
         for index in self.chosen_dimensions:
             dimension: Dimension = self.drawing.dimensions[index]
-            if dimension.kind in (ANGLE, RADIUS):
+            if dimension.kind in (ANGLE, RADIUS) or is_mark(dimension):
                 continue  # Not cycled.
             self.measures[index].prepareGeometryChange()
             kind: str = NEXT_KIND[dimension.kind]
@@ -2441,9 +2547,7 @@ class OutlineView(QGraphicsView):
         self.apply_values()
         self.outline.refresh()
         self.solution = solve(self.drawing.points, self.drawing.dimensions)
-        self.pinned = solve(
-            self.drawing.points, self.drawing.dimensions, drawn=False
-        )
+        self.pinned = self.solution
         measure: DimensionItem
         for measure in self.measures:
             measure.prepareGeometryChange()
@@ -2829,6 +2933,76 @@ class OutlineView(QGraphicsView):
         self.letters_changed()
         self.restyle()
 
+    # Method `OutlineView.toggle_mark()`:
+    def toggle_mark(self, kind: str) -> None:
+        """[Horizontal] or [Vertical] (#233): mark the selected edges
+        level or upright, or put the selected corners on the X or Y
+        axis (#239), drawing them so at once; when all of them are
+        marked so already, take the marks off.  One change.
+
+        Arguments:
+        * `kind` (`str`): `VERTICAL` for [Horizontal] (the same Y),
+          `HORIZONTAL` for [Vertical] (the same X).
+        """
+        count: int = len(self.drawing.points)
+        wanted: list[Dimension] = [
+            Dimension("", kind, edge, (edge + 1) % count)
+            for edge in self.chosen_edges
+            if edge not in AXES
+        ] + [
+            Dimension("", kind, ORIGIN, corner)
+            for corner in self.chosen_points
+            if corner != ORIGIN
+        ]
+        if not wanted:
+            self.message = "Select edges or corners to mark."
+            self.scene().update()
+            return
+
+        # Function `same()`:
+        def same(mark: Dimension, other: Dimension) -> bool:
+            return (
+                is_mark(mark)
+                and mark.kind == other.kind
+                and {mark.start, mark.end} == {other.start, other.end}
+            )
+
+        self.history.remember(self.drawing.snapshot())
+        if all(
+            any(same(each, mark) for each in self.drawing.dimensions)
+            for mark in wanted
+        ):
+            self.drawing.dimensions[:] = [
+                each
+                for each in self.drawing.dimensions
+                if not any(same(each, mark) for mark in wanted)
+            ]
+        else:
+            axis: int = AXIS[kind]
+            mark: Dimension
+            for mark in wanted:
+                if any(same(each, mark) for each in self.drawing.dimensions):
+                    continue
+                self.drawing.dimensions.append(mark)
+                # Drawn so at once: the far corner takes the near
+                # one's Y (X), or the axis's.
+                level: float = (
+                    0.0
+                    if mark.start == ORIGIN
+                    else self.drawing.points[mark.start][axis]
+                )
+                moved: list[float] = list(self.drawing.points[mark.end])
+                moved[axis] = level
+                self.drawing.points[mark.end] = (moved[0], moved[1])
+        points: list[int] = list(self.chosen_points)
+        edges: list[int] = list(self.chosen_edges)
+        self.message = ""
+        self.make_squares()
+        self.chosen_points = points
+        self.chosen_edges = edges
+        self.letters_changed()
+        self.restyle()
+
     # Method `OutlineView.note_letter()`:
     def note_letter(self) -> str:
         """Return the note letter, making it the first time (`UDF`, or
@@ -2957,7 +3131,11 @@ class OutlineView(QGraphicsView):
         box: QRectF = self.outline.boundingRect()
         measure: DimensionItem
         for measure in self.measures:
-            if self.drawing.dimensions[measure.index].kind == RADIUS:
+            if self.drawing.dimensions[
+                measure.index
+            ].kind == RADIUS or is_mark(
+                self.drawing.dimensions[measure.index]
+            ):
                 continue
             if self.drawing.dimensions[measure.index].kind == ANGLE:
                 box = box.united(measure.arc_path().boundingRect())
@@ -3370,7 +3548,8 @@ class OutlineView(QGraphicsView):
         """
         measure: DimensionItem
         for measure in self.measures:
-            if self.drawing.dimensions[measure.index].kind in (ANGLE, RADIUS):
+            dimension: Dimension = self.drawing.dimensions[measure.index]
+            if dimension.kind in (ANGLE, RADIUS) or is_mark(dimension):
                 continue
             start: QPointF
             end: QPointF
@@ -3717,6 +3896,8 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             ("Delete", "Del"),
             ("Dimension", "N"),
             ("Dim. Kind", "K"),
+            ("Horizontal", "-"),
+            ("Vertical", "|"),
             ("Revolve", "R"),
             ("Hide", "H"),
             ("Overview", "O"),
@@ -3748,6 +3929,9 @@ class OutlineEditor(  # pylint: disable=too-many-instance-attributes
             "Delete": self.view.delete_selected,
             "Dimension": self.view.dimension_selected,
             "Dim. Kind": self.view.cycle_kind,
+            # Level (the same Y) and upright (the same X) marks (#233).
+            "Horizontal": partial(self.view.toggle_mark, VERTICAL),
+            "Vertical": partial(self.view.toggle_mark, HORIZONTAL),
             "Revolve": self.toggle_revolve,
             "Hide": self.view.start_hide,
             "Overview": self.toggle_overview,

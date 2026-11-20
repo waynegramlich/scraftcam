@@ -9,6 +9,7 @@ from scraftcam.gui.dimensions import (
     ORIGIN,
     Y_AXIS,
     Dimension,
+    is_mark,
 )
 from scraftcam.gui.hides import Hide
 from scraftcam.gui.letters import Letter
@@ -52,7 +53,9 @@ class OutlineFileTest(unittest.TestCase):
     def test_round_trip(self) -> None:
         """What is written reads back the same, and writes the same."""
         text: str = outline_text(HALF_DRILL)
-        self.assertTrue(text.startswith('kind = "outline"\nrevolve = true'))
+        self.assertTrue(
+            text.startswith('kind = "outline"\nversion = 2\nrevolve = true')
+        )
         self.assertIn('to = "y_axis"', text)
         self.assertIn('from = "origin"', text)
         self.assertIn("rays = [1, -1]", text)
@@ -60,6 +63,21 @@ class OutlineFileTest(unittest.TestCase):
         back: Outline = outline_from_text(text, "drill.outline.toml")
         self.assertEqual(back, HALF_DRILL)
         self.assertEqual(outline_text(back), text)
+
+    def test_old_file_marks(self) -> None:
+        """A file from before marks gets those its drawing showed,
+        first; a version 2 file gets none; others are refused (#233).
+        """
+        old: str = outline_text(HALF_DRILL).replace("version = 2\n", "")
+        back: Outline = outline_from_text(old, "old.outline.toml")
+        marks: int = len(back.dimensions) - len(HALF_DRILL.dimensions)
+        self.assertGreater(marks, 0)
+        self.assertTrue(all(is_mark(each) for each in back.dimensions[:marks]))
+        self.assertEqual(back.dimensions[marks:], HALF_DRILL.dimensions)
+        self.assertIn("version = 2", outline_text(back))
+        with self.assertRaises(OutlineError) as caught:
+            outline_from_text(old.replace("revolve", "version = 7\nrevolve"))
+        self.assertIn("version", str(caught.exception))
 
     def test_order_fixed(self) -> None:
         """One moved corner changes one line (#92)."""

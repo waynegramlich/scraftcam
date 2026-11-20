@@ -13,6 +13,7 @@ from scraftcam.gui.dimensions import (
     X_AXIS,
     Y_AXIS,
     Dimension,
+    drawn_marks,
 )
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
@@ -721,11 +722,94 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.undo()
         self.assertEqual(view.fillets(), {2: "R2"})
 
+    def test_split_mark(self) -> None:
+        """A corner pulled out of a marked edge drops its mark (#233);
+        a mark has no circle, only its glyph's box to click."""
+        drawing = Drawing([(0.0, 0.0), (6.0, 0.0), (3.0, 4.0)])
+        drawing.dimensions[:] = [
+            Dimension("", VERTICAL, 0, 1),
+            Dimension("", HORIZONTAL, ORIGIN, 2),
+        ]
+        drawing.insert(2, (5.0, 2.0))
+        self.assertEqual(len(drawing.dimensions), 2)
+        drawing.insert(1, (3.0, 0.0))
+        self.assertEqual(len(drawing.dimensions), 1)
+        self.assertEqual(drawing.dimensions[0].end, 4)
+        editor = OutlineEditor(drawing)
+        self.assertFalse(editor.view.circles[0].isVisible())
+        self.assertFalse(editor.view.measures[0].shape().isEmpty())
+        self.assertFalse(editor.view.grab().isNull())
+        editor.close()
+
+    def test_toggle_marks(self) -> None:
+        """[Horizontal (-)] and [Vertical (|)] mark the selected edges
+        (drawn so at once) or put corners on an axis; again takes them
+        off; a glyph clicked selects its mark, [Delete] removes it; a
+        mark repeating another is red (#233, #239)."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtGui import QColor
+        from PySide6.QtWidgets import QGraphicsSceneMouseEvent
+
+        from scraftcam.gui import theme
+
+        editor = self.editor
+        view = editor.view
+        level = editor.buttons["Horizontal"]
+        upright = editor.buttons["Vertical"]
+        self.assertEqual(level.text(), "Horizontal (-)")
+        self.assertEqual(upright.text(), "Vertical (|)")
+        level.click()
+        self.assertIn("Select edges or corners", view.message)
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.5), (6.0, 4.0), (0, 4)]
+        view.make_squares()
+        view.select_edge(0)
+        level.click()
+        self.assertEqual(view.drawing.points[1], (6.0, 0.0))
+        mark = view.drawing.dimensions[-1]
+        self.assertEqual((mark.letter, mark.kind), ("", VERTICAL))
+        self.assertEqual(view.drawing.letters, [])
+        level.click()
+        self.assertEqual(view.drawing.dimensions, [])
+        view.undo()
+        self.assertEqual(len(view.drawing.dimensions), 1)
+
+        # Corners onto the axes.
+        view.clear_selection()
+        view.select_point(3)
+        upright.click()
+        self.assertEqual(view.drawing.dimensions[-1].start, ORIGIN)
+        self.assertEqual(view.drawing.dimensions[-1].kind, HORIZONTAL)
+        view.clear_selection()
+        view.select_point(0)
+        upright.click()
+        level.click()
+        self.assertEqual(len(view.drawing.dimensions), 4)
+        # Corner 0 on the X axis and edge 0 level put corner 1 there
+        # too; marking it on the X axis as well is one too many.
+        view.clear_selection()
+        view.select_point(1)
+        level.click()
+        self.assertEqual(view.solution.extra, [4])
+        self.assertEqual(
+            view.measures[4].pen().color().name(),
+            QColor(theme.colors().problem).name(),
+        )
+
+        # Clicked, a glyph selects its mark; [Delete] takes it away.
+        view.clear_selection()
+        view.measures[4].mousePressEvent(QGraphicsSceneMouseEvent())
+        self.assertEqual(view.chosen_dimensions, [4])
+        editor.buttons["Delete"].click()
+        self.assertEqual(len(view.drawing.dimensions), 4)
+        self.assertEqual(view.solution.extra, [])
+
     def test_fillet_too_big(self) -> None:
         """A fillet too big for its edges is red in the table, under it,
         and on its corner (#127, #139, #141)."""
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.dimensions[:] = drawn_marks(view.drawing.points)
         view.make_squares()
         view.dimension_between(-1, 1, HORIZONTAL)
         view.dimension_between(-1, 2, VERTICAL)
@@ -789,6 +873,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         editor = self.editor
         view = editor.view
         view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.dimensions[:] = drawn_marks(view.drawing.points)
         view.make_squares()
         view.dimension_between(-1, 1, HORIZONTAL)
         view.dimension_between(-1, 2, VERTICAL)
