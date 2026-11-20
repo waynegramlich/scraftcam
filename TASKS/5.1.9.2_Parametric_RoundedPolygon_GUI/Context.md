@@ -152,7 +152,7 @@ until #S7.
 
 ## Next: the Fillet Design Agreed (2026-11-19, not coded)
 
-Numbers sticky; the next new one is #230.
+Numbers sticky; the next new one is #231.
 * #213 One letters table.  A tab bar over it: [Dimensions] shows
   every row; [Fillets] shows only rows checked "Fillet" (a new check
   box column, `fillet = true` on the letter in the file; only length
@@ -165,44 +165,54 @@ Numbers sticky; the next new one is #230.
   #220 the same letter again does nothing).  Disarm: click the armed
   row again, empty space, or switch to [Dimensions]; no `Esc`
   (#229).  #218 arming also applies to corners already selected (to
-  try).  #227 drags still work while armed; only plain clicks paint.
+  try in chunk 2 and REMIND THE USER, who asked).  #227 drags still work while armed; only plain clicks paint.
   #223 each painted corner one undo step.  No entries yet: the tab
   shows [New Fillet Dimension] (next free letter, checked, "Fillet
   radius").
 * #219/#222 a fixed first row "No fillet", value 0, never editable or
   deletable, not in [Dimensions] nor the file, Letter cell blank;
-  attaching it removes the fillet.  Maybe an "uneditable" marker.
+  attaching it removes the fillet.  The row shows "(No Edit
+  Allowed)" (the user, 2026-11-19).
 * #215 an entry in use cannot be deleted: [Delete] refuses, naming
   and lighting its uses; unchecking "Fillet" in use likewise (#225).
 * #224 hovering any row lights everything using it; hovering a
-  corner frames its letter's row.  To try.
+  corner frames its letter's row.  Expected to stay; the user
+  verifies by trying it.
 * #226 own-letter fillets show their letter; `UDF` ones do not.
 * #217 for #S8: SolidCraft drops zero-length lines and arcs (~1e-6
   mm), so a 0 fillet is sharp and a used-up edge vanishes; a value
   through 0 changes the segment count, so `SolidCraftLink` rebuilds.
 * Chunk plan (#221): (1) one table, tab bar, "Fillet" column, file;
   per-corner rows out; (2) "No fillet" row, arming and painting;
-  (3) hover lighting and refused deletes.  Then #182 (a letter in a
-  hidden stretch moves to the nearest visible part of its line).
+  (3) hover lighting and refused deletes.  #230 (an extra angle not
+  drawn red, a bug) is fixed in chunk 1.  Then #182: a hide strip is
+  drawn red while it covers a dimension letter; the user's placement
+  of letters is respected, never moved (the user, 2026-11-19).
 
 ## Steps Left and Open Items
 
-* Steps: #S5 SVG (the same meaning as the screen, #61; working view
-  or not, #189), #S7 opened from the GUI tree (with [Show in
-  SolidCraft], #115), #S8 a separate class extruding a planar outline
+* Steps (reordered freely, #150): the fillets (#221 chunks 1-3,
+  #230 in chunk 1), then #182; #S5 SVG (the same meaning as the
+  screen, #61; #189: the user leans to an [SVG] tab, redrawn when
+  clicked, decided when SVG is the focus); #S7 opened from the GUI
+  tree with [Show in SolidCraft] (#115, the user leans to after
+  #S5); #S8 a separate class extruding a planar outline
   (`RoundedPolygon` losing `z_start`, `z_end`, `children`;
-  `keepout.py`, `demo.py` follow; SolidCraft fillets, #140), #S9
-  leftovers.  Steps and chunks may be reordered freely (#150).
-* Open: #152 dragging a fixed corner changes its letter's value;
-  #182 above; #183 no grid or axes in the working view; #8 flutes and
-  assemblies (`T.cett2e~5.1.9.2.1`); #83 two lengths at a corner;
-  #84 a length along a directed edge; an angle one too many is not
-  red; #89 diameters and whole tip angles for catalog numbers.
+  `keepout.py`, `demo.py` follow; SolidCraft fillets, #140), done
+  before the 2D GUI wraps up; #S9 leftovers, with the solver work
+  #83 (two slanted lengths at a corner: circles crossing) and #84 (a
+  length along an edge an angle directs).  An entry is always one
+  kind: letter, name, help, value with unit.
+* Settled: #183 no grid in the working view; #89 deferred to the
+  catalog work (a catalog `PointAngle` feeds `PointAngle / 2`); #8
+  drill flute and cutter teeth modeling are not currently planned
+  for development due to solid modeling issues.
 * Work rules: one ~3 minute chunk per turn; summaries in sentences or
   `#N:` issues, never `1. 2. 3.`; a top 5 each round with tokens left
-  as a percentage.  Transcript for the user's friend:
-  `~/.scraftcam/transcripts/2026-11-19_T.prg_5.1.9.2.md` (made by
-  `~/.scraftcam/transcripts/transcript.py`, not versioned).
+  as a percentage.  Transcripts (for the user's friend) in
+  `~/.scraftcam/transcripts/`, one per session (this one
+  `2026-11-19_2_T.prg_5.1.9.2.md`), made by `transcript.py` there,
+  not versioned; regenerate it and remind the user before `/clear`.
 
 ## Tried and Dropped (do not bring back)
 
@@ -224,3 +234,5 @@ Numbers sticky; the next new one is #230.
   corner tooltips as anything but formulas.
 * Sharp tips revolved as drawn (look broken in SolidCraft).
 * Heights and children in the editor (corners and radii only).
+* #152 a drag changing a letter's value: only the user edits the
+  letters table.
