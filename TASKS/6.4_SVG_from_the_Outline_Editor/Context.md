@@ -65,8 +65,31 @@ lighting, warning rings) stay Qt only, on top, at a fixed pixel size
   modules.  Samples: a scratchpad script wrote `scratch/*.svg`
   (`scratch/drill.outline.toml` is a copy to try the editor on).
 
-## Open (numbers sticky; next new one #301)
+## Open (numbers sticky; next new one #311)
 
+* #S4 is next (agreed by the user, 2026-11-21: it removes duplicate
+  code).  What stands in the way (found 2026-11-21, not yet
+  answered by the user):
+  * #301: the editor paints per item (`DimensionItem`, lit, hovered,
+    selected one by one) but `outline_sheet()` returns one flat
+    `Sheet`; give `diagram.py` per-item builders (Claude's choice) or
+    tag strokes by owner.
+  * #302: the editor's pens are cosmetic (fixed pixels,
+    `ARROW_PIXELS / scale`); the shapes scale with the zoom (#263).
+    A minimum of about 1 px so lines never vanish?
+  * #303: colors: shapes are ink only (#266); the editor lights a
+    letter's dimensions, paints crossings and broken marks red, the
+    mirror half faint.  Plan: one color per item chosen in Qt;
+    warnings stay Qt overlays (#269).
+  * #304: the editor needs strokes in drawing steps (before
+    `on_paper()`/`placed()`), rebuilt each drag frame (Hershey text
+    included): measure the speed.
+  * #305: hit areas (`DimensionItem.shape()`) and handle spots
+    (`arc_point()`, `ends()`) use the editor's own geometry (#295,
+    #297's copies) and could drift from what is drawn.
+  * First chunk suggested: #301 and #302 on `OutlineItem` alone (no
+    letters, no hit testing), then dimensions.
+  * (#306-#310 were the transcript rule, done: `R.ccsr~6`.)
 * #S4: the editor draws through the shapes, one item type per chunk;
   then the plain-Python copies of its geometry go (#295 angles:
   `edge_arc()`, `crossing()`, `edge_way()`; #297 fillets:
