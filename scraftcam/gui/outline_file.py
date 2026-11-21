@@ -28,7 +28,11 @@ rays = [1, 1]
 ```
 
 Positions (`at`, `offset`, `along`) are as drawn, in unitless grid
-steps; sizes come from the letters.  A dimension's `from` and `to`
+steps; sizes come from the letters.  Since version 3 (`T.sfoe~6.4`
+#280) a `text_height` (grid steps) sets the diagram's lettering,
+written once [All Fonts +] or [All Fonts -] sets it (absent: picked
+from the outline's size), and a dimension's `font_step` its own
+letter's ([Font +], [Font -]; absent: 0).  A dimension's `from` and `to`
 are a corner's index or `"origin"`, and for an angle an edge (by the
 corner it leaves) or `"x_axis"` / `"y_axis"`.
 """
@@ -63,9 +67,11 @@ ENDS: dict[int, str] = {
 # A hide strip's axis, as written (`HIDE_X`, `HIDE_Y`).
 AXES: tuple[str, ...] = ("x", "y")
 
-# The file format's version: 2 since marks (#233); a file without one
-# is 1, and gets the marks its drawing showed.
-VERSION: int = 2
+# The file format's version: 2 since marks (#233), 3 since text sizes
+# (`T.sfoe~6.4` #280); a file without one is 1, and gets the marks
+# its drawing showed.
+VERSION: int = 3
+VERSIONS: tuple[int, ...] = (1, 2, 3)
 
 # The kinds of dimension a file may hold.
 KINDS: tuple[str, ...] = (HORIZONTAL, VERTICAL, LENGTH, ANGLE, RADIUS)
@@ -89,10 +95,13 @@ class Outline:
     * `note_radius` (`str`): The letter of every fillet without a
       radius of its own ("" for none, #116).
     * `hides` (`list[Hide]`): The hide strips (#157).
+    * `text_height` (`float`): The diagram's letter height (drawing
+      steps); 0 picks one from the outline's size (`T.sfoe~6.4`
+      #280).
 
     Constructor:
     * `Outline(points, letters, dimensions, revolve, note_radius,
-      hides)`
+      hides, text_height)`
     """
 
     # Constructor arguments:
@@ -102,6 +111,7 @@ class Outline:
     revolve: bool = field(init=True, default=False)
     note_radius: str = field(init=True, default="")
     hides: list[Hide] = field(init=True, default_factory=list)
+    text_height: float = field(init=True, default=0.0)
 
 
 # Function `outline_text()`:
@@ -121,6 +131,8 @@ def outline_text(outline: Outline) -> str:
     ]
     if outline.note_radius:
         lines.append(f"note_radius = {_string(outline.note_radius)}")
+    if outline.text_height > 0.0:
+        lines.append(f"text_height = {_number(outline.text_height)}")
 
     # The letters, a table each, in the order of the table.
     letter: Letter
@@ -154,6 +166,8 @@ def outline_text(outline: Outline) -> str:
         ]
         if dimension.kind == ANGLE:
             lines.append(f"rays = [{dimension.rays[0]}, {dimension.rays[1]}]")
+        if dimension.font_step:
+            lines.append(f"font_step = {dimension.font_step}")
         if dimension.places:
             places: str = ", ".join(
                 f"[{_string(kind)}, {_number(offset)}, {_number(along)}]"
@@ -253,12 +267,17 @@ class _Reader:
         if not isinstance(note, str):
             self.note("note_radius", "is not a letter")
             note = ""
+        height: object = data.get("text_height", 0.0)
+        if not _is_number(height) or float(height) < 0.0:  # type: ignore[arg-type]  # Checked.
+            self.note("text_height", "is not a number, 0 or more")
+            height = 0.0
         outline: Outline = Outline(
             self.points(data.get("points", [])),
             self.letters(data.get("letters", {})),
             [],
             revolve,
             note,
+            text_height=float(height),  # type: ignore[arg-type]  # Checked.
         )
         if revolve and any(x < 0.0 for x, _ in outline.points):
             self.note("points", "a revolved outline has a corner at X < 0")
@@ -280,8 +299,10 @@ class _Reader:
         # edges and its corners on an axis from the drawing: they are
         # its marks now.
         version: object = data.get("version", 1)
-        if version not in (1, VERSION):
-            self.note("version", f"is not 1 or {VERSION}")
+        if version not in VERSIONS:
+            self.note(
+                "version", f"is not one of {', '.join(map(str, VERSIONS))}"
+            )
         elif version == 1:
             # First, as the old solving took them before any dimension.
             outline.dimensions[:0] = drawn_marks(outline.points)
@@ -445,6 +466,9 @@ class _Reader:
             and all(ray in (1, -1) for ray in rays)
         ):
             self.note(where, "rays must be two of 1 and -1")
+        step: object = table.get("font_step", 0)
+        if not isinstance(step, int) or isinstance(step, bool):
+            self.note(where, "font_step is not a whole number")
         places: tuple[tuple[str, float, float], ...] = self.places(
             where, table.get("places", [])
         )
@@ -459,6 +483,7 @@ class _Reader:
             float(numbers[1]),  # type: ignore[arg-type]  # Checked.
             places,
             (int(rays[0]), int(rays[1])),  # type: ignore[index]  # Checked.
+            int(step),  # type: ignore[call-overload]  # Checked.
         )
 
     # Method `_Reader.end()`:

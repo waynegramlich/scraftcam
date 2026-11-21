@@ -1,49 +1,88 @@
 # LLM Agent Context Log
 
-Squeezed 2026-11-20: only what is in force and where things stand;
-the history is in `hg` and `git`.  Nothing coded yet.
+Squeezed 2026-11-20 (end of the first coding session): only what is
+in force and where things stand; the history is in `hg` and `git`.
 
-## Scope
+## Goal and Design (decided with the user, 2026-11-20)
 
-One SVG writer with two inputs: the outline file (`outline_file.py`,
-the editor's, the main one) and a `scraftcam/outline.py` `Profile`.
-`T.sdfm~2.5.2.1` (SVG diagrams from the models) was merged in here
-(#259); its SolidCraft solver facts are in `T.oe~6.2`'s `Context.md`.
-The editor drawn from is described there ("The Editor Today").
+The SVG and the editor's diagram are drawn by the same code, so they
+never diverge.  Qt-free shapes, two back ends (SVG text, and later
+`QPainter` in the editor, #S4); editing aids (circles, selection,
+lighting, warning rings) stay Qt only, on top, at a fixed pixel size
+(#269).
 
-## Open Questions
+* Drawn as on paper (#263): letters, arrowheads and line widths scale
+  with the zoom; no 1:N scale (#268).  Sizes from the text height h
+  (#277, after ASME Y14.2, kept simple: users do not know ASME, it
+  must just work): outline 0.2 h, thin lines 0.1 h, arrowheads h by
+  h/3, gaps h/2.  Starting h: 1/30 of the larger side (#281).
+* Text as lines: Hershey simplex (#264), `°`, `⌀`, `±` drawn by us.
+* Ink only, no colors (#266, #274): light theme black on white, dark
+  white on black.  The `.svg` follows the viewer's theme with a style
+  rule (#287), black on white when printed; letters print 3 mm
+  (`LETTER_MM`, #292).  The `.svg` goes into `.md` files read in a
+  browser (#279; the user's Firefox is a snap: files for it go in
+  the project's ignored `scratch/`).
+* Font buttons, at most 4 (#272, #273): [Font +], [Font -] on
+  selected text (`Dimension.font_step`, 1.25x a step) and [All Fonts
+  +], [All Fonts -] (`Outline.text_height`); the user zooms out and
+  presses until it looks right, judged in the [SVG] tab.  Saved in
+  outline file version 3 (#280); not built in the GUI yet.
+* #300 (decided): long tools are shown on their side, by turning the
+  view only (a saved setting such as `turned = true`, by a button or
+  when much taller than wide); the file keeps the tool axis along Y,
+  so the simulator never needs a turn.
+* Work in ~3 minute chunks, each with a file for the user to look at
+  in `scratch/` when there is one (full `file:///` path).
 
-* #247 drawn how: (a) plain Python from the geometry, no Qt (Claude
-  leans here: documents without a display, and a `Profile` has no Qt
-  scene), or (b) Qt painting the scene through `QSvgGenerator`.
-* #248 where seen: an [SVG] tab redrawn when clicked (#189), a `.svg`
-  written beside the outline for documents, or both.
+## Code Today
 
-## Starting Points
+* `scraftcam/diagram.py`: `Stroke` (segments, `Weight`, `filled`,
+  `dashed`, `role` `LINE`), `Sheet`, `on_paper()`,
+  `starting_height()`, `profile_sheet()`, `text()`,
+  `dimension_line()` (feet, ends, `along`), `length_dimension()`,
+  `angle_dimension()` (`along`; short arcs whole, letter outside),
+  `radius_dimension()`, `center_mark()`, `edge_mark()`, `mark_box()`,
+  `right_angle()`, `note()`, `placed()`, `polyline()`, `svg()`
+  (`themed`, `letter_mm`), `FONT_STEP`.
+* `scraftcam/hershey.py`: `strokes()`, `width()`, `GLYPHS` (credits in
+  its docstring, as the font's notice requires).
+* `scraftcam/gui/outline_diagram.py`: `outline_sheet(outline)`: the
+  outline with true fillet arcs (`fillet_arcs()`, the editor's scale
+  rule), the dashed mirror half when revolved, length, horizontal,
+  vertical, angle and radius dimensions, marks, the UDF note, font
+  steps; then `outline_cuts.cut_strokes()`.
+* `scraftcam/gui/outline_cuts.py`: hide strips cut out and closed up
+  (`GAP` 2 h), break lines meshing, S's on chopped dimension lines.
+* `outline_file.py` version 3: `text_height`, `font_step` (written
+  only when set; versions 1, 2 still read).
+* `outline_editor.py`: the drawing in tabs [Drawing] and [SVG]
+  (`drawing_tabs()`, `show_svg()`: `QSvgWidget`, redrawn when chosen,
+  kept to its shape after each load).
+* Tests: `test_diagram` 25, `test_hershey` 9, `test_outline_diagram`
+  15, `test_outline_cuts` 8, plus `test_outline_file`,
+  `test_outline_editor` when touched; 99% coverage of the new
+  modules.  Samples: a scratchpad script wrote `scratch/*.svg`
+  (`scratch/drill.outline.toml` is a copy to try the editor on).
 
-* `outline_editor.py` draws the outline (`OutlineItem.paint()`,
-  `fillet_ends()`, `rounded_path()`), the dimensions and marks
-  (`DimensionItem`: `paint_angle()`, `draw_letter()`, `paint_mark()`,
-  `right_box()`), the hide cuts (`draw_cut()`) and the UDF note
-  (`drawForeground()`); `values.py` has the real coordinates;
-  `theme.py` the light and dark colors.
-* `Profile(name, outer, holes, unit)` of `geometry.Loop`s, checked in
-  `__post_init__()` (closed, no segment under `MIN_LENGTH` 1e-6 mm,
-  arcs on their circles, no crossings, holes inside, apart, not
-  nested; islands wait); messages in the user's units.
-  `structure()`, `values(prefix)`, `sketch()`, `add_parameters()`,
-  `send_changes(old, new, limit=500)`.  Tests `test_outline` (8).
-* `scraftcam/tooling/parallel.py` `Parallel`: its side is a `Profile`
-  on YZ; `python3 -m scraftcam.tooling.parallel headless`; tests
-  `test_parallel` (3).  The old `tools.Parallel` stays until the GUI
-  is debugged.
+## Open (numbers sticky; next new one #301)
 
-## Next and Decided
-
-* After #247 and #248: #38, `Profile` to SVG (lines and arcs as path
-  commands, holes by the fill rule, light and dark), first tried on
-  `Parallel().side`; then the outline file's dimensions, marks, hide
-  cuts and UDF note.
+* #S4: the editor draws through the shapes, one item type per chunk;
+  then the plain-Python copies of its geometry go (#295 angles:
+  `edge_arc()`, `crossing()`, `edge_way()`; #297 fillets:
+  `fillet_radii()`, `fillet_ends()`, `first_scale()`).
+* #300 build the turned view.  The four font buttons (#273).
+* #267: each letter an invisible `<title>` in the SVG (not done).
+* #290: holes dimensioned from their centers in outlines (center
+  marks exist in `diagram.py`; outlines have no holes yet).
+* #296: an angle's extension lines where its arc lies past an edge.
+* #299: `examples/shop/tools/drill.outline.toml`'s corners do not
+  follow its values (the editor places them; the file was never
+  saved after), so #292's "saved corners follow the values" fails
+  for it outside the editor.
+* #285 (near the end, never dropped): a white-on-black `.svg` chosen
+  by `<picture>` (or rely on #287's style rule).
+* A `.svg` written beside the outline for documents (#248), and the
+  `Profile` sheet for `Parallel` in documents (`T.dtm~2.5.2`).
 * #260: no per-model `sketch()` method in Python (`T.ant~5.9` idea
-  1); once tools are outlines (`T.cett2e~6.5`) it stops mattering.
-* Numbers sticky; next new one #261.
+  1).

@@ -65,6 +65,7 @@ from PySide6.QtGui import (  # noqa: E402
     QTransform,
     QWheelEvent,
 )
+from PySide6.QtSvgWidgets import QSvgWidget  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractItemView,
     QApplication,
@@ -87,10 +88,12 @@ from PySide6.QtWidgets import (  # noqa: E402
     QTabBar,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from ..diagram import svg  # noqa: E402
 from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
@@ -130,6 +133,7 @@ from .letters import (  # noqa: E402
     use_problem,
     value_problem,
 )
+from .outline_diagram import outline_sheet  # noqa: E402
 from .outline_file import (  # noqa: E402
     Outline,
     OutlineError,
@@ -4196,9 +4200,14 @@ class OutlineEditor(QWidget):
         mode_bar: QHBoxLayout = QHBoxLayout()
         layout.addLayout(mode_bar)
 
-        # The drawing over the letters, a bar between them (#27).
+        # The drawing over the letters, a bar between them (#27); the
+        # drawing in two tabs: the working view, and the diagram it
+        # makes as SVG, redrawn each time it is shown (`T.sfoe~6.4`
+        # #248, #189).
         self.splitter: QSplitter = QSplitter(Qt.Orientation.Vertical)
-        self.splitter.addWidget(self.view)
+        self.picture: QSvgWidget = QSvgWidget()
+        self.views: QTabWidget = self.drawing_tabs()
+        self.splitter.addWidget(self.views)
         self.table: QTableWidget = QTableWidget(0, len(COLUMNS))
         self.problems: QLabel = QLabel("")
         self.tabs: QTabBar = QTabBar()
@@ -4274,6 +4283,44 @@ class OutlineEditor(QWidget):
         self.table.itemChanged.connect(self.letter_edited)
         self.show_message()
         self.resize(800, 600)
+
+    # Method `OutlineEditor.drawing_tabs()`:
+    def drawing_tabs(self) -> QTabWidget:
+        """Return the drawing's tabs: [Drawing], the working view, and
+        [SVG], the diagram it makes, kept to its shape.
+
+        Returns:
+        * (`QTabWidget`): The tabs.
+        """
+        views: QTabWidget = QTabWidget()
+        views.addTab(self.view, "Drawing")
+        views.addTab(self.picture, "SVG")
+        views.currentChanged.connect(self.show_svg)
+        return views
+
+    # Method `OutlineEditor.show_svg()`:
+    def show_svg(self, tab: int) -> None:
+        """Draw the [SVG] tab again when it is chosen: the outline's
+        diagram (`outline_sheet()`), in the theme's ink and paper.
+
+        Arguments:
+        * `tab` (`int`): The tab now shown.
+        """
+        if self.views.widget(tab) is not self.picture:
+            return
+        colors: theme.Colors = theme.colors()
+        self.picture.load(
+            svg(
+                outline_sheet(self.drawing),
+                colors.ink,
+                colors.paper,
+                themed=False,
+            ).encode("utf-8")
+        )
+        # Kept to its shape: each load resets this.
+        self.picture.renderer().setAspectRatioMode(
+            Qt.AspectRatioMode.KeepAspectRatio
+        )
 
     # Method `OutlineEditor.hook_view()`:
     def hook_view(self) -> None:

@@ -88,10 +88,13 @@ class Dimension:  # pylint: disable=too-many-instance-attributes
       edges' crossing along (`1`) or against (`-1`) its edge's
       direction, fixed when it is made (#53); the angle is measured
       counterclockwise from the first ray to the second.
+    * `font_step` (`int`): How many [Font +] presses its letter has
+      had (less [Font -]): each 1.25 times bigger (`T.sfoe~6.4`
+      #273, #280).
 
     Constructor:
     * `Dimension(letter, kind, start, end, offset, along, places,
-      rays)`
+      rays, font_step)`
     """
 
     # Constructor arguments:
@@ -103,6 +106,7 @@ class Dimension:  # pylint: disable=too-many-instance-attributes
     along: float = field(init=True, default=0.5)
     places: tuple[tuple[str, float, float], ...] = field(init=True, default=())
     rays: tuple[int, int] = field(init=True, default=(1, 1))
+    font_step: int = field(init=True, default=0)
 
     # Method `Dimension.place_of()`:
     def place_of(self, kind: str) -> tuple[float, float] | None:

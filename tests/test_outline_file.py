@@ -54,7 +54,7 @@ class OutlineFileTest(unittest.TestCase):
         """What is written reads back the same, and writes the same."""
         text: str = outline_text(HALF_DRILL)
         self.assertTrue(
-            text.startswith('kind = "outline"\nversion = 2\nrevolve = true')
+            text.startswith('kind = "outline"\nversion = 3\nrevolve = true')
         )
         self.assertIn('to = "y_axis"', text)
         self.assertIn('from = "origin"', text)
@@ -68,16 +68,41 @@ class OutlineFileTest(unittest.TestCase):
         """A file from before marks gets those its drawing showed,
         first; a version 2 file gets none; others are refused (#233).
         """
-        old: str = outline_text(HALF_DRILL).replace("version = 2\n", "")
+        old: str = outline_text(HALF_DRILL).replace("version = 3\n", "")
         back: Outline = outline_from_text(old, "old.outline.toml")
         marks: int = len(back.dimensions) - len(HALF_DRILL.dimensions)
         self.assertGreater(marks, 0)
         self.assertTrue(all(is_mark(each) for each in back.dimensions[:marks]))
         self.assertEqual(back.dimensions[marks:], HALF_DRILL.dimensions)
-        self.assertIn("version = 2", outline_text(back))
+        self.assertIn("version = 3", outline_text(back))
+        two: str = outline_text(HALF_DRILL).replace(
+            "version = 3", "version = 2"
+        )
+        self.assertEqual(outline_from_text(two), HALF_DRILL)
         with self.assertRaises(OutlineError) as caught:
             outline_from_text(old.replace("revolve", "version = 7\nrevolve"))
         self.assertIn("version", str(caught.exception))
+
+    def test_text_sizes(self) -> None:
+        """A text height and font steps are written only when set,
+        and read back (`T.sfoe~6.4` #280)."""
+        self.assertNotIn("text_height", outline_text(HALF_DRILL))
+        self.assertNotIn("font_step", outline_text(HALF_DRILL))
+        sized: Outline = outline_from_text(outline_text(HALF_DRILL))
+        sized.text_height = 0.25
+        sized.dimensions[0].font_step = -2
+        text: str = outline_text(sized)
+        self.assertIn("text_height = 0.25", text)
+        self.assertIn("font_step = -2", text)
+        self.assertEqual(outline_from_text(text), sized)
+        bad: str
+        for bad in ("text_height = -1", 'text_height = "big"'):
+            with self.assertRaises(OutlineError):
+                outline_from_text(text.replace("text_height = 0.25", bad))
+        with self.assertRaises(OutlineError):
+            outline_from_text(
+                text.replace("font_step = -2", "font_step = 1.5")
+            )
 
     def test_order_fixed(self) -> None:
         """One moved corner changes one line (#92)."""

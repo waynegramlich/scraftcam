@@ -1400,8 +1400,8 @@ speed_factor = "250 %"
 A vendor's catalog, one edition of it:
 `catalogs/VENDOR/EDITION/catalog.toml`.  The catalog's PDF (or a link to
 it) and `catxtract`'s working files are in `pages/` beside it, never
-under version control (`T.cm~6.3` #50, #58).  It has a `name` even
-when it is not a file of its own.
+under version control (`T.cm~6.3` #50, #58).  It has a `name` even when
+it is not a file of its own.
 
 | Key           | Value            | Required | Meaning                       |
 | ------------- | ---------------- | -------- | ----------------------------- |

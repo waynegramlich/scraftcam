@@ -29,3 +29,5 @@ build/
 dist/
 # STEP files written by the pybind examples.
 scraftcam/pybind/examples/*.step
+# Files for the browser to read (snap Firefox cannot read dot directories).
+scratch/

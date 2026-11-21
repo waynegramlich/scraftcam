@@ -6,6 +6,9 @@ things stand; designs dropped and the full history are in `hg` and
 
 ## The Editor Today
 
+(2026-11-20: the drawing now sits in tabs [Drawing] and [SVG]; the
+diagram code is `T.sfoe~6.4`'s, see its `Context.md`.)
+
 `python3 -m scraftcam.gui.outline_editor [FILE]` edits an outline
 file, rewriting it after every change (never mid-drag); a bad file is
 refused with every problem named, a missing one starts as the
@@ -133,7 +136,8 @@ read).
 
 ### File Format (`outline_file.py`)
 
-`kind = "outline"`, `version = 2`, `revolve`, `note_radius`,
+`kind = "outline"`, `version = 3` (3 added `text_height` and
+a dimension's `font_step`, `T.sfoe~6.4`), `revolve`, `note_radius`,
 `[letters]` (`name`, `default`, `help`, `fillet = true` when set),
 `[[points]]`, `[[dimensions]]` (`letter` "" for marks, `kind`,
 `from`/`to`, `offset`, `along`, `rays`, `places`), `[[hides]]`;
