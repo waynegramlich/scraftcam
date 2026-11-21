@@ -104,7 +104,8 @@ later in public `.md` files (`Models.md`, a page per model,
   `rebuilt`, `place()`, `remove()`.
 * `scraftcam/tooling/jaw_plate.py` `JawPlate` (inches, Kurt numbers;
   seen live by the user); `scraftcam/tooling/parallel.py` `Parallel`
-  (drawn from a `Profile`, `T.sdfm~2.5.2.1`); the Z setter
+  (drawn from a `Profile`, `T.sdfm~2.5.2.1`, merged into
+  `T.sfoe~6.4`); the Z setter
   `tooling/setters.py` `z_setter(imperial)` (Shars 303-3104, approved;
   no shop kind, keep-out, sketch or tests).  Old `tools.JawPlate` and
   `tools.Parallel` stay until the GUI is debugged.

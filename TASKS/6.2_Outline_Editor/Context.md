@@ -142,6 +142,34 @@ ahead of its dimensions.  Outline files live in the shop's
 directories (`tools/NAME.outline.toml`); the shop reader and tree
 skip them until #S7.
 
+## SolidCraft's 2D Solver (from `T.sdfm~2.5.2.1`, 2026-11-17)
+
+Moved here when `T.sdfm~2.5.2.1` was merged into `T.sfoe~6.4`
+(#259); they matter for #S7 and #S8.
+
+* Good: closed polylines, per-corner fillets, free arcs with given
+  centers (arc centers are always given), arc to arc, holes, two
+  outlines in one sketch, pockets cut into a plate; 204 segments
+  built in 1.3 s, changes 1-55 ms; areas exact, boxes to 1e-4 mm.
+  Driving each point and arc center as its own parameter (Python
+  computes them) matches dimensioned sketches exactly.
+* Taken silently, so our model must refuse them first: self-crossing
+  outlines (every region filled); holes touching, crossing or outside
+  the outline (dropped); an edge too short for its two fillets (the
+  solid goes back to the first build); a fillet radius using up an
+  edge, then the extrude fails ("no closed profiles").  `R = 0` and
+  over-half radii are refused, so sharp <-> rounded is a rebuild.
+* Limits: one `parameters.change` takes at most about 500 values
+  (send in chunks); tolerance near 1e-6 mm (1e-10 lines and 1e9 radii
+  refused); `arc_center_point` takes its radius from center and start.
+* Inches: bare parameter and point numbers are mm, a bare extrude
+  distance is inches, so always send a unit.
+* Volumes from `component.properties` are tessellated (compare boxes
+  or loose volumes); `parameters.list()` shows `used_by: []` for
+  parameters used only in point expressions.
+* `sketch.export_dxf(sketch=)` gives LINE and ARC entities, mm, no
+  dimensions; no SVG export.  A visible window builds ~10x slower.
+
 ## Steps Left and Open Items
 
 Numbers sticky; the next new one is #247.

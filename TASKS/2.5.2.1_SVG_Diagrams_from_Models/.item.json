@@ -1,7 +1,7 @@
 {
-  "state": "Open",
+  "state": "Closed",
   "created": "2026-11-17T03:28:40Z",
-  "updated": "2026-11-17T03:28:55Z",
+  "updated": "2026-11-21T03:26:22Z",
   "history": [
     {
       "state": "Pending",
@@ -10,6 +10,10 @@
     {
       "state": "Open",
       "time": "2026-11-17T03:28:55Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-21T03:26:22Z"
     }
   ],
   "tag": "sdfm"

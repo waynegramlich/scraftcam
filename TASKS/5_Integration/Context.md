@@ -49,9 +49,10 @@ to be published on PyPI.  The LinuxCNC end-to-end suite
 * `T.cmt~5.3`: the parametric model library (`scraftcam/model.py`,
   `SolidModel`, `SolidCraftLink`, live SolidCraft parameters;
   `JawPlate`, `Parallel`).
-* `T.sdfm~2.5.2.1`: `scraftcam/outline.py` `Profile`; SVG next.
-* `T.oe~6.2`: the outline editor (the current focus).
-* `T.cm~6.3` Reference until 5.3 has tools; `T.ant~5.9` Open.
+* `T.sfoe~6.4`: SVG from outlines and `Profile`s (the current
+  focus; `T.sdfm~2.5.2.1` merged in, #259).  `T.oe~6.2`, the
+  outline editor, is Reference meanwhile.
+* `T.cm~6.3` Suspended until 5.3 has tools; `T.ant~5.9` Open.
 * Pending: `T.npfetc~5.4` (a path per tool change), `T.sm2~5.5`,
   `T.cpfj~5.7`, `T.rslsao~5.8`, `T.cett2e~6.5`.
-  `T.oacv~6.1` is Open but left as it is.
+  `T.oacv~6.1` Suspended (left as it is).
