@@ -196,8 +196,3 @@ Numbers sticky; the next new one is #247.
   teeth not planned (#8); only the user edits letter values (#152).
 * Work rules: ~3 minute chunks (longer when the user says), a top 5
   each round with tokens left; `#N:` issues, never `1. 2. 3.`.
-  Transcripts per the session rules (`R.ccsr~6`): one per session in
-  `~/.claude_transcriptions/`, `YYYY-MM-DD_HH:MM_scraftcam.md` (the
-  start time), made by `transcript.py` there, not
-  versioned; regenerate before each commit and `/clear`.  Older ones
-  stay in `~/.scraftcam/transcripts/`.
