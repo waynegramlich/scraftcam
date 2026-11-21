@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 
 from scraftcam.diagram import (
     MARGIN,
+    TEXT,
     TEXT_FRACTION,
     THICK,
     Sheet,
@@ -155,7 +156,9 @@ class TestDimensions(unittest.TestCase):
         self.assertTrue(strokes[2].filled)
 
     def test_letter_past(self) -> None:
-        """A letter past an arrowhead: one line, run out to it."""
+        """A letter past an arrowhead: one line, run out to it and a
+        tail past the far end; the arrows outside, pointing in
+        (#321)."""
         before: list[Stroke] = dimension_line(
             ((0.0, 0.0), (4.0, 0.0)),
             ((0.0, 0.0), (4.0, 0.0)),
@@ -164,8 +167,12 @@ class TestDimensions(unittest.TestCase):
             along=-1.0,
         )
         self.assertLess(ends(before[0])[0][0], 0.0)
-        self.assertEqual(ends(before[0])[1], (4.0, 0.0))
+        self.assertEqual(ends(before[0])[1], (6.0, 0.0))
         self.assertTrue(before[1].filled)
+
+        # Each arrow lies outside its end, its tip on the end.
+        self.assertTrue(all(seg.start[0] <= 0.0 for seg in before[1].segments))
+        self.assertTrue(all(seg.start[0] >= 4.0 for seg in before[2].segments))
         after: list[Stroke] = dimension_line(
             ((0.0, 0.0), (4.0, 0.0)),
             ((0.0, 0.0), (4.0, 0.0)),
@@ -174,6 +181,58 @@ class TestDimensions(unittest.TestCase):
             along=2.0,
         )
         self.assertGreater(ends(after[0])[1][0], 4.0)
+        self.assertEqual(ends(after[0])[0], (-2.0, 0.0))
+
+    def test_letter_clear(self) -> None:
+        """A letter just past its end is drawn clear of the arrowhead
+        (#323): at least an arrow and half the letter beyond."""
+        strokes: list[Stroke] = dimension_line(
+            ((0.0, 0.0), (4.0, 0.0)),
+            ((0.0, 0.0), (4.0, 0.0)),
+            letter="X",
+            height=1.0,
+            along=-0.01,
+        )
+        letter: list[float] = [
+            x
+            for stroke in strokes
+            if stroke.role == TEXT
+            for seg in stroke.segments
+            for x in (seg.start[0], seg.end[0])
+        ]
+        self.assertLess(max(letter), -1.0)
+
+        # An angle's letter likewise clears its arrow.
+        arcs: list[Stroke] = angle_dimension(
+            (0.0, 0.0), (0.0, 90.0), 10.0, letter="A", height=1.0, along=1.01
+        )
+        tops: list[float] = [
+            x
+            for stroke in arcs
+            if stroke.role == TEXT
+            for seg in stroke.segments
+            for x in (seg.start[0], seg.end[0])
+        ]
+        self.assertLess(max(tops), -1.0)
+
+    def test_angle_past(self) -> None:
+        """An angle's letter past a ray: one arc run on to it and a
+        tail past the other ray, the arrows pointing in (#321)."""
+        strokes: list[Stroke] = angle_dimension(
+            (0.0, 0.0), (0.0, 90.0), 10.0, letter="A", height=1.0, along=1.5
+        )
+        arcs: list[Stroke] = [
+            stroke for stroke in strokes if stroke.role != TEXT
+        ]
+        self.assertFalse(arcs[0].filled)
+        self.assertTrue(arcs[1].filled and arcs[2].filled)
+
+        # The arc starts a tail below the first ray (Y < 0).
+        self.assertLess(ends(arcs[0])[0][1], 0.0)
+
+        # The first ray's arrow lies below it, the second's left of it.
+        self.assertTrue(all(seg.start[1] <= 1e-9 for seg in arcs[1].segments))
+        self.assertTrue(all(seg.start[0] <= 1e-9 for seg in arcs[2].segments))
 
     def test_angle(self) -> None:
         """Two arcs around the letter, arrows at the rays."""
@@ -315,15 +374,14 @@ class TestSvg(unittest.TestCase):
         self.assertIn('fill="black"', text)
         self.assertIn('stroke="white"', text)
 
-    def test_themed(self) -> None:
-        """The style follows the viewer unless turned off."""
+    def test_unthemed(self) -> None:
+        """Files are black on white whatever the viewer's theme
+        (#285)."""
         sheet: Sheet = profile_sheet(Profile("p", square(1.0)))
-        root: ET.Element = ET.fromstring(svg(sheet))
-        style: ET.Element | None = root.find(f"{SVG}style")
-        assert style is not None and style.text is not None
-        self.assertIn("prefers-color-scheme: dark", style.text)
-        self.assertIn('class="ink"', svg(sheet))
-        self.assertNotIn("<style>", svg(sheet, themed=False))
+        text: str = svg(sheet)
+        self.assertNotIn("<style>", text)
+        self.assertIn('fill="white"', text)
+        self.assertIn('stroke="black"', text)
 
     def test_circle(self) -> None:
         """A whole circle is two half arcs, counter-clockwise as flag 0."""

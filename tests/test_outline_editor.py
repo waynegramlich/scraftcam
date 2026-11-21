@@ -287,10 +287,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             [stroke for stroke in strokes if stroke.role == TEXT], 0.0
         )
         self.assertFalse(letter.isNull())
-        spot = measure.letter_spot()
-        assert spot is not None
-        self.assertEqual(spot, letter.center())
-        self.assertTrue(measure.shape().contains(spot))
+        box = measure.letter_box()
+        assert box is not None
+        self.assertEqual(box, letter)
+        self.assertTrue(measure.shape().contains(box.center()))
 
         # Its circle sits just off the letter, up and right (#315).
         circle = measure.handle_spot()
@@ -563,8 +563,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(view.drawing.letters[-1].default, "59 deg")
         self.assertFalse(view.grab().isNull())
         dimension = view.drawing.dimensions[0]
+        # Dragged past a ray, the letter goes outside it (#321).
         view.circles[0].drag_angle(dimension, QPointF(9.0, -9.0))
-        self.assertTrue(0.0 <= dimension.along <= 1.0)
+        self.assertFalse(0.0 <= dimension.along <= 1.0)
         view.select_edge(X_AXIS)
         view.select_edge(Y_AXIS)
         self.editor.buttons["Dimension"].click()
@@ -614,6 +615,132 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertFalse(view.drawing.revolve)
         self.editor.show_message()
         self.assertFalse(button.isChecked())
+
+    def test_rotate_diagram(self) -> None:
+        """[Rotate Diagram]: a quarter turn clockwise per press, back
+        after four; undone as one change; letters read upright and
+        the zoom is the same whatever the turn (#300)."""
+        from PySide6.QtCore import QPointF  # pylint: disable=C0415
+
+        def ratio(strokes: list[Stroke]) -> float:
+            """Return the strokes' width over their height."""
+            box = outline_editor.stroke_box(strokes, 0.0)
+            return float(box.width() / box.height())
+
+        view = self.editor.view
+        view.add_dimension(Dimension("A", HORIZONTAL, ORIGIN, 1))
+        button = self.editor.buttons["Rotate Diagram"]
+        label: list[Stroke] = [
+            stroke
+            for stroke in view.measures[0].strokes()
+            if stroke.role == TEXT
+        ]
+        self.assertTrue(label)
+        upright: float = ratio(label)
+        button.click()
+        self.assertEqual(view.drawing.turns, 1)
+        self.assertGreater(view.zoom(), 0.0)
+
+        # +Y in the drawing points right on the screen.
+        up: QPointF = view.transform().map(QPointF(0.0, 1.0))
+        origin: QPointF = view.transform().map(QPointF(0.0, 0.0))
+        self.assertGreater(up.x() - origin.x(), 0.0)
+        self.assertAlmostEqual(up.y() - origin.y(), 0.0)
+
+        # On screen the letter keeps its shape: in drawing steps it lies
+        # on its side.
+        turned: list[Stroke] = [
+            stroke
+            for stroke in view.measures[0].strokes()
+            if stroke.role == TEXT
+        ]
+        self.assertAlmostEqual(ratio(turned), 1.0 / upright)
+        self.assertFalse(view.grab().isNull())
+        view.undo()
+        self.assertEqual(view.drawing.turns, 0)
+        self.assertAlmostEqual(view.transform().m12(), 0.0)
+        for _press in range(4):
+            button.click()
+        self.assertEqual(view.drawing.turns, 0)
+
+    def test_font_buttons(self) -> None:
+        """[Font +] / [Font -]: the whole diagram with nothing
+        selected, else the selected dimensions, stopping at
+        `FONT_STEPS`; each press one change (#273)."""
+        view = self.editor.view
+        view.add_dimension(Dimension("A", HORIZONTAL, ORIGIN, 1))
+        bigger = self.editor.buttons["Font +"]
+        smaller = self.editor.buttons["Font -"]
+
+        # Nothing selected: the diagram's height, picked first.
+        self.assertEqual(view.drawing.text_height, 0.0)
+        bigger.click()
+        first: float = view.drawing.text_height
+        self.assertGreater(first, 0.0)
+        smaller.click()
+        self.assertAlmostEqual(view.drawing.text_height, first / 1.25)
+        view.undo()
+        self.assertAlmostEqual(view.drawing.text_height, first)
+        view.undo()
+        self.assertEqual(view.drawing.text_height, 0.0)
+
+        # A selected dimension: its own steps, its letter drawn bigger.
+        def height() -> float:
+            """Return the dimension's letter height (drawing steps)."""
+            letter: list[Stroke] = [
+                stroke
+                for stroke in view.measures[0].strokes()
+                if stroke.role == TEXT
+            ]
+            return float(outline_editor.stroke_box(letter, 0.0).height())
+
+        before: float = height()
+        view.chosen_dimensions = [0]
+        bigger.click()
+        self.assertEqual(view.drawing.dimensions[0].font_step, 1)
+        self.assertAlmostEqual(height(), before * 1.25, places=6)
+        self.assertEqual(view.drawing.text_height, 0.0)
+        for _press in range(outline_editor.FONT_STEPS + 2):
+            bigger.click()
+        self.assertEqual(
+            view.drawing.dimensions[0].font_step, outline_editor.FONT_STEPS
+        )
+        smaller.click()
+        self.assertEqual(
+            view.drawing.dimensions[0].font_step,
+            outline_editor.FONT_STEPS - 1,
+        )
+
+    def test_button_tabs(self) -> None:
+        """The buttons sit in tabs, [Most Common] first; a button on two
+        tabs does the same, and keys work whichever tab shows (#319)."""
+        from PySide6.QtWidgets import QToolButton  # pylint: disable=C0415
+
+        tabs = self.editor.button_tabs
+        titles: list[str] = [tabs.tabText(index) for index in range(4)]
+        self.assertEqual(titles, ["Most Common", "Draw", "Marks", "View"])
+        self.assertEqual(tabs.currentIndex(), 0)
+
+        # [Rotate Diagram] on [View] turns as the one on [Most Common].
+        view_page = tabs.widget(3)
+        assert view_page is not None
+        rotate: list[QToolButton] = [
+            button
+            for button in view_page.findChildren(QToolButton)
+            if button.defaultAction()
+            is self.editor.button_actions["Rotate Diagram"]
+        ]
+        self.assertEqual(len(rotate), 1)
+        self.assertIsNot(rotate[0], self.editor.buttons["Rotate Diagram"])
+        rotate[0].click()
+        self.assertEqual(self.editor.view.drawing.turns, 1)
+
+        # [Grid]'s key works with [Most Common] showing, and its button
+        # on [View] follows.
+        self.assertTrue(self.editor.buttons["Grid"].isChecked())
+        self.editor.keys["Grid"].activated.emit()
+        self.assertFalse(self.editor.button_actions["Grid"].isChecked())
+        self.assertFalse(self.editor.buttons["Grid"].isChecked())
 
     def test_file(self) -> None:
         """An editor on a file rewrites it after each change, and reads
@@ -967,7 +1094,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_split_mark(self) -> None:
         """A corner pulled out of a marked edge drops its mark (#233);
-        a mark has no circle, only its glyph's box to click."""
+        a `—` or `|` mark has a circle to move it (#317)."""
         drawing = Drawing([(0.0, 0.0), (6.0, 0.0), (3.0, 4.0)])
         drawing.dimensions[:] = [
             Dimension("", VERTICAL, 0, 1),
@@ -979,10 +1106,46 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(len(drawing.dimensions), 1)
         self.assertEqual(drawing.dimensions[0].end, 4)
         editor = OutlineEditor(drawing)
-        self.assertFalse(editor.view.circles[0].isVisible())
+        self.assertTrue(editor.view.circles[0].isVisible())
         self.assertFalse(editor.view.measures[0].shape().isEmpty())
         self.assertFalse(editor.view.grab().isNull())
         editor.close()
+
+    def test_move_mark(self) -> None:
+        """A `—` mark's circle drags its box (snapped, one change),
+        saved as `moved`; a right angle has no circle (#317)."""
+        from PySide6.QtCore import QPointF, Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+
+        view = self.editor.view
+        view.drawing.dimensions[:] = [Dimension("", VERTICAL, 0, 1)]
+        view.make_squares()
+        view.fit()
+        before_box = view.measures[0].letter_box()
+        assert before_box is not None
+        before: QPointF = before_box.center()
+        port = view.viewport()
+        start = view.mapFromScene(view.circles[0].pos())
+        target = view.mapFromScene(view.circles[0].pos() + QPointF(2.0, 1.0))
+        QTest.mousePress(port, Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(port, target)
+        QTest.mouseRelease(port, Qt.MouseButton.LeftButton, pos=target)
+        moved: tuple[float, float] = view.drawing.dimensions[0].moved
+        self.assertAlmostEqual(moved[0], 2.0, delta=0.5)
+        self.assertAlmostEqual(moved[1], 1.0, delta=0.5)
+        after_box = view.measures[0].letter_box()
+        assert after_box is not None
+        after: QPointF = after_box.center()
+        self.assertAlmostEqual(after.x() - before.x(), moved[0])
+        self.assertAlmostEqual(after.y() - before.y(), moved[1])
+        self.assertIn("moved = [", outline_text(view.drawing))
+        view.undo()
+        self.assertEqual(view.drawing.dimensions[0].moved, (0.0, 0.0))
+
+        # A right angle's square stays in its corner.
+        view.drawing.dimensions[:] = [Dimension("", ANGLE, 0, 1)]
+        view.make_squares()
+        self.assertFalse(view.circles[0].isVisible())
 
     def test_toggle_marks(self) -> None:
         """[Horizontal (-)] and [Vertical (|)] mark the selected edges
@@ -1164,6 +1327,14 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertFalse(view.grab().isNull())
         view.drawing.hides[0] = Hide(HIDE_Y, 1, 2, 4.0, 1.0)
         self.assertEqual(view.covering(), set())
+
+        # A strip over only part of the glyph covers it too (#322).
+        glyph = view.measures[-1].letter_box()
+        assert glyph is not None
+        low: float = glyph.bottom() - 0.1 - 1.2
+        view.drawing.hides[0] = Hide(HIDE_Y, 1, 2, low, 1.0)
+        self.assertLess(glyph.center().y(), low + 1.2)
+        self.assertEqual(view.covering(), {0})
 
     def test_hide(self) -> None:
         """[Hide], then a wide drag over the shank: a strip hiding a

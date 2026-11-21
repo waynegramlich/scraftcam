@@ -24,6 +24,23 @@ from scraftcam.gui.outline_file import Outline, outline_from_text
 
 DRILL: Path = Path("examples/shop/tools/drill.outline.toml")
 
+
+# Function `plain_drill()`:
+def plain_drill() -> Outline:
+    """Return the example drill upright and uncut: the example lies on
+    its side with strips hiding its middle (#314), which these tests
+    of shapes leave off.
+
+    Returns:
+    * (`Outline`): The drill, `turns` 0 and no hides.
+    """
+    # The shape only: no turn, no strips.
+    outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
+    outline.turns = 0
+    outline.hides.clear()
+    return outline
+
+
 # A counter-clockwise 4 x 2 rectangle with a corner at the origin.
 BOX: list[tuple[float, float]] = [
     (0.0, 0.0),
@@ -120,7 +137,7 @@ class TestOutlineDiagram(unittest.TestCase):
 
     def test_angle_from_axis(self) -> None:
         """An angle from the Y axis crosses at the origin."""
-        outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
+        outline: Outline = plain_drill()
         outline.dimensions = []
         strokes: list[Stroke] = drawn(
             outline, Dimension("A", ANGLE, 0, Y_AXIS, 0.6, 0.5, rays=(1, 1))
@@ -164,7 +181,7 @@ class TestOutlineDiagram(unittest.TestCase):
 
     def test_fillet_to_scale(self) -> None:
         """With the values fixing a scale, the letter's value is used."""
-        outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
+        outline: Outline = plain_drill()
         outline.letters.append(Letter("F", default="1/64 in", fillet=True))
         outline.dimensions.append(Dimension("F", RADIUS, 2, 2, 0.0, 0.5))
         # The scale is private, but the radius must follow it.
@@ -203,7 +220,7 @@ class TestOutlineDiagram(unittest.TestCase):
 
     def test_revolve(self) -> None:
         """A revolved outline's mirror: dashed, the axis edge left off."""
-        outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
+        outline: Outline = plain_drill()
         outline.dimensions = []
         sheet: Sheet = outline_sheet(outline, 0.5)
         mirror: list[Stroke] = [s for s in sheet.strokes if s.dashed]
@@ -307,8 +324,29 @@ class TestOutlineDiagram(unittest.TestCase):
             self.assertAlmostEqual(new[0] - old[0], shift[0])
             self.assertAlmostEqual(new[1] - old[1], shift[1])
 
+    def test_upright_text(self) -> None:
+        """Labels turn counterclockwise about their middles, lines stay
+        (#300)."""
+        line: Stroke = Stroke(
+            (LineSegment((0.0, 0.0), (2.0, 0.0)),), Weight.THICK
+        )
+        label: Stroke = Stroke(
+            (LineSegment((0.0, 0.0), (2.0, 0.0)),), Weight.THICK, role=TEXT
+        )
+        strokes: list[Stroke] = [line, label]
+        self.assertEqual(outline_diagram.upright_text(strokes, 0), strokes)
+        self.assertEqual(outline_diagram.upright_text(strokes, 4), strokes)
+        turned: list[Stroke] = outline_diagram.upright_text(strokes, 1)
+        self.assertEqual(turned[0], line)
+        segment = turned[1].segments[0]
+        self.assertAlmostEqual(segment.start[0], 1.0)
+        self.assertAlmostEqual(segment.start[1], -1.0)
+        self.assertAlmostEqual(segment.end[0], 1.0)
+        self.assertAlmostEqual(segment.end[1], 1.0)
+
     def test_drill(self) -> None:
-        """The example drill draws and writes good SVG."""
+        """The example drill (on its side, its middle hidden) draws and
+        writes good SVG."""
         outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
         ET.fromstring(svg(outline_sheet(outline)))
 

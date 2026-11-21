@@ -32,7 +32,9 @@ steps; sizes come from the letters.  Since version 3 (`T.sfoe~6.4`
 #280) a `text_height` (grid steps) sets the diagram's lettering,
 written once [All Fonts +] or [All Fonts -] sets it (absent: picked
 from the outline's size), and a dimension's `font_step` its own
-letter's ([Font +], [Font -]; absent: 0).  `turns` (#300, 1 to 3;
+letter's ([Font +], [Font -]; absent: 0).  A mark's `moved`
+(`[dx, dy]`, #317; absent: `[0, 0]`) is how far the user dragged
+its box.  `turns` (#300, 1 to 3;
 absent: 0) shows the drawing turned that many quarter turns
 clockwise, its letters upright; the file keeps the tool's axis
 along Y.  A dimension's `from` and `to`
@@ -177,6 +179,11 @@ def outline_text(outline: Outline) -> str:
             lines.append(f"rays = [{dimension.rays[0]}, {dimension.rays[1]}]")
         if dimension.font_step:
             lines.append(f"font_step = {dimension.font_step}")
+        if dimension.moved != (0.0, 0.0):
+            lines.append(
+                f"moved = [{_number(dimension.moved[0])},"
+                f" {_number(dimension.moved[1])}]"
+            )
         if dimension.places:
             places: str = ", ".join(
                 f"[{_string(kind)}, {_number(offset)}, {_number(along)}]"
@@ -483,6 +490,14 @@ class _Reader:
         step: object = table.get("font_step", 0)
         if not isinstance(step, int) or isinstance(step, bool):
             self.note(where, "font_step is not a whole number")
+        moved: object = table.get("moved", [0.0, 0.0])
+        if not (
+            isinstance(moved, list)
+            and len(moved) == 2
+            and all(_is_number(value) for value in moved)
+        ):
+            self.note(where, "moved must be two numbers")
+            moved = [0.0, 0.0]
         places: tuple[tuple[str, float, float], ...] = self.places(
             where, table.get("places", [])
         )
@@ -498,6 +513,7 @@ class _Reader:
             places,
             (int(rays[0]), int(rays[1])),  # type: ignore[index]  # Checked.
             int(step),  # type: ignore[call-overload]  # Checked.
+            (float(moved[0]), float(moved[1])),
         )
 
     # Method `_Reader.end()`:

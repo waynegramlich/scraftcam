@@ -44,11 +44,13 @@ read).
   circles; the origin a filled ink square; a click near an axis
   selects it.  Not dimensioned: orange `warning` 3 px ring; fillet
   too big: red ring.  Tooltips give the formulas.
-* Buttons with keys (`QShortcut`s on the window): [Delete (Del)],
-  [Dimension (N)], [Dim. Kind ↻ (K)], [Horizontal (-)], [Vertical
-  (|)], [Right Angle (Shift+L)], [Revolve (R)], [Hide (H)],
-  [Overview (O)], [Grid (G)], [Snap (S)], [Fit (Home)], [Undo
-  (Ctrl+Z)], [Redo (Ctrl+Shift+Z)], [New Letter (L)].
+* Buttons with keys (`QShortcut`s on the window), in tabs (#319,
+  `T.sfoe~6.4`; `BUTTON_KEYS`, `BUTTON_TABS`): [Most Common] (Undo,
+  Redo, Delete, Dimension, Fit, Rotate Diagram), [Draw] (Delete,
+  Dimension, Dim. Kind, New Letter, Revolve), [Marks] (Horizontal,
+  Vertical, Right Angle), [View] (Grid, Snap, Fit, Overview, Hide,
+  Rotate Diagram, Font +, Font -).  Keys: Del, N, K, -, |, Shift+L,
+  R, T, H, O, G, S, Home, Ctrl+Z, Ctrl+Shift+Z, L, ], [.
 * [Dimension] works from the selection (`dimension_selected()`,
   #234): one edge -> its length; one corner -> the angle there (under
   180 as drawn); two edges, or an axis and an edge -> the angle

@@ -91,10 +91,13 @@ class Dimension:  # pylint: disable=too-many-instance-attributes
     * `font_step` (`int`): How many [Font +] presses its letter has
       had (less [Font -]): each 1.25 times bigger (`T.sfoe~6.4`
       #273, #280).
+    * `moved` (`tuple[float, float]`): How far the user has dragged a
+      `—` or `|` mark's box from where it is first drawn (drawing
+      steps, #317); (0, 0) for everything else.
 
     Constructor:
     * `Dimension(letter, kind, start, end, offset, along, places,
-      rays, font_step)`
+      rays, font_step, moved)`
     """
 
     # Constructor arguments:
@@ -107,6 +110,7 @@ class Dimension:  # pylint: disable=too-many-instance-attributes
     places: tuple[tuple[str, float, float], ...] = field(init=True, default=())
     rays: tuple[int, int] = field(init=True, default=(1, 1))
     font_step: int = field(init=True, default=0)
+    moved: tuple[float, float] = field(init=True, default=(0.0, 0.0))
 
     # Method `Dimension.place_of()`:
     def place_of(self, kind: str) -> tuple[float, float] | None:

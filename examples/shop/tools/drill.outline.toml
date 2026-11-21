@@ -1,6 +1,7 @@
 kind = "outline"
 version = 3
 revolve = true
+turns = 1
 
 [letters.A]
 name = "Half point angle"
@@ -92,4 +93,22 @@ kind = "vertical"
 from = "origin"
 to = 2
 offset = 4.0
-along = 0.5
+along = 0.42
+
+[[hides]]
+axis = "y"
+below = 1
+above = 2
+low = 6.0
+high = 43.0
+under = 1.0
+over = 1.0
+
+[[hides]]
+axis = "y"
+below = 1
+above = 2
+low = 36.0
+high = 6.0
+under = 1.0
+over = 1.0

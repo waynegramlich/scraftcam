@@ -12,12 +12,16 @@ selection (empty space clears it), and the bar's buttons act on it.
 [Dimension (N)] dimensions what is selected (#234): one edge's
 length, the angle at one corner, the angle between two edges, or the
 last two points clicked, before or after it is pressed (#60).
-The bar has a keyed button for each action, no menus (#11): [Grid
-(G)], [Snap (S)], [Delete (Del)], [Dimension (N)], [Dim. Kind
-\u21bb (K)] (horizontal, length, vertical), [Fit (F)],
-[Undo (Ctrl+Z)] and [Redo
-(Ctrl+Shift+Z)] (#18), a whole drag being one change, [New Letter
-(L)].  Below the drawing, past a bar dragged up and down, the
+The buttons sit in tabs of related ones (#319), each with its key,
+which works whichever tab is showing; no menus (#11).  [Most Common]:
+[Undo (Ctrl+Z)], [Redo (Ctrl+Shift+Z)] (#18, a whole drag being one
+change), [Delete (Del)], [Dimension (N)], [Fit (Home)], [Rotate
+Diagram (T)].  [Draw]: [Delete], [Dimension], [Dim. Kind \u21bb
+(K)], [New Letter (L)], [Revolve (R)].  [Marks]: [Horizontal (-)],
+[Vertical (|)], [Right Angle (Shift+L)].  [View]: [Grid (G)], [Snap
+(S)], [Fit], [Overview (O)], [Hide (H)], [Rotate Diagram], [Font +
+(])], [Font - ([)] (#273).  The refusals and hints show under the
+tabs.  Below the drawing, past a bar dragged up and down, the
 letters' table (#27): letter, long name, default value with its
 unit, help, each kept and checked at every keystroke.
 
@@ -51,6 +55,7 @@ from PySide6.QtCore import (  # noqa: E402
     QTimer,
 )
 from PySide6.QtGui import (  # noqa: E402
+    QAction,
     QBrush,
     QColor,
     QFont,
@@ -61,6 +66,7 @@ from PySide6.QtGui import (  # noqa: E402
     QPainterPathStroker,
     QPen,
     QShortcut,
+    QTransform,
     QWheelEvent,
 )
 from PySide6.QtSvgWidgets import QSvgWidget  # noqa: E402
@@ -87,11 +93,12 @@ from PySide6.QtWidgets import (  # noqa: E402
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from ..diagram import TEXT, Stroke, svg  # noqa: E402
+from ..diagram import FONT_STEP, TEXT, Stroke, svg  # noqa: E402
 from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
 from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
@@ -138,6 +145,7 @@ from .outline_diagram import (  # noqa: E402
     fillet_arcs,
     outline_sheet,
     outline_strokes,
+    upright_text,
 )
 from .outline_diagram import edge_arc as shared_arc  # noqa: E402
 from .outline_file import (  # noqa: E402
@@ -216,6 +224,56 @@ LETTER_POINTS: int = 11
 # zoom (#311).
 TEXT_PIXELS: float = 14.0
 
+# Each button's word and key (#20); the key works on any tab.
+BUTTON_KEYS: tuple[tuple[str, str], ...] = (
+    ("Grid", "G"),
+    ("Snap", "S"),
+    ("Delete", "Del"),
+    ("Dimension", "N"),
+    ("Dim. Kind", "K"),
+    ("Horizontal", "-"),
+    ("Vertical", "|"),
+    ("Right Angle", "Shift+L"),
+    ("Revolve", "R"),
+    ("Rotate Diagram", "T"),
+    ("Font +", "]"),
+    ("Font -", "["),
+    ("Hide", "H"),
+    ("Overview", "O"),
+    ("Fit", "Home"),
+    ("Undo", "Ctrl+Z"),
+    ("Redo", "Ctrl+Shift+Z"),
+    ("New Letter", "L"),
+)
+
+# The buttons in tabs of related ones (#319), the most used first; a
+# button may sit on more than one tab.
+BUTTON_TABS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Most Common",
+        ("Undo", "Redo", "Delete", "Dimension", "Fit", "Rotate Diagram"),
+    ),
+    ("Draw", ("Delete", "Dimension", "Dim. Kind", "New Letter", "Revolve")),
+    ("Marks", ("Horizontal", "Vertical", "Right Angle")),
+    (
+        "View",
+        (
+            "Grid",
+            "Snap",
+            "Fit",
+            "Overview",
+            "Hide",
+            "Rotate Diagram",
+            "Font +",
+            "Font -",
+        ),
+    ),
+)
+
+# [Font +] and [Font -] stop this many steps from a letter's start
+# (#273): 1.25**6 is about 3.8 times.
+FONT_STEPS: int = 6
+
 # Letters' lines are this wide (pixels), a little bolder than the thin
 # lines (#316; to be tuned by eye).
 TEXT_PEN_PIXELS: float = 1.5
@@ -293,8 +351,10 @@ def triangle() -> list[tuple[float, float]]:
 
 
 # Class `Snapshot`:
+# A snapshot holds every part of the drawing that undo restores, so
+# it has as many attributes as the drawing has parts.
 @dataclass(frozen=True, slots=True)
-class Snapshot:
+class Snapshot:  # pylint: disable=too-many-instance-attributes
     """A drawing's corners and dimensions at one time, for undo.
 
     Attributes:
@@ -304,10 +364,12 @@ class Snapshot:
     * `revolve` (`bool`): Whether it is revolved (#32).
     * `note_radius` (`str`): The fillets' note letter (#116).
     * `hides` (`tuple[Hide, ...]`): Copies of the hide strips.
+    * `turns` (`int`): Quarter turns clockwise it is shown (#300).
+    * `text_height` (`float`): The diagram's letter height (#273).
 
     Constructor:
     * `Snapshot(points, dimensions, letters, revolve, note_radius,
-      hides)`
+      hides, turns, text_height)`
     """
 
     # Constructor arguments:
@@ -317,6 +379,8 @@ class Snapshot:
     revolve: bool = field(init=True, default=False)
     note_radius: str = field(init=True, default="")
     hides: tuple[Hide, ...] = field(init=True, default=())
+    turns: int = field(init=True, default=0)
+    text_height: float = field(init=True, default=0.0)
 
 
 # Class `Drawing`:
@@ -365,6 +429,8 @@ class Drawing(Outline):
             self.revolve,
             self.note_radius,
             tuple(replace(hide) for hide in self.hides),
+            self.turns,
+            self.text_height,
         )
 
     # Method `Drawing.restore()`:
@@ -382,6 +448,8 @@ class Drawing(Outline):
         self.revolve = snapshot.revolve
         self.note_radius = snapshot.note_radius
         self.hides[:] = [replace(hide) for hide in snapshot.hides]
+        self.turns = snapshot.turns
+        self.text_height = snapshot.text_height
 
     # Method `Drawing.follow_angles()`:
     def follow_angles(self) -> None:
@@ -725,8 +793,10 @@ class OutlineItem(QGraphicsItem):
         # Each arrowhead is `ARROW_PIXELS` long on screen, pointing
         # along its edge to where it ends.
         painter.setPen(pen)
-        scale: float = painter.worldTransform().m11()
-        length: float = ARROW_PIXELS / max(abs(scale), 1e-12)
+        world: QTransform = painter.worldTransform()
+        # A quarter turn moves the scale off the diagonal (#300).
+        scale: float = math.hypot(world.m11(), world.m12())
+        length: float = ARROW_PIXELS / max(scale, 1e-12)
         painter.setBrush(ink)
         segment: XYSegment
         for segment in strokes[0].segments:
@@ -1282,8 +1352,9 @@ class DimensionHandle(QGraphicsEllipseItem):
     """A dimension's small hollow circle, beside its letter (#63).
 
     Dragged along the line it moves the letter (past the arrowheads
-    too); across the line it moves the line; snapped as corners are,
-    the whole drag one change.
+    too); across the line it moves the line; a `—` or `|` mark's moves
+    its box anywhere (#317); snapped as corners are, the whole drag
+    one change.
 
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
@@ -1291,6 +1362,8 @@ class DimensionHandle(QGraphicsEllipseItem):
     * `before` (`Snapshot | None`): The drawing when a drag began.
     * `grab` (`QPointF`): Where it sits from its letter's point (the
       line's `at()`) when a drag began, so the letter does not jump.
+    * `pressed` (`QPointF`): Where a mark's drag began (scene).
+    * `was` (`tuple[float, float]`): The mark's `moved` then.
     """
 
     # Method `DimensionHandle.__init__()`:
@@ -1307,15 +1380,22 @@ class DimensionHandle(QGraphicsEllipseItem):
         self.index: int = index
         self.before: Snapshot | None = None
         self.grab: QPointF = QPointF()
+        self.pressed: QPointF = QPointF()
+        self.was: tuple[float, float] = (0.0, 0.0)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
         self.setZValue(1.5)
 
     # Method `DimensionHandle.place()`:
     def place(self) -> None:
-        """Sit just off its letter's upper right corner (#315; hidden
-        for a fillet, for now)."""
+        """Sit just off its letter's (or a `—` or `|` mark's box's)
+        upper right corner (#315, #317; hidden for a fillet and a right
+        angle, for now)."""
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        lined: bool = dimension.kind != RADIUS and not is_mark(dimension)
+        lined: bool = (
+            dimension.kind != ANGLE
+            if is_mark(dimension)
+            else dimension.kind != RADIUS
+        )
         self.setVisible(lined)
         if lined:
             self.setPos(self.editor.measures[self.index].handle_spot())
@@ -1326,6 +1406,8 @@ class DimensionHandle(QGraphicsEllipseItem):
         self.editor.select_dimension(self.index)
         self.before = self.editor.drawing.snapshot()
         self.grab = self.pos() - self.editor.measures[self.index].at()
+        self.pressed = event.scenePos()
+        self.was = self.editor.drawing.dimensions[self.index].moved
         event.accept()
 
     # Method `DimensionHandle.mouseMoveEvent()`:
@@ -1342,6 +1424,18 @@ class DimensionHandle(QGraphicsEllipseItem):
         start: QPointF
         end: QPointF
         measure.prepareGeometryChange()
+        if is_mark(dimension):
+            # A mark's box goes where it is dragged (#317).
+            shift: QPointF = event.scenePos() - self.pressed
+            if not free:
+                shift = snap(shift, self.editor.step())
+            dimension.moved = (
+                self.was[0] + shift.x(),
+                self.was[1] + shift.y(),
+            )
+            measure.update()
+            self.place()
+            return
         if dimension.kind == ANGLE:
             self.drag_angle(dimension, where)
             measure.update()
@@ -1398,8 +1492,10 @@ class DimensionHandle(QGraphicsEllipseItem):
         dimension.offset = radius
         past: float = math.degrees(math.atan2(out.y(), out.x())) - start
         past = (past - turn / 2.0 + 180.0) % 360.0 - 180.0 + turn / 2.0
-        # The letter stays on the arc, between its arrowheads (#76).
-        dimension.along = min(max(past / turn, 0.0), 1.0)
+        # The letter may go past either ray (#321; it was held between
+        # the arrowheads, #76); `past` already keeps it off the far
+        # side of the circle.
+        dimension.along = past / turn
 
     # Method `DimensionHandle.mouseReleaseEvent()`:
     def mouseReleaseEvent(self, _event: QGraphicsSceneMouseEvent) -> None:
@@ -1571,13 +1667,23 @@ class DimensionItem(QGraphicsItem):
         Returns:
         * (`QPointF`): The circle's middle, in drawing steps.
         """
-        letter: QRectF = stroke_box(
-            [stroke for stroke in self.strokes() if stroke.role == TEXT], 0.0
-        )
+        found: QRectF | None = self.letter_box()
+        letter: QRectF = QRectF() if found is None else found
         if letter.isNull():
             return self.at()
         off: float = HANDLE_PIXELS / max(self.editor.zoom(), 1e-12)
-        return QPointF(letter.right() + off, letter.bottom() + off)
+
+        # The screen's upper right, in drawing steps: (1, 1) turned a
+        # quarter turn counterclockwise per turn of the view (#300).
+        way: tuple[float, float] = (1.0, 1.0)
+        _turn: int
+        for _turn in range(self.editor.drawing.turns % 4):
+            way = (-way[1], way[0])
+        middle: QPointF = letter.center()
+        return QPointF(
+            middle.x() + way[0] * (letter.width() / 2.0 + off),
+            middle.y() + way[1] * (letter.height() / 2.0 + off),
+        )
 
     # Method `DimensionItem.strokes()`:
     def strokes(self) -> list[Stroke]:
@@ -1588,15 +1694,20 @@ class DimensionItem(QGraphicsItem):
         * (`list[Stroke]`): In drawing steps.
         """
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        return dimension_strokes(
-            self.editor.drawing,
-            dimension,
-            (
-                fillet_arcs(self.editor.drawing, self.editor.drawing.scale)
-                if dimension.kind == RADIUS
-                else {}
+        return upright_text(
+            dimension_strokes(
+                self.editor.drawing,
+                dimension,
+                (
+                    fillet_arcs(self.editor.drawing, self.editor.drawing.scale)
+                    if dimension.kind == RADIUS
+                    else {}
+                ),
+                TEXT_PIXELS
+                * FONT_STEP**dimension.font_step
+                / max(self.editor.zoom(), 1e-12),
             ),
-            TEXT_PIXELS / max(self.editor.zoom(), 1e-12),
+            self.editor.drawing.turns,
         )
 
     # Method `DimensionItem.paint_strokes()`:
@@ -1660,25 +1771,27 @@ class DimensionItem(QGraphicsItem):
             path.lineTo(self.arc_point(step / ARC_STEPS))
         return path
 
-    # Method `DimensionItem.letter_spot()`:
-    def letter_spot(self) -> QPointF | None:
-        """Return where its letter (or a mark's glyph) is drawn, for
-        the hide strips' check (#182); `None` for a fillet's (on its
-        arc, at a corner no strip covers).
+    # Method `DimensionItem.letter_box()`:
+    def letter_box(self) -> QRectF | None:
+        """Return the box its letter (or a mark's glyph) is drawn in,
+        for the hide strips' check (#182, the whole box, #322); `None`
+        for a fillet's (on its arc, at a corner no strip covers).
 
         Returns:
-        * (`QPointF | None`): The spot, in drawing steps.
+        * (`QRectF | None`): The box, in drawing steps.
         """
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
         if is_mark(dimension):
-            return stroke_box(self.strokes(), 0.0).center()
+            return stroke_box(self.strokes(), 0.0)
         if dimension.kind == RADIUS:
             return None
-        # The middle of its letter as drawn (#305), else its point.
+        # Its letter as drawn (#305), else its point.
         letter: QRectF = stroke_box(
             [stroke for stroke in self.strokes() if stroke.role == TEXT], 0.0
         )
-        return self.at() if letter.isNull() else letter.center()
+        if letter.isNull():
+            return QRectF(self.at(), self.at())
+        return letter
 
 
 # Class `OutlineView`:
@@ -2917,6 +3030,58 @@ class OutlineView(QGraphicsView):
         self.resetCachedContent()
         self.follow()
 
+    # Method `OutlineView.turn_view()`:
+    def turn_view(self) -> None:
+        """Show the drawing turned its `turns` quarter turns clockwise
+        (#300), Y up, at the zoom it has now."""
+        zoom: float = self.zoom()
+        turned: QTransform = QTransform()
+        turned.scale(zoom, -zoom)
+        # With Y flipped, a negative angle turns clockwise on screen.
+        turned.rotate(-90.0 * (self.drawing.turns % 4))
+        self.setTransform(turned)
+
+    # Method `OutlineView.rotate_diagram()`:
+    def rotate_diagram(self) -> None:
+        """[Rotate Diagram]: turn the drawing a quarter turn clockwise
+        (#300), as one change; four turns come back to the start.  The
+        letters stay upright, and the file keeps the tool axis along
+        Y (only `turns` is saved)."""
+        self.history.remember(self.drawing.snapshot())
+        self.drawing.turns = (self.drawing.turns + 1) % 4
+        self.turn_view()
+        self.fit()
+        self.follow()
+
+    # Method `OutlineView.step_font()`:
+    def step_font(self, way: int) -> None:
+        """[Font +] (`way` 1) or [Font -] (`way` -1) (#273): the
+        selected dimensions' letters a `FONT_STEP` bigger or smaller
+        (at most `FONT_STEPS` steps either way), or with none
+        selected, the whole diagram's; one change each press.
+
+        Arguments:
+        * `way` (`int`): 1 bigger, -1 smaller.
+        """
+        self.history.remember(self.drawing.snapshot())
+        if self.chosen_dimensions:
+            index: int
+            for index in self.chosen_dimensions:
+                dimension: Dimension = self.drawing.dimensions[index]
+                dimension.font_step = max(
+                    -FONT_STEPS, min(FONT_STEPS, dimension.font_step + way)
+                )
+        else:
+            # The height the diagram has now, picked when never set.
+            height: float = (
+                self.drawing.text_height
+                or outline_sheet(self.drawing).text_height
+            )
+            self.drawing.text_height = height * FONT_STEP**way
+        self.message = ""
+        self.follow()
+        self.scene().update()
+
     # Method `OutlineView.undo()`:
     def undo(self) -> None:
         """Go back to the corners before the last change, if any."""
@@ -2937,6 +3102,7 @@ class OutlineView(QGraphicsView):
         if snapshot is not None:
             self.drawing.restore(snapshot)
             self.message = ""
+            self.turn_view()
             self.make_squares()
             self.letters_changed()
 
@@ -3024,7 +3190,7 @@ class OutlineView(QGraphicsView):
     def set_up_view(self) -> None:
         """Make Y point up, zoom about the pointer, and hide the scroll
         bars (empty space is dragged to pan)."""
-        self.scale(1.0, -1.0)
+        self.turn_view()
         anchor: QGraphicsView.ViewportAnchor = (
             QGraphicsView.ViewportAnchor.AnchorUnderMouse
         )
@@ -3058,7 +3224,8 @@ class OutlineView(QGraphicsView):
     # Method `OutlineView.zoom()`:
     def zoom(self) -> float:
         """Return the zoom, in pixels per drawing step."""
-        return abs(self.transform().m11())
+        # A quarter turn moves the scale off the diagonal (#300).
+        return math.hypot(self.transform().m11(), self.transform().m12())
 
     # Method `OutlineView.step()`:
     def step(self) -> float:
@@ -3390,11 +3557,11 @@ class OutlineView(QGraphicsView):
         Returns:
         * (`set[int]`): The strips, by index.
         """
-        spots: list[QPointF] = [
-            spot
+        boxes: list[QRectF] = [
+            box
             for measure in self.measures
             if measure.index < len(self.drawing.dimensions)
-            and (spot := measure.letter_spot()) is not None
+            and (box := measure.letter_box()) is not None
         ]
         found: set[int] = set()
         index: int
@@ -3406,11 +3573,31 @@ class OutlineView(QGraphicsView):
             near: float
             far: float
             near, far = across(self.drawing.points, hide)
-            place: QPointF
-            for place in spots:
-                along: float = place.y() if hide.axis == HIDE_Y else place.x()
-                other: float = place.x() if hide.axis == HIDE_Y else place.y()
-                if low < along < high and near <= other <= far:
+            # Any part of a letter under the strip counts (#322): its
+            # box overlaps the strip both along and across.
+            letter: QRectF
+            for letter in boxes:
+                ends: tuple[float, float, float, float] = (
+                    (
+                        letter.top(),
+                        letter.bottom(),
+                        letter.left(),
+                        letter.right(),
+                    )
+                    if hide.axis == HIDE_Y
+                    else (
+                        letter.left(),
+                        letter.right(),
+                        letter.top(),
+                        letter.bottom(),
+                    )
+                )
+                if (
+                    ends[0] < high
+                    and ends[1] > low
+                    and ends[2] <= far
+                    and ends[3] >= near
+                ):
                     found.add(index)
         return found
 
@@ -3604,8 +3791,10 @@ class OutlineEditor(QWidget):
     """The editor's window: the mode bar, the drawing, the letters.
 
     Attributes:
-    * `buttons` (`dict[str, QPushButton]`):
-      The mode bar's buttons, by their word (`"Grid"`, `"Fit"`, ...).
+    * `button_actions` (`dict[str, QAction]`): What each button does,
+      by its word (`"Grid"`, ...); its state is the buttons'.
+    * `button_tabs` (`QTabWidget`): The buttons in tabs (#319).
+    * `buttons` (`dict[str, QToolButton]`): Each word's first button.
     * `keys` (`dict[str, QShortcut]`): Each button's key, by its word.
     * `drawing` (`Drawing`): The outline being drawn.
     * `new_fillet` (`QPushButton`): [New Fillet Dimension], shown
@@ -3615,7 +3804,7 @@ class OutlineEditor(QWidget):
     * `problems` (`QLabel`): The letters' problems, a line each, red,
       right under the table (#141).
     * `splitter` (`QSplitter`): The drawing over the table.
-    * `status` (`QLabel`): The last refusal, at the bar's end.
+    * `status` (`QLabel`): The last refusal, under the button tabs.
     * `table` (`QTableWidget`): The letters, a row each.
     * `view` (`OutlineView`): The drawing area.
     """
@@ -3643,9 +3832,17 @@ class OutlineEditor(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.view: OutlineView = OutlineView(self.drawing)
 
-        # The mode bar: each button shows its key (#20).
-        mode_bar: QHBoxLayout = QHBoxLayout()
-        layout.addLayout(mode_bar)
+        # The buttons in tabs (#319) over the status line.
+        self.button_tabs: QTabWidget = QTabWidget()
+        self.button_tabs.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
+        )
+        layout.addWidget(self.button_tabs)
+        self.status: QLabel = QLabel("")
+        self.status.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        layout.addWidget(self.status)
 
         # The drawing over the letters, a bar between them (#27); the
         # drawing in two tabs: the working view, and the diagram it
@@ -3662,42 +3859,53 @@ class OutlineEditor(QWidget):
         self.splitter.addWidget(self.letters_area())
         self.splitter.setSizes([450, 150])
         layout.addWidget(self.splitter)
-        self.buttons: dict[str, QPushButton] = {}
+        self.make_buttons()
+        self.hook_view()
+        self.fill_table()
+        self.table.itemChanged.connect(self.letter_edited)
+        self.show_message()
+        self.resize(800, 600)
+
+    # Method `OutlineEditor.make_buttons()`:
+    def make_buttons(self) -> None:
+        """Make the buttons (#319): each word one `QAction` with its
+        key, shown as a button on every tab listing it, so that its
+        checked and enabled state is the same on all of them."""
+        self.button_actions: dict[str, QAction] = {}
+        self.buttons: dict[str, QToolButton] = {}
         self.keys: dict[str, QShortcut] = {}
         word: str
         key: str
-        for word, key in (
-            ("Grid", "G"),
-            ("Snap", "S"),
-            ("Delete", "Del"),
-            ("Dimension", "N"),
-            ("Dim. Kind", "K"),
-            ("Horizontal", "-"),
-            ("Vertical", "|"),
-            ("Right Angle", "Shift+L"),
-            ("Revolve", "R"),
-            ("Hide", "H"),
-            ("Overview", "O"),
-            ("Fit", "Home"),
-            ("Undo", "Ctrl+Z"),
-            ("Redo", "Ctrl+Shift+Z"),
-            ("New Letter", "L"),
-        ):
+        for word, key in BUTTON_KEYS:
             # [Dim. Kind] cycles, so it shows a cycle arrow (U+21BB).
             cycle: str = " \u21bb" if word == "Dim. Kind" else ""
-            button: QPushButton = QPushButton(f"{word}{cycle} ({key})")
+            action: QAction = QAction(f"{word}{cycle} ({key})", self)
             # A button's own shortcut never fired; a `QShortcut` does.
             shortcut: QShortcut = QShortcut(QKeySequence(key), self)
-            shortcut.activated.connect(button.click)
+            shortcut.activated.connect(action.trigger)
             self.keys[word] = shortcut
-            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            mode_bar.addWidget(button)
-            self.buttons[word] = button
+            self.button_actions[word] = action
+        for word in ("Grid", "Snap", "Revolve", "Overview"):
+            self.button_actions[word].setCheckable(True)
         for word in ("Grid", "Snap"):
-            self.buttons[word].setCheckable(True)
-            self.buttons[word].setChecked(True)
-        self.buttons["Revolve"].setCheckable(True)
-        self.buttons["Overview"].setCheckable(True)
+            self.button_actions[word].setChecked(True)
+
+        # Each tab a row of buttons; `buttons` keeps a word's first.
+        title: str
+        words: tuple[str, ...]
+        for title, words in BUTTON_TABS:
+            page: QWidget = QWidget()
+            row: QHBoxLayout = QHBoxLayout(page)
+            row.setContentsMargins(2, 2, 2, 2)
+            for word in words:
+                button: QToolButton = QToolButton()
+                button.setDefaultAction(self.button_actions[word])
+                button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+                row.addWidget(button)
+                self.buttons.setdefault(word, button)
+            row.addStretch(1)
+            self.button_tabs.addTab(page, title)
+
         # What each button does.
         does: dict[str, Callable[[], None]] = {
             "Grid": self.view.toggle_grid,
@@ -3711,25 +3919,18 @@ class OutlineEditor(QWidget):
             "Vertical": partial(self.view.toggle_mark, HORIZONTAL),
             "Right Angle": self.view.toggle_right,
             "Revolve": self.toggle_revolve,
+            "Rotate Diagram": self.view.rotate_diagram,
+            "Font +": partial(self.view.step_font, 1),
+            "Font -": partial(self.view.step_font, -1),
             "Hide": self.view.start_hide,
             "Overview": self.toggle_overview,
             "Undo": self.view.undo,
             "Redo": self.view.redo,
             "New Letter": self.new_letter,
         }
-        action: Callable[[], None]
-        for word, action in does.items():
-            self.buttons[word].clicked.connect(action)
-        self.status: QLabel = QLabel("")
-        self.status.setSizePolicy(
-            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
-        )
-        mode_bar.addWidget(self.status, 1)
-        self.hook_view()
-        self.fill_table()
-        self.table.itemChanged.connect(self.letter_edited)
-        self.show_message()
-        self.resize(800, 600)
+        does_it: Callable[[], None]
+        for word, does_it in does.items():
+            self.button_actions[word].triggered.connect(does_it)
 
     # Method `OutlineEditor.drawing_tabs()`:
     def drawing_tabs(self) -> QTabWidget:
@@ -3761,7 +3962,6 @@ class OutlineEditor(QWidget):
                 outline_sheet(self.drawing),
                 colors.ink,
                 colors.paper,
-                themed=False,
             ).encode("utf-8")
         )
         # Kept to its shape: each load resets this.
@@ -4233,20 +4433,20 @@ class OutlineEditor(QWidget):
     # Method `OutlineEditor.toggle_snap()`:
     def toggle_snap(self) -> None:
         """Turn snapping on or off, as [Snap] now shows."""
-        self.view.snap_on = self.buttons["Snap"].isChecked()
+        self.view.snap_on = self.button_actions["Snap"].isChecked()
 
     # Method `OutlineEditor.toggle_overview()`:
     def toggle_overview(self) -> None:
         """[Overview]: switch views, the button showing which."""
         self.view.toggle_overview()
-        self.buttons["Overview"].setChecked(self.view.overview)
+        self.button_actions["Overview"].setChecked(self.view.overview)
 
     # Method `OutlineEditor.toggle_revolve()`:
     def toggle_revolve(self) -> None:
         """[Revolve]: revolve or not, the button showing the result
         (a refusal leaves it as it was)."""
         self.view.toggle_revolve()
-        self.buttons["Revolve"].setChecked(self.view.drawing.revolve)
+        self.button_actions["Revolve"].setChecked(self.view.drawing.revolve)
 
     # Method `OutlineEditor.save()`:
     def save(self) -> None:
@@ -4275,11 +4475,11 @@ class OutlineEditor(QWidget):
         undo or redo.
         """
         history: History = self.view.history
-        self.buttons["Undo"].setEnabled(bool(history.done))
-        self.buttons["Redo"].setEnabled(bool(history.undone))
+        self.button_actions["Undo"].setEnabled(bool(history.done))
+        self.button_actions["Redo"].setEnabled(bool(history.undone))
         # [Revolve] shows the drawing's state (a refusal, an undo).
-        self.buttons["Revolve"].setChecked(self.view.drawing.revolve)
-        self.buttons["Overview"].setChecked(self.view.overview)
+        self.button_actions["Revolve"].setChecked(self.view.drawing.revolve)
+        self.button_actions["Overview"].setChecked(self.view.overview)
         self.save()
         # A refusal in red; else the armed letter's hint (#214).
         hint: str = ""

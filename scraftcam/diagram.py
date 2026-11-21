@@ -27,19 +27,6 @@ THICK: float = 0.2
 THIN: float = 0.1
 MARGIN: float = 2.0
 
-# The style of a themed SVG (#287): dark when the viewer prefers it,
-# black on white on paper; the print rule comes last, so it wins.
-STYLE: str = (
-    "<style>"
-    "@media (prefers-color-scheme: dark)"
-    " { .paper { fill: black } .ink { stroke: white }"
-    " .solid { fill: white } }"
-    " @media print"
-    " { .paper { fill: white } .ink { stroke: black }"
-    " .solid { fill: black } }"
-    "</style>"
-)
-
 # The roles of a dimension line's strokes and of text's
 # (`Stroke.role`).
 LINE: str = "line"
@@ -47,6 +34,11 @@ TEXT: str = "text"
 
 # A dash's length, in text heights; the gaps are half a text height.
 DASH: float = 1.0
+
+# With its letter outside (#321), a dimension's arrows sit outside
+# its extension lines, pointing in, with tails this many text heights
+# long.
+TAIL: float = 2.0
 
 # Each [Font +] makes a letter this many times bigger (#273).
 FONT_STEP: float = 1.25
@@ -265,10 +257,12 @@ def dimension_line(
 
     An extension line runs from each foot (a measured point), a gap
     of `height` / 2 off it, out to its end of the dimension line and
-    `height` / 2 past; the arrows point out to the ends; the letter
-    sits upright `along` the line, in a break in it, or past an
-    arrowhead (below 0 or above 1) with the line run out to it (#277:
-    arrowheads `height` long and a third as wide).
+    `height` / 2 past; the letter sits upright `along` the line.
+    Between the ends (0 to 1) the line is broken around it and the
+    arrows point out to the ends; past an end (below 0 or above 1,
+    #321) the arrows sit outside pointing in, the line is whole, a
+    `TAIL` runs past the far arrow and the line runs out to the
+    letter (#277: arrowheads `height` long and a third as wide).
 
     Arguments:
     * `feet` (`tuple[Point, Point]`): The measured points.
@@ -311,12 +305,21 @@ def dimension_line(
         + gap
     )
 
-    # The line: broken around the letter, or run out past an arrow to it.
+    # A letter outside is drawn clear of its arrowhead (#323); its
+    # `along` is left as the user set it.
+    if along < 0.0:
+        spot = _step(first, way, -max(-along * length, height + half))
+    elif along > 1.0:
+        spot = _step(last, way, max((along - 1.0) * length, height + half))
+
+    # The line: broken around the letter, or whole with the letter
+    # outside, run out to it past one arrow and a tail past the other.
+    tail: float = TAIL * height
     pieces: list[list[Point]]
     if along < 0.0:
-        pieces = [[_step(spot, way, half), last]]
+        pieces = [[_step(spot, way, half), _step(last, way, tail)]]
     elif along > 1.0:
-        pieces = [[first, _step(spot, way, -half)]]
+        pieces = [[_step(first, way, -tail), _step(spot, way, -half)]]
     else:
         pieces = [
             [first, _step(spot, way, -half)],
@@ -327,9 +330,13 @@ def dimension_line(
         for piece in pieces
     )
 
-    # An arrowhead at each end, pointing out to its extension line.
-    found.append(_arrowhead(first, way, height))
-    found.append(_arrowhead(last, (-way[0], -way[1]), height))
+    # An arrowhead at each end, pointing out to its extension line, or
+    # in from outside when the letter is outside.
+    inward: float = -1.0 if along < 0.0 or along > 1.0 else 1.0
+    found.append(_arrowhead(first, (inward * way[0], inward * way[1]), height))
+    found.append(
+        _arrowhead(last, (-inward * way[0], -inward * way[1]), height)
+    )
     found.extend(text(letter, spot, height))
     return found
 
@@ -352,7 +359,9 @@ def angle_dimension(
     The arc runs counter-clockwise from the first ray to the second,
     `radius` from the vertex, broken around the letter `along` it;
     an arc too short for the break is drawn whole, its letter just
-    outside it.  The edges themselves serve as extension lines.
+    outside it.  Past a ray (`along` below 0 or above 1, #321) the
+    letter sits on the arc run on, the arrows outside pointing in, a
+    `TAIL` past the other.  The edges serve as extension lines.
 
     Arguments:
     * `vertex` (`Point`): Where the two rays meet.
@@ -377,14 +386,25 @@ def angle_dimension(
     center: Point = _step(vertex, (math.cos(middle), math.sin(middle)), radius)
 
     # Break the arc around the letter: half its box plus a gap.
-    tangent: Point = (-math.sin(middle), math.cos(middle))
-    half: float = (
-        abs(tangent[0]) * hershey.width(letter, height) / 2.0
-        + abs(tangent[1]) * height / 2.0
-        + height / 2.0
-    ) / radius
+    half: float = _arc_half(letter, height, radius, middle)
+
+    # A letter outside is drawn clear of its arrowhead (#323); its
+    # `along` is left as the user set it.
+    if along < 0.0:
+        middle = min(middle, start - height / radius - half)
+    elif along > 1.0:
+        middle = max(middle, end + height / radius + half)
+    if along < 0.0 or along > 1.0:
+        half = _arc_half(letter, height, radius, middle)
+        center = _step(vertex, (math.cos(middle), math.sin(middle)), radius)
     found: list[Stroke]
-    if start < middle - half and middle + half < end:
+    tail: float = TAIL * height / radius
+    outside: bool = along < 0.0 or along > 1.0
+    if along < 0.0:
+        found = [_arc(vertex, radius, middle + half, end + tail)]
+    elif along > 1.0:
+        found = [_arc(vertex, radius, start - tail, middle - half)]
+    elif start < middle - half and middle + half < end:
         found = [
             _arc(vertex, radius, start, middle - half),
             _arc(vertex, radius, middle + half, end),
@@ -395,23 +415,47 @@ def angle_dimension(
             vertex, (math.cos(middle), math.sin(middle)), radius + height
         )
 
-    # An arrowhead at each end, along the arc's tangent there.
+    # An arrowhead at each end, along the arc's tangent there: out to
+    # the rays, or in from outside them.
+    inward: float = -1.0 if outside else 1.0
     found.append(
         _arrowhead(
             _on_circle(vertex, radius, start),
-            (-math.sin(start), math.cos(start)),
+            (-inward * math.sin(start), inward * math.cos(start)),
             height,
         )
     )
     found.append(
         _arrowhead(
             _on_circle(vertex, radius, end),
-            (math.sin(end), -math.cos(end)),
+            (inward * math.sin(end), -inward * math.cos(end)),
             height,
         )
     )
     found.extend(text(letter, center, height))
     return found
+
+
+# Function `_arc_half()`:
+def _arc_half(letter: str, height: float, radius: float, at: float) -> float:
+    """Return half the angle an arc's break around a letter takes.
+
+    Arguments:
+    * `letter` (`str`): The letter.
+    * `height` (`float`): The text height.
+    * `radius` (`float`): The arc's radius.
+    * `at` (`float`): Where on the arc the letter sits (radians).
+
+    Returns:
+    * (`float`): Half its box along the arc plus a gap (radians).
+    """
+    # The letter's box measured along the arc's tangent there.
+    tangent: Point = (-math.sin(at), math.cos(at))
+    return (
+        abs(tangent[0]) * hershey.width(letter, height) / 2.0
+        + abs(tangent[1]) * height / 2.0
+        + height / 2.0
+    ) / radius
 
 
 # Function `radius_dimension()`:
@@ -823,20 +867,18 @@ def svg(
     ink: str = "black",
     paper: str = "white",
     *,
-    themed: bool = True,
     letter_mm: float = LETTER_MM,
 ) -> str:
     """Return a sheet as SVG text, its size in millimeters.
 
-    A themed SVG follows the viewer (#287): white ink on black paper
-    when it prefers dark, black on white when printed; a viewer that
-    ignores the style gets `ink` on `paper`.
+    Files are black on white whatever the viewer's theme, the
+    standard for drawings (#285; #287's dark style rule is gone);
+    the editor's [SVG] tab passes its theme's `ink` and `paper`.
 
     Arguments:
     * `sheet` (`Sheet`): The sheet.
     * `ink` (`str`): The ink's SVG color.
     * `paper` (`str`): The paper's SVG color (painted, #284).
-    * `themed` (`bool`): Whether to add the dark and print style.
     * `letter_mm` (`float`):
       How tall its letters print (mm, #292); the sheet's own units
       (drawing steps or mm) are scaled to it.
@@ -866,8 +908,6 @@ def svg(
             f' fill="{paper}"/>'
         ),
     ]
-    if themed:
-        lines.insert(1, STYLE)
 
     # One path per stroke, its width from its weight; strokes with a
     # title grouped under it, over an unseen box the pointer can rest

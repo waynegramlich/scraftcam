@@ -206,6 +206,63 @@ def turned_strokes(strokes: list[Stroke]) -> list[Stroke]:
     return found
 
 
+# Function `upright_text()`:
+def upright_text(strokes: list[Stroke], turns: int) -> list[Stroke]:
+    """Return strokes with each run of text (one label) turned
+    `turns` quarter turns counterclockwise about its middle, so that
+    it reads upright in a view turned that many quarter turns
+    clockwise (the editor's [Rotate Diagram], #300).
+
+    Arguments:
+    * `strokes` (`list[Stroke]`): The strokes, in drawing steps.
+    * `turns` (`int`): The view's quarter turns clockwise.
+
+    Returns:
+    * (`list[Stroke]`): The strokes, their labels counter-turned.
+    """
+    # Three clockwise quarter turns make one counterclockwise.
+    count: int = (-turns) % 4
+    if not count:
+        return strokes
+    found: list[Stroke] = []
+    is_text: bool
+    run: Iterator[Stroke]
+    for is_text, run in itertools.groupby(strokes, _is_text):
+        group: list[Stroke] = list(run)
+        if not is_text:
+            found.extend(group)
+            continue
+
+        # Turn about the label's middle: move it to the origin, turn,
+        # move it back.
+        ends: list[Point] = [
+            end
+            for stroke in group
+            for seg in stroke.segments
+            for end in (seg.start, seg.end)
+        ]
+        middle: Point = (
+            (min(x for x, _ in ends) + max(x for x, _ in ends)) / 2.0,
+            (min(y for _, y in ends) + max(y for _, y in ends)) / 2.0,
+        )
+        stroke: Stroke
+        for stroke in group:
+            segments: tuple[XYSegment, ...] = tuple(
+                placed(seg, (-middle[0], -middle[1]))
+                for seg in stroke.segments
+            )
+            _count: int
+            for _count in range(count):
+                segments = tuple(_turned(seg) for seg in segments)
+            found.append(
+                replace(
+                    stroke,
+                    segments=tuple(placed(seg, middle) for seg in segments),
+                )
+            )
+    return found
+
+
 # Function `_is_text()`:
 def _is_text(stroke: Stroke) -> bool:
     """Return whether a stroke is part of a label (the grouping key).
@@ -819,7 +876,37 @@ def _mark(
             height,
         )
 
+    # Across an edge: out from its middle; else out from its corner;
+    # then wherever the user dragged it (#317).
+    return [
+        replace(
+            stroke,
+            segments=tuple(
+                placed(segment, dimension.moved) for segment in stroke.segments
+            ),
+        )
+        for stroke in _mark_box(outline, dimension, height)
+    ]
+
+
+# Function `_mark_box()`:
+def _mark_box(
+    outline: Outline, dimension: Dimension, height: float
+) -> list[Stroke]:
+    """Return a `—` or `|` mark's box where it is first drawn: out
+    from its edge's middle, or from its corner.
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `dimension` (`Dimension`): The mark.
+    * `height` (`float`): The text height.
+
+    Returns:
+    * (`list[Stroke]`): Its box and line.
+    """
     # Across an edge: out from its middle; else out from its corner.
+    points: list[Point] = outline.points
+    count: int = len(points)
     level: bool = dimension.kind == VERTICAL
     inside: Point = _middle(points)
     edge: int = mark_edge(dimension, count)

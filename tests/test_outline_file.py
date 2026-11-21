@@ -117,6 +117,20 @@ class OutlineFileTest(unittest.TestCase):
             with self.assertRaises(OutlineError):
                 outline_from_text(text.replace("turns = 3", bad))
 
+    def test_moved(self) -> None:
+        """A mark's `moved` is written only when set, and read back
+        (#317)."""
+        self.assertNotIn("moved", outline_text(HALF_DRILL))
+        shifted: Outline = outline_from_text(outline_text(HALF_DRILL))
+        shifted.dimensions[0].moved = (1.5, -2.0)
+        text: str = outline_text(shifted)
+        self.assertIn("moved = [1.5, -2.0]", text)
+        self.assertEqual(outline_from_text(text), shifted)
+        bad: str
+        for bad in ("moved = [1.5]", 'moved = ["a", 2]', "moved = 3"):
+            with self.assertRaises(OutlineError):
+                outline_from_text(text.replace("moved = [1.5, -2.0]", bad))
+
     def test_order_fixed(self) -> None:
         """One moved corner changes one line (#92)."""
         moved: Outline = outline_from_text(outline_text(HALF_DRILL))
