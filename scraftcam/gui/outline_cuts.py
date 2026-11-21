@@ -174,6 +174,7 @@ def _clipped(
             filled=stroke.filled and whole,
             dashed=stroke.dashed,
             role=stroke.role,
+            title=stroke.title,
         )
         for run in runs
     ]

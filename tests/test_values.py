@@ -15,7 +15,10 @@ from scraftcam.gui.letters import Letter
 from scraftcam.gui.values import (
     evaluate,
     fillet_problems,
+    first_scale,
     letter_values,
+    letters_bad,
+    placed_corners,
     real_corners,
 )
 
@@ -104,6 +107,31 @@ class ValuesTest(unittest.TestCase):
             fillet_problems(PLATE, letters("2 in"), SIZES[1:]), {}
         )
         self.assertIsNone(real_corners(PLATE, letters("x"), SIZES[1:]))
+
+    def test_placed_corners(self) -> None:
+        """Corners follow the values, to the middle scale (#299)."""
+        placed: list[tuple[float, float]]
+        scale: float
+        placed, scale = placed_corners(PLATE, letters("1/8 in"), SIZES)
+        self.assertAlmostEqual(scale, 4.0 / 12.7)
+        self.assertAlmostEqual(placed[2][0], 2.0 * placed[2][1])
+        self.assertEqual(placed[0], (0.0, 0.0))
+        self.assertIsNot(placed, PLATE)
+
+        # A scale given is kept; none found leaves the corners.
+        placed, scale = placed_corners(PLATE, letters("1/8 in"), SIZES, 1.0)
+        self.assertEqual(scale, 1.0)
+        self.assertAlmostEqual(placed[2][0], 25.4)
+        self.assertEqual(placed_corners(PLATE, [], [])[0], PLATE)
+        self.assertEqual(first_scale(PLATE, ({}, {})), 0.0)
+
+    def test_letters_bad(self) -> None:
+        """A used letter with a bad value keeps the drawing (#154)."""
+        bad: list[Letter] = letters("1/8 in")
+        self.assertFalse(letters_bad(bad, SIZES))
+        bad[0] = Letter("W", "", "30 deg", "")
+        self.assertTrue(letters_bad(bad, SIZES))
+        self.assertEqual(placed_corners(PLATE, bad, SIZES), (PLATE, 0.0))
 
 
 if __name__ == "__main__":

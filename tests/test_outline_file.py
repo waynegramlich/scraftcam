@@ -104,6 +104,19 @@ class OutlineFileTest(unittest.TestCase):
                 text.replace("font_step = -2", "font_step = 1.5")
             )
 
+    def test_turned(self) -> None:
+        """`turns` is written only when set, and read back (#300)."""
+        self.assertNotIn("turns", outline_text(HALF_DRILL))
+        turned: Outline = outline_from_text(outline_text(HALF_DRILL))
+        turned.turns = 3
+        text: str = outline_text(turned)
+        self.assertIn("turns = 3", text)
+        self.assertEqual(outline_from_text(text), turned)
+        bad: str
+        for bad in ("turns = 4", "turns = true", "turns = 1.5"):
+            with self.assertRaises(OutlineError):
+                outline_from_text(text.replace("turns = 3", bad))
+
     def test_order_fixed(self) -> None:
         """One moved corner changes one line (#92)."""
         moved: Outline = outline_from_text(outline_text(HALF_DRILL))

@@ -1,4 +1,5 @@
 kind = "outline"
+version = 3
 revolve = true
 
 [letters.A]
@@ -20,13 +21,53 @@ help = "From the point's tip to the end of the shank."
 at = [0.0, 0.0]
 
 [[points]]
-at = [2.0, 1.2]
+at = [1.9971353788206216, 1.2]
 
 [[points]]
-at = [2.0, 8.0]
+at = [1.9971353788206216, 63.90833212225989]
 
 [[points]]
-at = [0.0, 8.0]
+at = [0.0, 63.90833212225989]
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "origin"
+to = 0
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = 0
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = 3
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = 1
+to = 2
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = 2
+to = 3
+offset = 0.0
+along = 0.5
 
 [[dimensions]]
 letter = "A"

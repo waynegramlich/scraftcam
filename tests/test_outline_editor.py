@@ -1,8 +1,12 @@
 """Tests of `scraftcam.gui.outline_editor`, chunk 1 (offscreen)."""
 
+import math
 import unittest
+import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 
+from scraftcam.diagram import TEXT, Stroke, Weight
+from scraftcam.geometry import ArcSegment, LineSegment
 from scraftcam.gui import outline_editor
 from scraftcam.gui.dimensions import (
     ANGLE,
@@ -17,6 +21,7 @@ from scraftcam.gui.dimensions import (
 )
 from scraftcam.gui.hides import HIDE_Y, Hide
 from scraftcam.gui.letters import Letter
+from scraftcam.gui.outline_diagram import fillet_arcs, outline_strokes
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 from scraftcam.gui.outline_file import outline_text
 from scraftcam.gui.values import crossings
@@ -71,6 +76,30 @@ class GridTest(unittest.TestCase):
         self.assertAlmostEqual(path.boundingRect().left(), 3.0)
         dot = outline_editor.arrowhead(QPointF(1, 1), QPointF(1, 1), 1.0)
         self.assertTrue(dot.isEmpty())
+
+    def test_stroke_path(self) -> None:
+        """A stroke's lines and arcs become one path (#S4)."""
+        line: LineSegment = LineSegment((0.0, 0.0), (2.0, 0.0))
+        arc: ArcSegment = ArcSegment(
+            (2.0, 0.0), (3.0, 1.0), (2.0, 1.0), 1.0, math.pi / 2
+        )
+        path = outline_editor.stroke_path(Stroke((line, arc), Weight.THICK))
+        self.assertAlmostEqual(path.boundingRect().right(), 3.0)
+        self.assertAlmostEqual(path.boundingRect().bottom(), 1.0)
+        self.assertAlmostEqual(path.currentPosition().x(), 3.0)
+        self.assertAlmostEqual(path.currentPosition().y(), 1.0)
+        apart = outline_editor.stroke_path(
+            Stroke((line, LineSegment((5.0, 5.0), (6.0, 5.0))), Weight.THIN)
+        )
+        self.assertEqual(apart.elementCount(), 4)
+
+
+def radii_of(drawing: Drawing) -> dict[int, float]:
+    """Return each rounded corner's radius as the editor draws it."""
+    return {
+        corner: fillet.arc.radius
+        for corner, fillet in fillet_arcs(drawing, drawing.scale).items()
+    }
 
 
 # Each test is a public method, and the editor has many features.
@@ -245,6 +274,37 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.undo()
         self.assertEqual(len(view.drawing.dimensions), 2)
         self.assertEqual(self.editor.table.rowCount(), 3)
+
+    def test_drawn_letter(self) -> None:
+        """A dimension's letter spot and click area are where its
+        shared strokes draw its letter (#305), text and arrowheads a
+        fixed pixel size at any zoom (#311)."""
+        view = self.editor.view
+        view.dimension_between(-1, 1)
+        measure = view.measures[-1]
+        strokes: list[Stroke] = measure.strokes()
+        letter = outline_editor.stroke_box(
+            [stroke for stroke in strokes if stroke.role == TEXT], 0.0
+        )
+        self.assertFalse(letter.isNull())
+        spot = measure.letter_spot()
+        assert spot is not None
+        self.assertEqual(spot, letter.center())
+        self.assertTrue(measure.shape().contains(spot))
+
+        # Its circle sits just off the letter, up and right (#315).
+        circle = measure.handle_spot()
+        self.assertFalse(letter.contains(circle))
+        self.assertGreater(circle.x(), letter.right())
+        self.assertGreater(circle.y(), letter.bottom())
+        self.assertEqual(view.circles[-1].pos(), circle)
+        before: float = letter.height() * view.zoom()
+        view.scale(2.0, 2.0)
+        after = outline_editor.stroke_box(
+            [stroke for stroke in measure.strokes() if stroke.role == TEXT],
+            0.0,
+        )
+        self.assertAlmostEqual(after.height() * view.zoom(), before)
 
     def test_delete_after_drag(self) -> None:
         """A dimension dragged by its circle, then deleted, is gone
@@ -568,6 +628,14 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             # A new file is written at once, holding the triangle.
             editor.save()
             self.assertTrue(path.exists())
+
+            # Its diagram is written beside it (#248), again if lost.
+            picture: Path = outline_editor.svg_path(path)
+            self.assertEqual(picture.name, "drill.outline.svg")
+            ET.fromstring(picture.read_text(encoding="utf-8"))
+            picture.unlink()
+            editor.save()
+            self.assertTrue(picture.exists())
             editor.view.add_after(0)
             editor.show_message()
             self.assertTrue(path.exists())
@@ -598,34 +666,32 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(view.drawing.note_radius, "UDF")
         self.assertEqual(view.drawing.letters[0].letter, "UDF")
         self.assertEqual(view.drawing.letters[0].default, "1/16 in")
-        radii = outline_editor.fillet_radii(view.drawing)
+        radii = radii_of(view.drawing)
         self.assertEqual(sorted(radii), [1, 2])
         self.assertAlmostEqual(radii[1], 0.8)
 
         # The drawn size follows the corners (#121).
         view.drawing.points[2] = (6.0, 2.0)
-        self.assertAlmostEqual(
-            outline_editor.fillet_radii(view.drawing)[1], 0.4
-        )
+        self.assertAlmostEqual(radii_of(view.drawing)[1], 0.4)
         view.drawing.points[2] = (6.0, 4.0)
 
-        ends = outline_editor.fillet_ends(view.drawing)
-        self.assertEqual(ends[0][0], ends[0][1])
-        self.assertAlmostEqual(ends[1][0].x(), 5.2)
-        self.assertAlmostEqual(ends[1][1].y(), 0.8)
-        box = outline_editor.rounded_path(view.drawing, ends).boundingRect()
+        arcs = fillet_arcs(view.drawing, view.drawing.scale)
+        self.assertNotIn(0, arcs)
+        self.assertAlmostEqual(arcs[1].arc.start[0], 5.2)
+        self.assertAlmostEqual(arcs[1].arc.end[1], 0.8)
+        box = outline_editor.stroke_path(
+            outline_strokes(view.drawing, arcs)[0]
+        ).boundingRect()
         self.assertAlmostEqual(box.right(), 6.0, places=6)
         self.assertFalse(view.grab().isNull())
         # No fillet on corner 1: sharp again.
         view.set_fillets([1], "")
-        self.assertEqual(
-            sorted(outline_editor.fillet_radii(view.drawing)), [2]
-        )
+        self.assertEqual(sorted(radii_of(view.drawing)), [2])
         self.editor.buttons["Dim. Kind"].click()
         view.undo()
         view.undo()
         self.assertEqual(view.drawing.note_radius, "")
-        self.assertEqual(outline_editor.fillet_radii(view.drawing), {})
+        self.assertEqual(radii_of(view.drawing), {})
 
     def test_fillet_scale(self) -> None:
         """Once the drawing has a scale, a fillet is its value to scale,
@@ -635,14 +701,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.make_squares()
         view.set_fillets([1], outline_editor.NOTE_CHOICE)
         view.drawing.scale = 0.5
-        self.assertAlmostEqual(
-            outline_editor.fillet_radii(view.drawing)[1], 25.4 / 32
-        )
+        self.assertAlmostEqual(radii_of(view.drawing)[1], 25.4 / 32)
         view.drawing.letters[0].default = "1/8 in"
         view.follow()
-        self.assertAlmostEqual(
-            outline_editor.fillet_radii(view.drawing)[1], 25.4 / 16
-        )
+        self.assertAlmostEqual(radii_of(view.drawing)[1], 25.4 / 16)
 
     def test_fillets_tab(self) -> None:
         """[Fillets] shows "No fillet" and only the letters checked
@@ -1480,7 +1542,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view = self.editor.view
         view.add_dimension(Dimension("W", HORIZONTAL, 0, 1, -5.0))
         circle = view.circles[0]
-        self.assertEqual((circle.pos().x(), circle.pos().y()), (0.0, -5.0))
+        at = view.measures[0].at()
+        self.assertEqual((at.x(), at.y()), (0.0, -5.0))
+        self.assertEqual(circle.pos(), view.measures[0].handle_spot())
         grab: QPoint = view.mapFromScene(circle.pos())
         target: QPoint = view.mapFromScene(QPointF(6.1, -7.1))
         QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=grab)

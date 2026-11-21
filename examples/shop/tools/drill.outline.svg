@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="22.125mm" height="110.9986mm" viewBox="-6.2577 -71.3643 15.7108 78.8193">
+<style>@media (prefers-color-scheme: dark) { .paper { fill: black } .ink { stroke: white } .solid { fill: white } } @media print { .paper { fill: white } .ink { stroke: black } .solid { fill: black } }</style>
+<rect x="-6.2577" y="-71.3643" width="15.7108" height="78.8193" class="paper" fill="white"/>
+<path d="M 0 0 L 1.9971 -1.2 L 1.9971 -63.9083 L 0 -63.9083 L 0 0" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 0 L -1.9971 -1.2" class="ink" fill="none" stroke="black" stroke-dasharray="2.1303 1.0651" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.9971 -1.2 L -1.9971 -63.9083" class="ink" fill="none" stroke="black" stroke-dasharray="2.1303 1.0651" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.9971 -63.9083 L 0 -63.9083" class="ink" fill="none" stroke="black" stroke-dasharray="2.1303 1.0651" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.1311 3.1944 L 0.9992 3.1944 L 0.9992 1.0641 L -1.1311 1.0641 L -1.1311 3.1944" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.5985 2.1293 L 0.4666 2.1293" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.1311 3.1944 L 0.9992 3.1944 L 0.9992 1.0641 L -1.1311 1.0641 L -1.1311 3.1944" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.0659 2.6618 L -0.0659 1.5967" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.1323 -64.9724 L 0.998 -64.9724 L 0.998 -67.1027 L -1.1323 -67.1027 L -1.1323 -64.9724" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.0672 -65.505 L -0.0672 -66.5701" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.0623 -31.489 L 5.1926 -31.489 L 5.1926 -33.6193 L 3.0623 -33.6193 L 3.0623 -31.489" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.1274 -32.0216 L 4.1274 -33.0867" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.0666 -64.9735 L 2.0637 -64.9735 L 2.0637 -67.1037 L -0.0666 -67.1037 L -0.0666 -64.9735" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.466 -66.0386 L 1.5311 -66.0386" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.4998 -0.3003 A 0.5831 0.5831 0 0 0 0 -0.5831" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.4998 -0.3003 L -0.9017 -1.9435 L -0.293 -2.3092 L 0.4998 -0.3003" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 -0.5831 L 2.1303 -0.9381 L 2.1303 -0.228 L 0 -0.5831" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>A: Half point angle = 59 deg.  Half of the drill&#x27;s point angle (118 deg drills: 59 deg).</title>
+<rect x="-1.6057" y="-5.557" width="5.8836" height="6.3908" fill="none" pointer-events="all"/>
+<path d="M 1.3361 -3.4267 L 0.5246 -1.2965" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.3361 -3.4267 L 2.1477 -1.2965" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.8289 -2.0066 L 1.8433 -2.0066" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 1.9971 -0.1349 L 1.9971 1.4651" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 0.4 L -1.1317 0.4" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.1288 0.4 L 1.9971 0.4" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 0.4 L 2.1303 0.045 L 2.1303 0.755 L 0 0.4" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.9971 0.4 L -0.1331 0.755 L -0.1331 0.045 L 1.9971 0.4" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>R: Radius = 1/8 in.  Half of the drill&#x27;s diameter.</title>
+<rect x="-1.7911" y="-2.7954" width="5.6807" height="6.3908" fill="none" pointer-events="all"/>
+<path d="M 0.3392 -0.6651 L 0.3392 1.4651" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.3392 -0.6651 L 1.2522 -0.6651 L 1.5565 -0.5637 L 1.6579 -0.4623 L 1.7594 -0.2594 L 1.7594 -0.0565 L 1.6579 0.1464 L 1.5565 0.2478 L 1.2522 0.3493 L 0.3392 0.3493" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.0493 0.3493 L 1.7594 1.4651" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 1.0651 0 L 5.0651 0" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.0623 -63.9083 L 5.0651 -63.9083" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4 0 L 4 -29.8239" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4 -34.0844 L 4 -63.9083" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4 0 L 3.645 -2.1303 L 4.355 -2.1303 L 4 0" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4 -63.9083 L 4.355 -61.7781 L 3.645 -61.7781 L 4 -63.9083" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>L: Overall length = 4 in.  From the point&#x27;s tip to the end of the shank.</title>
+<rect x="1.4132" y="-35.1496" width="5.4779" height="6.3908" fill="none" pointer-events="all"/>
+<path d="M 3.5435 -33.0193 L 3.5435 -30.889" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.5435 -30.889 L 4.7608 -30.889" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

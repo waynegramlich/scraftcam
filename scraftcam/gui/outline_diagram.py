@@ -3,16 +3,19 @@
 `outline_sheet()` turns what an outline file holds (`Outline`) into a
 `diagram.Sheet`: the outline, its dimensions with their letters and
 its marks, the same shapes the editor shows (#S2).  The sheet is in
-drawing steps, as the file keeps its corners (already placed by the
-letters' values, #148), so each dimension's `offset` and `along`
-apply as they are (#292).
+drawing steps, its corners placed by the letters' values as the
+editor places them (#148, #299), so each dimension's `offset` and
+`along` apply as they are (#292).
 """
 
+import itertools
 import math
-from dataclasses import dataclass, field
+from collections.abc import Iterator
+from dataclasses import dataclass, field, replace
 
 from ..diagram import (
     FONT_STEP,
+    TEXT,
     Sheet,
     Stroke,
     Weight,
@@ -43,12 +46,22 @@ from .dimensions import (
     is_mark,
     mark_edge,
 )
+from .letters import Letter
 from .outline_cuts import cut_strokes
 from .outline_file import Outline
-from .values import letter_values, real_coordinates
+from .values import (
+    first_scale,
+    letter_values,
+    placed_corners,
+    real_coordinates,
+)
 
 # The note when fillets share the note letter (#116, #118).
 NOTE: str = "All undimensioned fillets are radius {}"
+
+# Two edges closer to parallel than this (the sine of the angle
+# between them) have no angle (#40).
+PARALLEL: float = 1e-6
 
 # A fillet with no scale yet is drawn this share of its shorter edge
 # (the editor's `FILLET_SHARE`, #121).
@@ -86,37 +99,46 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
     Returns:
     * (`Sheet`): The diagram, its paper the drawing plus a margin.
     """
-    # The outline itself: one thick closed stroke, corners rounded.
+    # The corners where the values put them, as the editor places
+    # them, so a file saved before its values changed draws right
+    # (#299).
+    outline = replace(
+        outline,
+        points=placed_corners(
+            outline.points, outline.letters, outline.dimensions
+        )[0],
+    )
+
+    # The outline itself, and a revolved outline's mirror half.
     fillets: dict[int, Fillet] = fillet_arcs(outline)
-    segments: tuple[XYSegment, ...] = _rounded(outline.points, fillets)
-    strokes: list[Stroke] = [Stroke(segments, Weight.THICK)]
+    strokes: list[Stroke] = outline_strokes(outline, fillets)
     if text_height <= 0.0:
         text_height = outline.text_height
     if text_height <= 0.0:
-        text_height = starting_height(tuple(strokes))
-
-    # A revolved outline's mirror half: thin, dashed, each segment not
-    # on the axis reflected across it (#294).
-    if outline.revolve:
-        strokes.extend(
-            Stroke(
-                (placed(segment, (0.0, 0.0), mirror=True),),
-                Weight.THIN,
-                dashed=True,
-            )
-            for segment in segments
-            if abs(segment.start[0]) > ON_AXIS or abs(segment.end[0]) > ON_AXIS
-        )
+        text_height = starting_height((strokes[0],))
 
     # Then each dimension and mark, its letter grown or shrunk by its
     # font steps, and the fillets' note.
+    # Each letter's text carries its name, value and help as a title
+    # (#267).
+    titles: dict[str, str] = {
+        letter.letter: letter_title(letter) for letter in outline.letters
+    }
     dimension: Dimension
     for dimension in outline.dimensions:
         height: float = text_height * FONT_STEP**dimension.font_step
-        if dimension.kind == RADIUS:
-            strokes.extend(_fillet(outline, dimension, fillets, height))
-        else:
-            strokes.extend(_dimension(outline, dimension, height))
+        found: list[Stroke] = dimension_strokes(
+            outline, dimension, fillets, height
+        )
+        title: str = titles.get(dimension.letter, "")
+        strokes.extend(
+            (
+                replace(stroke, title=title)
+                if title and stroke.role == TEXT
+                else stroke
+            )
+            for stroke in found
+        )
     if any(
         dimension.kind == RADIUS and dimension.letter == outline.note_radius
         for dimension in outline.dimensions
@@ -128,21 +150,203 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
                 text_height,
             )
         )
-    return on_paper(
-        tuple(cut_strokes(outline, strokes, text_height)), text_height
-    )
+    cut: list[Stroke] = cut_strokes(outline, strokes, text_height)
+    _turn: int
+    for _turn in range(outline.turns % 4):
+        cut = turned_strokes(cut)
+    return on_paper(tuple(cut), text_height)
+
+
+# Function `turned_strokes()`:
+def turned_strokes(strokes: list[Stroke]) -> list[Stroke]:
+    """Return strokes turned a quarter turn clockwise about the origin
+    (#300), each run of text moved with the drawing but kept upright.
+
+    Arguments:
+    * `strokes` (`list[Stroke]`): The diagram's strokes.
+
+    Returns:
+    * (`list[Stroke]`): Turned.
+    """
+    # Each run of text strokes (one label) moves by where its middle
+    # goes; everything else turns.
+    found: list[Stroke] = []
+    is_text: bool
+    run: Iterator[Stroke]
+    for is_text, run in itertools.groupby(strokes, _is_text):
+        group: list[Stroke] = list(run)
+        if not is_text:
+            found.extend(
+                replace(
+                    stroke,
+                    segments=tuple(_turned(seg) for seg in stroke.segments),
+                )
+                for stroke in group
+            )
+            continue
+        ends: list[Point] = [
+            end
+            for stroke in group
+            for seg in stroke.segments
+            for end in (seg.start, seg.end)
+        ]
+        middle: Point = (
+            (min(x for x, _ in ends) + max(x for x, _ in ends)) / 2.0,
+            (min(y for _, y in ends) + max(y for _, y in ends)) / 2.0,
+        )
+        there: Point = _turn(middle)
+        move: Point = (there[0] - middle[0], there[1] - middle[1])
+        found.extend(
+            replace(
+                stroke,
+                segments=tuple(placed(seg, move) for seg in stroke.segments),
+            )
+            for stroke in group
+        )
+    return found
+
+
+# Function `_is_text()`:
+def _is_text(stroke: Stroke) -> bool:
+    """Return whether a stroke is part of a label (the grouping key).
+
+    Arguments:
+    * `stroke` (`Stroke`): The stroke.
+
+    Returns:
+    * (`bool`): Whether its role is `TEXT`.
+    """
+    # Labels keep upright when the drawing turns.
+    return stroke.role == TEXT
+
+
+# Function `_turn()`:
+def _turn(point: Point) -> Point:
+    """Return a point turned a quarter turn clockwise about the origin.
+
+    Arguments:
+    * `point` (`Point`): The point.
+
+    Returns:
+    * (`Point`): `(y, -x)`.
+    """
+    # Clockwise: +Y goes to +X.
+    return (point[1], -point[0])
+
+
+# Function `_turned()`:
+def _turned(segment: XYSegment) -> XYSegment:
+    """Return a line or arc turned a quarter turn clockwise (its sweep
+    keeps its sign: a turn keeps the way round).
+
+    Arguments:
+    * `segment` (`XYSegment`): The line or arc.
+
+    Returns:
+    * (`XYSegment`): Turned.
+    """
+    # An arc turns its ends and center.
+    if isinstance(segment, ArcSegment):
+        return ArcSegment(
+            _turn(segment.start),
+            _turn(segment.end),
+            _turn(segment.center),
+            segment.radius,
+            segment.sweep,
+        )
+    return LineSegment(_turn(segment.start), _turn(segment.end))
+
+
+# Function `letter_title()`:
+def letter_title(letter: Letter) -> str:
+    """Return what a viewer shows over a letter (#267): the letter,
+    its name and value, then its help.
+
+    Arguments:
+    * `letter` (`Letter`): The letter.
+
+    Returns:
+    * (`str`): E.g. "L: Overall length = 4 in.  From the tip ...".
+    """
+    # The parts it has, the help as its own sentence.
+    head: str = letter.letter + (f": {letter.name}" if letter.name else "")
+    if letter.default:
+        head += f" = {letter.default}"
+    return f"{head}.  {letter.help}" if letter.help else head
+
+
+# Function `dimension_strokes()`:
+def dimension_strokes(
+    outline: Outline,
+    dimension: Dimension,
+    fillets: dict[int, Fillet],
+    height: float,
+) -> list[Stroke]:
+    """Return one dimension's or mark's strokes, shared by the SVG and
+    the editor (#S4).
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `dimension` (`Dimension`): The dimension or mark.
+    * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
+    * `height` (`float`): The text height (drawing steps).
+
+    Returns:
+    * (`list[Stroke]`): Its strokes.
+    """
+    # A fillet's radius is drawn about its arc.
+    if dimension.kind == RADIUS:
+        return _fillet(outline, dimension, fillets, height)
+    return _dimension(outline, dimension, height)
+
+
+# Function `outline_strokes()`:
+def outline_strokes(
+    outline: Outline, fillets: dict[int, Fillet]
+) -> list[Stroke]:
+    """Return the outline's own strokes, shared by the SVG and the
+    editor (#S4): first one thick closed stroke, corners rounded;
+    then, when revolved, the mirror half, thin and dashed, each
+    segment not on the axis reflected across it (#294).
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
+
+    Returns:
+    * (`list[Stroke]`): The outline, then the mirror half's strokes.
+    """
+    # The outline, then its mirror image.
+    segments: tuple[XYSegment, ...] = _rounded(outline.points, fillets)
+    strokes: list[Stroke] = [Stroke(segments, Weight.THICK)]
+    if outline.revolve:
+        strokes.extend(
+            Stroke(
+                (placed(segment, (0.0, 0.0), mirror=True),),
+                Weight.THIN,
+                dashed=True,
+            )
+            for segment in segments
+            if abs(segment.start[0]) > ON_AXIS or abs(segment.end[0]) > ON_AXIS
+        )
+    return strokes
 
 
 # Function `fillet_arcs()`:
 # Type hints on every variable inflate its count of locals.
 # pylint: disable-next=too-many-locals
-def fillet_arcs(outline: Outline) -> dict[int, Fillet]:
+def fillet_arcs(
+    outline: Outline, scale: float | None = None
+) -> dict[int, Fillet]:
     """Return each rounded corner's arc, as the editor draws it: its
     letter's value to scale once the values fix a scale, else a share
     of its shorter edge; never more than its edges allow.
 
     Arguments:
     * `outline` (`Outline`): The outline.
+    * `scale` (`float | None`):
+      Drawing steps per mm (0 for none yet, as the editor keeps it);
+      `None` picks it from the outline.
 
     Returns:
     * (`dict[int, Fillet]`): By corner; a corner too straight or too
@@ -150,7 +354,8 @@ def fillet_arcs(outline: Outline) -> dict[int, Fillet]:
     """
     # The scale (drawing steps per mm) and the letters' values.
     points: list[Point] = outline.points
-    scale: float = _scale(outline)
+    if scale is None:
+        scale = _scale(outline)
     values: dict[str, float] = letter_values(outline.letters)
     fillets: dict[int, Fillet] = {}
     dimension: Dimension
@@ -314,8 +519,7 @@ def _fillet(
 # Function `_scale()`:
 def _scale(outline: Outline) -> float:
     """Return drawing steps per millimeter, as the editor picks it
-    (its `first_scale()`, #148): the middle of the drawn-to-real
-    ratios of the coordinates the values fix.
+    (`values.first_scale()`, #148).
 
     Arguments:
     * `outline` (`Outline`): The outline.
@@ -323,19 +527,11 @@ def _scale(outline: Outline) -> float:
     Returns:
     * (`float`): The scale; 0 when nothing says.
     """
-    # Each fixed coordinate's drawn over real value, when positive.
+    # The ratios of the coordinates the values fix.
     real: tuple[dict[int, float], dict[int, float]] | None = real_coordinates(
         outline.points, outline.letters, outline.dimensions
     )
-    if real is None:
-        return 0.0
-    ratios: list[float] = sorted(
-        outline.points[corner][axis] / value
-        for axis in (0, 1)
-        for corner, value in real[axis].items()
-        if abs(value) > 1e-9 and outline.points[corner][axis] / value > 0.0
-    )
-    return ratios[len(ratios) // 2] if ratios else 0.0
+    return 0.0 if real is None else first_scale(outline.points, real)
 
 
 # Function `_unit()`:
@@ -415,36 +611,17 @@ def _angle(
     Returns:
     * (`list[Stroke]`): Its strokes; none for parallel edges.
     """
-    # Each edge's start and direction (an axis from the origin).
+    # The arc about where the edges' lines cross; parallel lines draw
+    # nothing.
     points: list[Point] = outline.points
-    first: Point = _edge_way(points, dimension.start)
-    second: Point = _edge_way(points, dimension.end)
-    a0: Point = _point(outline, max(dimension.start, ORIGIN))
-    b0: Point = _point(outline, max(dimension.end, ORIGIN))
-
-    # Where their lines cross; parallel lines draw nothing.
-    cross: float = first[0] * second[1] - first[1] * second[0]
-    if abs(cross) <= 1e-12 * math.hypot(*first) * math.hypot(*second):
-        return []
-    share: float = (
-        (b0[0] - a0[0]) * second[1] - (b0[1] - a0[1]) * second[0]
-    ) / cross
-    vertex: Point = (a0[0] + first[0] * share, a0[1] + first[1] * share)
-
-    # The rays, along or against their edges.
-    rays: tuple[float, float] = (
-        math.degrees(
-            math.atan2(
-                first[1] * dimension.rays[0], first[0] * dimension.rays[0]
-            )
-        ),
-        math.degrees(
-            math.atan2(
-                second[1] * dimension.rays[1], second[0] * dimension.rays[1]
-            )
-        ),
+    arc: tuple[Point, float, float] | None = edge_arc(
+        points, dimension.start, dimension.end, dimension.rays
     )
-    return angle_dimension(
+    if arc is None:
+        return []
+    vertex: Point = arc[0]
+    rays: tuple[float, float] = (arc[1], arc[1] + arc[2])
+    found: list[Stroke] = angle_dimension(
         vertex,
         rays,
         dimension.offset,
@@ -452,6 +629,141 @@ def _angle(
         height=height,
         along=dimension.along,
     )
+
+    found.extend(_reaches(points, dimension, (vertex, rays), height))
+    return found
+
+
+# Function `_reaches()`:
+def _reaches(
+    points: list[Point],
+    dimension: Dimension,
+    arc: tuple[Point, tuple[float, float]],
+    height: float,
+) -> list[Stroke]:
+    """Return an angle's extension lines (#296): where its arc lies
+    past an edge's far end, the edge carried on to it, a little past;
+    none for the axes (drawn across the window already).
+
+    Arguments:
+    * `points` (`list[Point]`): The corners.
+    * `dimension` (`Dimension`): The angle.
+    * `arc` (`tuple[Point, tuple[float, float]]`):
+      Its vertex and its two rays' directions (degrees).
+    * `height` (`float`): The text height.
+
+    Returns:
+    * (`list[Stroke]`): The lines, thin.
+    """
+    # Each edge's far end, measured along its ray.
+    vertex: Point = arc[0]
+    found: list[Stroke] = []
+    edge: int
+    ray: float
+    for edge, ray in zip(
+        (dimension.start, dimension.end), arc[1], strict=True
+    ):
+        if edge in (X_AXIS, Y_AXIS):
+            continue
+        way: Point = (math.cos(math.radians(ray)), math.sin(math.radians(ray)))
+        reach: float = max(
+            (end[0] - vertex[0]) * way[0] + (end[1] - vertex[1]) * way[1]
+            for end in (points[edge], points[(edge + 1) % len(points)])
+        )
+        if reach < dimension.offset:
+            found.append(
+                Stroke(
+                    (
+                        LineSegment(
+                            _along(vertex, way, max(reach, 0.0)),
+                            _along(vertex, way, dimension.offset + height / 2),
+                        ),
+                    ),
+                    Weight.THIN,
+                )
+            )
+    return found
+
+
+# Function `_along()`:
+def _along(start: Point, way: Point, distance: float) -> Point:
+    """Return a point some distance from another along a unit vector.
+
+    Arguments:
+    * `start` (`Point`): Where it starts.
+    * `way` (`Point`): The unit vector.
+    * `distance` (`float`): How far.
+
+    Returns:
+    * (`Point`): The point.
+    """
+    # A step along the vector.
+    return (start[0] + way[0] * distance, start[1] + way[1] * distance)
+
+
+# Function `edge_arc()`:
+def edge_arc(
+    points: list[Point],
+    first: int,
+    second: int,
+    rays: tuple[int, int],
+) -> tuple[Point, float, float] | None:
+    """Return an angle's arc, for the SVG and the editor alike (#295):
+    where two edges' lines cross, and the turn counterclockwise from
+    the first ray to the second.
+
+    Arguments:
+    * `points` (`list[Point]`): The corners.
+    * `first` (`int`): The corner the first edge leaves, or an axis.
+    * `second` (`int`): The corner the second edge leaves, or an axis.
+    * `rays` (`tuple[int, int]`): Each ray along (`1`) or against
+      (`-1`) its edge's direction.
+
+    Returns:
+    * (`tuple[Point, float, float] | None`): The crossing, the first
+      ray's direction and the turn to the second ray (degrees, 0 to
+      360, counterclockwise); `None` for parallel edges.
+    """
+    # Each edge's start and direction (an axis from the origin).
+    way_a: Point = _edge_way(points, first)
+    way_b: Point = _edge_way(points, second)
+    a0: Point = _edge_start(points, first)
+    b0: Point = _edge_start(points, second)
+
+    # Where their lines cross, unless (nearly) parallel.
+    cross: float = way_a[0] * way_b[1] - way_a[1] * way_b[0]
+    if abs(cross) <= PARALLEL * max(
+        math.hypot(*way_a) * math.hypot(*way_b), 1e-300
+    ):
+        return None
+    share: float = (
+        (b0[0] - a0[0]) * way_b[1] - (b0[1] - a0[1]) * way_b[0]
+    ) / cross
+    vertex: Point = (a0[0] + way_a[0] * share, a0[1] + way_a[1] * share)
+
+    # The rays, along or against their edges.
+    start: float = math.degrees(
+        math.atan2(way_a[1] * rays[0], way_a[0] * rays[0])
+    )
+    end: float = math.degrees(
+        math.atan2(way_b[1] * rays[1], way_b[0] * rays[1])
+    )
+    return vertex, start, (end - start) % 360.0
+
+
+# Function `_edge_start()`:
+def _edge_start(points: list[Point], edge: int) -> Point:
+    """Return the corner an edge leaves (the origin, for an axis).
+
+    Arguments:
+    * `points` (`list[Point]`): The corners.
+    * `edge` (`int`): The corner the edge leaves, or an axis.
+
+    Returns:
+    * (`Point`): The point.
+    """
+    # The axes run from the origin.
+    return (0.0, 0.0) if edge in (X_AXIS, Y_AXIS) else points[edge]
 
 
 # Function `_edge_way()`:

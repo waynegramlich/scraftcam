@@ -16,6 +16,7 @@ import itertools
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from html import escape
 
 from . import hershey
 from .geometry import ArcSegment, LineSegment, Loop, Point, XYSegment
@@ -39,8 +40,10 @@ STYLE: str = (
     "</style>"
 )
 
-# The role of a dimension line's strokes (`Stroke.role`).
+# The roles of a dimension line's strokes and of text's
+# (`Stroke.role`).
 LINE: str = "line"
+TEXT: str = "text"
 
 # A dash's length, in text heights; the gaps are half a text height.
 DASH: float = 1.0
@@ -84,10 +87,14 @@ class Stroke:
       Whether it is dashed (a revolved outline's mirror half).
     * `role` (`str`):
       What it is, when that matters later (`LINE`: a dimension line,
-      which a hide strip ends with an S); "" otherwise.
+      which a hide strip ends with an S; `TEXT`: a letter's lines);
+      "" otherwise.
+    * `title` (`str`):
+      What a viewer shows when the pointer rests on it (#267); ""
+      for none.
 
     Constructor:
-    * `Stroke(segments, weight, filled, dashed, role)`
+    * `Stroke(segments, weight, filled, dashed, role, title)`
     """
 
     # Constructor arguments:
@@ -96,6 +103,7 @@ class Stroke:
     filled: bool = field(init=True, default=False)
     dashed: bool = field(init=True, default=False)
     role: str = field(init=True, default="")
+    title: str = field(init=True, default="")
 
 
 # Class `Sheet`:
@@ -203,7 +211,7 @@ def text(label: str, center: Point, height: float) -> list[Stroke]:
         center[1] - height / 2.0,
     )
     return [
-        polyline(line)
+        Stroke(polyline(line).segments, Weight.THIN, role=TEXT)
         for line in hershey.strokes(label, origin, height)
         if len(line) > 1
     ]
@@ -861,24 +869,81 @@ def svg(
     if themed:
         lines.insert(1, STYLE)
 
-    # One path per stroke, its width from its weight.
-    stroke: Stroke
-    for stroke in sheet.strokes:
-        share: float = THICK if stroke.weight is Weight.THICK else THIN
-        lines.append(
-            f'<path d="{_path(stroke)}"'
-            + (
-                f' class="ink solid" fill="{ink}"'
-                if stroke.filled
-                else ' class="ink" fill="none"'
+    # One path per stroke, its width from its weight; strokes with a
+    # title grouped under it, over an unseen box the pointer can rest
+    # on (#267).
+    title: str
+    group: list[Stroke]
+    for title, group in (
+        (key, list(run))
+        for key, run in itertools.groupby(sheet.strokes, _title)
+    ):
+        if title:
+            lines.extend(("<g>", f"<title>{escape(title)}</title>"))
+            lines.append(_hover_box(group, sheet.text_height))
+        stroke: Stroke
+        for stroke in group:
+            share: float = THICK if stroke.weight is Weight.THICK else THIN
+            lines.append(
+                f'<path d="{_path(stroke)}"'
+                + (
+                    f' class="ink solid" fill="{ink}"'
+                    if stroke.filled
+                    else ' class="ink" fill="none"'
+                )
+                + f' stroke="{ink}"'
+                + (f' stroke-dasharray="{dashes}"' if stroke.dashed else "")
+                + f' stroke-width="{_n(share * sheet.text_height)}"'
+                ' stroke-linecap="round" stroke-linejoin="round"/>'
             )
-            + f' stroke="{ink}"'
-            + (f' stroke-dasharray="{dashes}"' if stroke.dashed else "")
-            + f' stroke-width="{_n(share * sheet.text_height)}"'
-            ' stroke-linecap="round" stroke-linejoin="round"/>'
-        )
+        if title:
+            lines.append("</g>")
     lines.append("</svg>")
     return "\n".join(lines) + "\n"
+
+
+# Function `_title()`:
+def _title(stroke: Stroke) -> str:
+    """Return a stroke's title (the key its group is made by).
+
+    Arguments:
+    * `stroke` (`Stroke`): The stroke.
+
+    Returns:
+    * (`str`): Its title, "" for none.
+    """
+    # Only the title matters for grouping.
+    return stroke.title
+
+
+# Function `_hover_box()`:
+def _hover_box(strokes: list[Stroke], margin: float) -> str:
+    """Return an unseen box around some strokes, which the pointer
+    can rest on to show their group's title (#267).
+
+    Arguments:
+    * `strokes` (`list[Stroke]`): The titled strokes.
+    * `margin` (`float`): How far the box reaches past them.
+
+    Returns:
+    * (`str`): The SVG `<rect>`, Y negated.
+    """
+    # The strokes' ends, a margin around them.
+    points: list[Point] = [
+        end
+        for stroke in strokes
+        for segment in stroke.segments
+        for end in (segment.start, segment.end)
+    ]
+    low_x: float = min(x for x, _ in points) - margin
+    high_x: float = max(x for x, _ in points) + margin
+    low_y: float = min(y for _, y in points) - margin
+    high_y: float = max(y for _, y in points) + margin
+    return (
+        f'<rect x="{_n(low_x)}" y="{_n(-high_y)}"'
+        f' width="{_n(high_x - low_x)}" height="{_n(high_y - low_y)}"'
+        ' fill="none" pointer-events="all"/>'
+    )
 
 
 # Function `_path()`:

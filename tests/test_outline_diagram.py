@@ -4,8 +4,8 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from scraftcam.diagram import Sheet, Stroke, Weight, svg
-from scraftcam.geometry import ArcSegment, Point
+from scraftcam.diagram import TEXT, Sheet, Stroke, Weight, svg
+from scraftcam.geometry import ArcSegment, LineSegment, Point
 from scraftcam.gui import outline_diagram
 from scraftcam.gui.dimensions import (
     ANGLE,
@@ -16,6 +16,7 @@ from scraftcam.gui.dimensions import (
     VERTICAL,
     Y_AXIS,
     Dimension,
+    drawn_marks,
 )
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_diagram import outline_sheet
@@ -90,6 +91,32 @@ class TestOutlineDiagram(unittest.TestCase):
         assert isinstance(arc, ArcSegment)
         self.assertEqual(arc.center, (4.0, 0.0))
         self.assertGreater(arc.sweep, 0.0)
+
+    def test_angle_reach(self) -> None:
+        """An arc past an edge's end gets an extension line (#296)."""
+        strokes: list[Stroke] = drawn(
+            box(), Dimension("A", ANGLE, 0, 1, 3.0, 0.5, rays=(-1, 1))
+        )
+        lines: list[LineSegment] = [
+            segment
+            for stroke in strokes
+            for segment in stroke.segments
+            if isinstance(segment, LineSegment) and segment.start == (4.0, 2.0)
+        ]
+        self.assertEqual(len(lines), 1)
+        self.assertAlmostEqual(lines[0].end[0], 4.0)
+        self.assertAlmostEqual(lines[0].end[1], 3.25)
+        near: list[Stroke] = drawn(
+            box(), Dimension("A", ANGLE, 0, 1, 1.0, 0.5, rays=(-1, 1))
+        )
+        self.assertFalse(
+            any(
+                isinstance(segment, LineSegment)
+                and segment.start == (4.0, 2.0)
+                for stroke in near
+                for segment in stroke.segments
+            )
+        )
 
     def test_angle_from_axis(self) -> None:
         """An angle from the Y axis crosses at the origin."""
@@ -181,7 +208,8 @@ class TestOutlineDiagram(unittest.TestCase):
         sheet: Sheet = outline_sheet(outline, 0.5)
         mirror: list[Stroke] = [s for s in sheet.strokes if s.dashed]
         self.assertEqual(len(mirror), 3)
-        self.assertEqual(mirror[0].segments[0].end, (-2.0, 1.2))
+        corner: Point = outline.points[1]
+        self.assertEqual(mirror[0].segments[0].end, (-corner[0], corner[1]))
         self.assertIn("stroke-dasharray", svg(sheet))
 
     def test_text_sizes(self) -> None:
@@ -199,6 +227,85 @@ class TestOutlineDiagram(unittest.TestCase):
         self.assertLess(
             bigger[2].segments[0].end[0], plain[2].segments[0].end[0]
         )
+
+    def test_stale_corners(self) -> None:
+        """Corners saved before the values changed follow them (#299)."""
+        outline: Outline = Outline(
+            points=list(BOX),
+            letters=[Letter("W", default="1 in"), Letter("H", default="1 in")],
+            dimensions=drawn_marks(list(BOX))
+            + [
+                Dimension("W", HORIZONTAL, ORIGIN, 1),
+                Dimension("H", VERTICAL, ORIGIN, 2),
+            ],
+        )
+        corner: Point = outline_sheet(outline, 0.5).strokes[0].segments[1].end
+        self.assertAlmostEqual(corner[0], corner[1])
+        self.assertEqual(outline.points, BOX)
+
+    def test_titles(self) -> None:
+        """A letter's text carries its name, value and help (#267)."""
+        letter: Letter = Letter("W", "Width", "1 in", "Across the box.")
+        self.assertEqual(
+            outline_diagram.letter_title(letter),
+            "W: Width = 1 in.  Across the box.",
+        )
+        self.assertEqual(outline_diagram.letter_title(Letter("H")), "H = 1 in")
+        outline: Outline = box()
+        outline.letters.append(letter)
+        strokes: list[Stroke] = drawn(
+            outline, Dimension("W", HORIZONTAL, ORIGIN, 1)
+        )
+        titled: list[Stroke] = [stroke for stroke in strokes if stroke.title]
+        self.assertTrue(titled)
+        self.assertTrue(all(stroke.role == TEXT for stroke in titled))
+        page: ET.Element = ET.fromstring(svg(outline_sheet(outline)))
+        found: list[str] = [
+            element.text or ""
+            for element in page.iter("{http://www.w3.org/2000/svg}title")
+        ]
+        self.assertEqual(found, ["W: Width = 1 in.  Across the box."])
+
+    def test_turned(self) -> None:
+        """A turned diagram lies on its side, letters upright (#300)."""
+        outline: Outline = box()
+        outline.letters.append(Letter("W", default="1 in"))
+        outline.dimensions.append(Dimension("W", HORIZONTAL, ORIGIN, 1))
+        flat: Sheet = outline_sheet(outline, 0.5)
+        outline.turns = 4
+        self.assertEqual(outline_sheet(outline, 0.5), flat)
+        outline.turns = 1
+        turned: Sheet = outline_sheet(outline, 0.5)
+
+        # The 4 x 2 box is 2 wide and 4 tall: +Y went to +X.
+        corners: list[Point] = [
+            segment.end for segment in turned.strokes[0].segments
+        ]
+        self.assertAlmostEqual(corners[0][0], 0.0)
+        self.assertAlmostEqual(corners[0][1], -4.0)
+        self.assertAlmostEqual(corners[1][0], 2.0)
+        self.assertAlmostEqual(corners[1][1], -4.0)
+
+        # The letter keeps its shape, moved with the drawing.
+        def letter(sheet: Sheet) -> list[Stroke]:
+            return [stroke for stroke in sheet.strokes if stroke.role == TEXT]
+
+        before: list[Stroke] = letter(flat)
+        after: list[Stroke] = letter(turned)
+        self.assertEqual(len(before), len(after))
+        shift: tuple[float, float] = (
+            after[0].segments[0].start[0] - before[0].segments[0].start[0],
+            after[0].segments[0].start[1] - before[0].segments[0].start[1],
+        )
+        old: Point
+        new: Point
+        for old, new in zip(
+            (seg.end for stroke in before for seg in stroke.segments),
+            (seg.end for stroke in after for seg in stroke.segments),
+            strict=True,
+        ):
+            self.assertAlmostEqual(new[0] - old[0], shift[0])
+            self.assertAlmostEqual(new[1] - old[1], shift[1])
 
     def test_drill(self) -> None:
         """The example drill draws and writes good SVG."""

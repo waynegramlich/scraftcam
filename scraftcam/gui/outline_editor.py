@@ -60,9 +60,7 @@ from PySide6.QtGui import (  # noqa: E402
     QPainterPath,
     QPainterPathStroker,
     QPen,
-    QPolygonF,
     QShortcut,
-    QTransform,
     QWheelEvent,
 )
 from PySide6.QtSvgWidgets import QSvgWidget  # noqa: E402
@@ -93,7 +91,8 @@ from PySide6.QtWidgets import (  # noqa: E402
     QWidget,
 )
 
-from ..diagram import svg  # noqa: E402
+from ..diagram import TEXT, Stroke, svg  # noqa: E402
+from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
 from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
@@ -133,7 +132,14 @@ from .letters import (  # noqa: E402
     use_problem,
     value_problem,
 )
-from .outline_diagram import outline_sheet  # noqa: E402
+from .outline_diagram import (  # noqa: E402
+    Fillet,
+    dimension_strokes,
+    fillet_arcs,
+    outline_sheet,
+    outline_strokes,
+)
+from .outline_diagram import edge_arc as shared_arc  # noqa: E402
 from .outline_file import (  # noqa: E402
     Outline,
     OutlineError,
@@ -141,11 +147,9 @@ from .outline_file import (  # noqa: E402
     outline_text,
 )
 from .values import (  # noqa: E402
-    crosses,
     crossings,
     fillet_problems,
-    letter_values,
-    real_coordinates,
+    placed_corners,
 )
 from .window import make_application  # noqa: E402
 
@@ -156,17 +160,10 @@ from .window import make_application  # noqa: E402
 # between minor grid lines.
 SQUARE_PIXELS: float = 9.0
 
-# A mark's glyph (#233): its box's side, and how far its middle sits
-# out from its edge's middle or its corner (pixels).
-MARK_PIXELS: float = 14.0
-MARK_GAP_PIXELS: float = 16.0
-
 # A lit corner's square (#199) is this much bigger.
 LIT_SCALE: float = 1.8
 ARROW_PIXELS: float = 9.0
 
-# A fillet is drawn with this share of its shorter edge as radius.
-FILLET_SHARE: float = 0.2
 
 # How many straight pieces draw an angle's arc.
 ARC_STEPS: int = 48
@@ -211,9 +208,17 @@ COLUMNS: tuple[tuple[str, str], ...] = (
 
 # A dimension's extension lines run this far past its line, and its
 # letter sits this far from it (pixels); the letters' size (points).
-OVERSHOOT_PIXELS: float = 4.0
 LETTER_GAP_PIXELS: float = 4.0
 LETTER_POINTS: int = 11
+
+# The text height of dimensions and marks drawn through `diagram.py`
+# (#S4): their letters, arrowheads that long and marks' boxes, at any
+# zoom (#311).
+TEXT_PIXELS: float = 14.0
+
+# Letters' lines are this wide (pixels), a little bolder than the thin
+# lines (#316; to be tuned by eye).
+TEXT_PEN_PIXELS: float = 1.5
 
 # An edge handle's size, smaller than a corner's circle (#235), and
 # the least length on screen of an edge that shows one (pixels).
@@ -330,12 +335,15 @@ class Drawing(Outline):
     * `note_radius` (`str`): The letter of every fillet without a
       radius of its own (#116), "" before the first fillet.
     * `hides` (`list[Hide]`): The hide strips (#157).
+    * `text_height` (`float`): The diagram's letter height; 0 picks
+      one (#280).
+    * `turns` (`int`): Quarter turns clockwise it is shown (#300).
     * `scale` (`float`): Drawing steps per millimeter, once the
       drawing follows the values (#148); 0 before.
 
     Constructor:
     * `Drawing(points, letters, dimensions, revolve, note_radius,
-      hides)`
+      hides, text_height, turns)`
     """
 
     # Remaining attributes (alphabetized):
@@ -684,85 +692,120 @@ class OutlineItem(QGraphicsItem):
         _option: QStyleOptionGraphicsItem,
         _widget: QWidget | None = None,
     ) -> None:
-        """Draw the edges, then an arrowhead at the end of each."""
+        """Draw the outline's strokes (`outline_strokes()`, the SVG's
+        own, #S4) with pens of fixed pixel widths (#302), then the
+        editing aids: crossings and an arrowhead along each edge (a
+        fillet's dashes to its sharp corner are its own, #117)."""
         # Pens are cosmetic: their widths are pixels at any zoom.
         ink: QColor = QColor(theme.colors().ink)
         pen: QPen = QPen(ink, THICK_PIXELS)
         pen.setCosmetic(True)
-        painter.setPen(pen)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        fillets: dict[int, Fillet] = fillet_arcs(
+            self.drawing, self.drawing.scale
+        )
+        strokes: list[Stroke] = outline_strokes(self.drawing, fillets)
+        painter.setPen(pen)
+        painter.drawPath(stroke_path(strokes[0]))
+
+        # Revolved: the mirror half, faint and dashed.
+        ghost: QPen = QPen(QColor(theme.colors().quiet), THIN_PIXELS)
+        ghost.setCosmetic(True)
+        ghost.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(ghost)
+        stroke: Stroke
+        for stroke in strokes[1:]:
+            painter.drawPath(stroke_path(stroke))
+
         corners: list[QPointF] = [
             QPointF(x, y) for x, y in self.drawing.points
         ]
-        rounded: list[tuple[QPointF, QPointF]] = fillet_ends(self.drawing)
-        painter.drawPath(rounded_path(self.drawing, rounded))
-
-        # Each rounded corner's edges carried on, thin and dashed, to
-        # the sharp corner the dimensions measure to (#117).
-        dashed: QPen = QPen(ink, THIN_PIXELS)
-        dashed.setCosmetic(True)
-        dashed.setStyle(Qt.PenStyle.DashLine)
-        painter.setPen(dashed)
-        corner: int
-        start: QPointF
-        end: QPointF
-        for corner, (start, end) in enumerate(rounded):
-            if start != end:
-                painter.drawLine(start, corners[corner])
-                painter.drawLine(corners[corner], end)
-        painter.setPen(pen)
-
         self.paint_crossings(painter, corners)
-        painter.setPen(pen)
-
-        # Revolved: the other half, mirrored, faint and dashed.
-        if self.drawing.revolve:
-            ghost: QPen = QPen(QColor(theme.colors().quiet), THIN_PIXELS)
-            ghost.setCosmetic(True)
-            ghost.setStyle(Qt.PenStyle.DashLine)
-            painter.setPen(ghost)
-            painter.drawPolygon(
-                QPolygonF([QPointF(-x, y) for x, y in self.drawing.points])
-            )
-            painter.setPen(pen)
 
         # Each arrowhead is `ARROW_PIXELS` long on screen, pointing
-        # along its edge into the corner it ends at.
+        # along its edge to where it ends.
+        painter.setPen(pen)
         scale: float = painter.worldTransform().m11()
         length: float = ARROW_PIXELS / max(abs(scale), 1e-12)
         painter.setBrush(ink)
-        index: int
-        for index in range(len(corners)):
-            # From where the last corner's fillet ends to where this
-            # one's begins (the corners themselves, when sharp).
-            painter.drawPath(
-                arrowhead(rounded[index - 1][1], rounded[index][0], length)
-            )
+        segment: XYSegment
+        for segment in strokes[0].segments:
+            if isinstance(segment, LineSegment):
+                painter.drawPath(
+                    arrowhead(
+                        QPointF(*segment.start), QPointF(*segment.end), length
+                    )
+                )
 
 
-# Function `first_scale()`:
-def first_scale(
-    points: list[tuple[float, float]],
-    real: tuple[dict[int, float], dict[int, float]],
-) -> float:
-    """Return drawing steps per millimeter, chosen once (#148): the
-    middle of the drawn-to-real ratios of the fixed coordinates.
+# Function `svg_path()`:
+def svg_path(path: Path) -> Path:
+    """Return where an outline file's diagram is written (#248):
+    beside it, `NAME.outline.svg` for `NAME.outline.toml`.
 
     Arguments:
-    * `points` (`list[tuple[float, float]]`): The corners as drawn.
-    * `real` (`tuple[dict[int, float], dict[int, float]]`): The fixed
-      coordinates' real values (mm).
+    * `path` (`Path`): The outline file.
 
     Returns:
-    * (`float`): The scale; 0 when nothing says.
+    * (`Path`): Its `.svg`, which follows the viewer's theme.
     """
-    ratios: list[float] = sorted(
-        points[corner][axis] / value
-        for axis in (0, 1)
-        for corner, value in real[axis].items()
-        if abs(value) > 1e-9 and points[corner][axis] / value > 0.0
-    )
-    return ratios[len(ratios) // 2] if ratios else 0.0
+    # The same name, its last suffix `.svg`.
+    return path.with_suffix(".svg")
+
+
+# Function `stroke_box()`:
+def stroke_box(strokes: list[Stroke], margin: float) -> QRectF:
+    """Return a box around some strokes' paths, grown by a margin.
+
+    Arguments:
+    * `strokes` (`list[Stroke]`): The strokes.
+    * `margin` (`float`): How far past them (drawing steps).
+
+    Returns:
+    * (`QRectF`): The box; empty for no strokes.
+    """
+    # Each stroke's path box, joined.
+    box: QRectF = QRectF()
+    stroke: Stroke
+    for stroke in strokes:
+        box = box.united(stroke_path(stroke).boundingRect())
+    if box.isNull():
+        return box
+    return box.adjusted(-margin, -margin, margin, margin)
+
+
+# Function `stroke_path()`:
+def stroke_path(stroke: Stroke) -> QPainterPath:
+    """Return a stroke's segments as a Qt path, each arc in
+    `ARC_STEPS` straight pieces.
+
+    Arguments:
+    * `stroke` (`Stroke`): Lines and arcs, in drawing steps.
+
+    Returns:
+    * (`QPainterPath`): The path, closed when the stroke is.
+    """
+    # Each segment from where the last one ended (or a jump to it).
+    path: QPainterPath = QPainterPath()
+    segment: XYSegment
+    for segment in stroke.segments:
+        if path.isEmpty() or path.currentPosition() != QPointF(*segment.start):
+            path.moveTo(*segment.start)
+        if isinstance(segment, ArcSegment):
+            first: float = math.atan2(
+                segment.start[1] - segment.center[1],
+                segment.start[0] - segment.center[0],
+            )
+            step: int
+            for step in range(1, ARC_STEPS + 1):
+                angle: float = first + segment.sweep * step / ARC_STEPS
+                path.lineTo(
+                    segment.center[0] + segment.radius * math.cos(angle),
+                    segment.center[1] + segment.radius * math.sin(angle),
+                )
+        else:
+            path.lineTo(*segment.end)
+    return path
 
 
 # Function `shift_at()`:
@@ -784,227 +827,6 @@ def shift_at(pieces: list[tuple[float, float, float]], at: float) -> float:
         if low <= at <= high:
             return shift
     return 0.0
-
-
-# Function `fillet_radii()`:
-def fillet_radii(drawing: Drawing) -> dict[int, float]:
-    """Return each rounded corner's radius as drawn: its letter's value
-    to scale once the drawing has one (#142.3), else a share of its
-    edges (`drawn_radius()`).
-
-    Arguments:
-    * `drawing` (`Drawing`): The outline.
-
-    Returns:
-    * (`dict[int, float]`): Radius by corner.
-    """
-    values: dict[str, float] = letter_values(drawing.letters)
-    radii: dict[int, float] = {}
-    dimension: Dimension
-    for dimension in drawing.dimensions:
-        if dimension.kind != RADIUS:
-            continue
-        value: float = values.get(dimension.letter, 0.0)
-        radii[dimension.start] = (
-            value * drawing.scale
-            if drawing.scale > 0.0 and value > 0.0
-            else drawn_radius(drawing.points, dimension.start)
-        )
-    return radii
-
-
-# Function `drawn_radius()`:
-def drawn_radius(points: list[tuple[float, float]], corner: int) -> float:
-    """Return a fillet's radius as drawn: a fifth of its shorter edge,
-    following the corners (#121); its real size is its letter's.
-
-    Arguments:
-    * `points` (`list[tuple[float, float]]`): The corners.
-    * `corner` (`int`): The rounded corner.
-
-    Returns:
-    * (`float`): The radius, in drawing steps.
-    """
-    here: tuple[float, float] = points[corner]
-    return FILLET_SHARE * min(
-        math.dist(here, points[corner - 1]),
-        math.dist(here, points[(corner + 1) % len(points)]),
-    )
-
-
-# Function `fillet_ends()`:
-def fillet_ends(drawing: Drawing) -> list[tuple[QPointF, QPointF]]:
-    """Return where each corner's fillet meets its two edges: on the
-    edge in and the edge out (the corner twice, when sharp).  A
-    radius too big for its edges is drawn as big as fits (chunk 3
-    marks it).
-
-    Arguments:
-    * `drawing` (`Drawing`): The outline.
-
-    Returns:
-    * (`list[tuple[QPointF, QPointF]]`): By corner.
-    """
-    radii: dict[int, float] = fillet_radii(drawing)
-    points: list[tuple[float, float]] = drawing.points
-    ends: list[tuple[QPointF, QPointF]] = []
-    corner: int
-    for corner, here in enumerate(points):
-        at: QPointF = QPointF(*here)
-        back: QPointF = QPointF(*points[corner - 1]) - at
-        ahead: QPointF = QPointF(*points[(corner + 1) % len(points)]) - at
-        reach: float = _tangent_reach(back, ahead, radii.get(corner, 0.0))
-        ends.append(
-            (
-                at + back * (reach / max(_size(back), 1e-12)),
-                at + ahead * (reach / max(_size(ahead), 1e-12)),
-            )
-        )
-    return ends
-
-
-# Function `fillet_middle()`:
-def fillet_middle(
-    drawing: Drawing, corner: int
-) -> tuple[QPointF, QPointF] | None:
-    """Return the middle of a fillet's arc, and the way out from its
-    center there (for its letter, #126).
-
-    Arguments:
-    * `drawing` (`Drawing`): The outline.
-    * `corner` (`int`): The rounded corner.
-
-    Returns:
-    * (`tuple[QPointF, QPointF] | None`): The point and a unit
-      vector; `None` when the corner is not rounded.
-    """
-    start: QPointF
-    end: QPointF
-    start, end = fillet_ends(drawing)[corner]
-    at: QPointF = QPointF(*drawing.points[corner])
-    if start == end:
-        return None
-    center: QPointF | None = _fillet_center(at, start, end)
-    if center is None:
-        return None
-    out: QPointF = at - center
-    out /= max(_size(out), 1e-12)
-    return center + out * _size(start - center), out
-
-
-# Function `_fillet_center()`:
-def _fillet_center(
-    at: QPointF, start: QPointF, end: QPointF
-) -> QPointF | None:
-    """Return a fillet's center: on the bisector, square to each edge
-    at its tangent point.
-
-    Arguments:
-    * `at` (`QPointF`): The sharp corner.
-    * `start` (`QPointF`): Where the arc leaves the edge in.
-    * `end` (`QPointF`): Where it meets the edge out.
-
-    Returns:
-    * (`QPointF | None`): The center; `None` for a straight corner.
-    """
-    bisector: QPointF = (start + end) / 2.0 - at
-    toward: QPointF = start - at
-    along: float = QPointF.dotProduct(bisector, toward)
-    if along == 0.0:
-        return None
-    return at + bisector * (QPointF.dotProduct(toward, toward) / along)
-
-
-# Function `rounded_path()`:
-def rounded_path(
-    drawing: Drawing, ends: list[tuple[QPointF, QPointF]]
-) -> QPainterPath:
-    """Return the closed outline, each fillet an arc tangent to its
-    edges.
-
-    Arguments:
-    * `drawing` (`Drawing`): The outline.
-    * `ends` (`list[tuple[QPointF, QPointF]]`): From `fillet_ends()`.
-
-    Returns:
-    * (`QPainterPath`): The outline.
-    """
-    path: QPainterPath = QPainterPath()
-    path.moveTo(ends[0][1])
-    corner: int
-    for corner in [*range(1, len(ends)), 0]:
-        path.lineTo(ends[corner][0])
-        if ends[corner][0] != ends[corner][1]:
-            _arc_to(path, QPointF(*drawing.points[corner]), *ends[corner])
-    path.closeSubpath()
-    return path
-
-
-# Function `_arc_to()`:
-def _arc_to(
-    path: QPainterPath, at: QPointF, start: QPointF, end: QPointF
-) -> None:
-    """Draw a fillet's arc from one tangent point to the other.
-
-    Arguments:
-    * `path` (`QPainterPath`): The outline so far, at `start`.
-    * `at` (`QPointF`): The sharp corner.
-    * `start` (`QPointF`): Where the arc leaves the edge in.
-    * `end` (`QPointF`): Where it meets the edge out.
-    """
-    center: QPointF | None = _fillet_center(at, start, end)
-    if center is None:
-        path.lineTo(end)
-        return
-    radius: float = _size(start - center)
-    first: float = math.atan2(start.y() - center.y(), start.x() - center.x())
-    turn: float = (
-        math.atan2(end.y() - center.y(), end.x() - center.x())
-        - first
-        + math.pi
-    ) % (2.0 * math.pi) - math.pi
-    step: int
-    for step in range(1, ARC_STEPS + 1):
-        angle: float = first + turn * step / ARC_STEPS
-        path.lineTo(
-            center + QPointF(math.cos(angle), math.sin(angle)) * radius
-        )
-
-
-# Function `_tangent_reach()`:
-def _tangent_reach(back: QPointF, ahead: QPointF, radius: float) -> float:
-    """Return how far from a corner a fillet meets its edges.
-
-    Arguments:
-    * `back` (`QPointF`): Toward the corner before.
-    * `ahead` (`QPointF`): Toward the corner after.
-    * `radius` (`float`): The fillet's radius (0 for none).
-
-    Returns:
-    * (`float`): The distance, at most each edge's length.
-    """
-    if radius <= 0.0:
-        return 0.0
-    cosine: float = QPointF.dotProduct(back, ahead) / max(
-        _size(back) * _size(ahead), 1e-24
-    )
-    half: float = math.acos(max(-1.0, min(1.0, cosine))) / 2.0
-    if half <= 1e-9 or half >= math.pi / 2.0 - 1e-9:
-        return 0.0
-    return min(radius / math.tan(half), _size(back), _size(ahead))
-
-
-# Function `_size()`:
-def _size(way: QPointF) -> float:
-    """Return a vector's length.
-
-    Arguments:
-    * `way` (`QPointF`): The vector.
-
-    Returns:
-    * (`float`): Its length.
-    """
-    return math.hypot(way.x(), way.y())
 
 
 # Function `arrowhead()`:
@@ -1050,17 +872,10 @@ def crossing(
     Returns:
     * (`QPointF | None`): The crossing; `None` for parallel edges.
     """
-    a0: QPointF = edge_start(points, first)
-    da: QPointF = edge_way(points, first)
-    b0: QPointF = edge_start(points, second)
-    db: QPointF = edge_way(points, second)
-    cross: float = da.x() * db.y() - da.y() * db.x()
-    if abs(cross) <= PARALLEL * max(
-        math.hypot(da.x(), da.y()) * math.hypot(db.x(), db.y()), 1e-300
-    ):
-        return None
-    gap: QPointF = b0 - a0
-    return a0 + da * ((gap.x() * db.y() - gap.y() * db.x()) / cross)
+    arc: tuple[tuple[float, float], float, float] | None = shared_arc(
+        points, first, second, (1, 1)
+    )
+    return None if arc is None else QPointF(*arc[0])
 
 
 # Function `edge_start()`:
@@ -1142,7 +957,8 @@ def edge_arc(
     rays: tuple[int, int],
 ) -> tuple[QPointF, float, float] | None:
     """Return an angle's arc: where two edges' lines cross, and the
-    turn counterclockwise from the first ray to the second.
+    turn counterclockwise from the first ray to the second
+    (`outline_diagram.edge_arc()`, as the SVG draws it, #295).
 
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners.
@@ -1156,12 +972,10 @@ def edge_arc(
       ray's direction and the turn to the second ray (degrees, 0 to
       360, counterclockwise); `None` for parallel edges.
     """
-    center: QPointF | None = crossing(points, first, second)
-    if center is None:
-        return None
-    start: float = direction(edge_way(points, first) * rays[0])
-    turn: float = direction(edge_way(points, second) * rays[1]) - start
-    return center, start, turn % 360.0
+    arc: tuple[tuple[float, float], float, float] | None = shared_arc(
+        points, first, second, rays
+    )
+    return None if arc is None else (QPointF(*arc[0]), arc[1], arc[2])
 
 
 # Function `angle_arc()`:
@@ -1180,19 +994,6 @@ def angle_arc(
     return edge_arc(points, dimension.start, dimension.end, dimension.rays)
 
 
-# Function `direction()`:
-def direction(way: QPointF) -> float:
-    """Return a direction's angle from +X, in degrees.
-
-    Arguments:
-    * `way` (`QPointF`): The direction.
-
-    Returns:
-    * (`float`): Counterclockwise positive, -180 to 180.
-    """
-    return math.degrees(math.atan2(way.y(), way.x()))
-
-
 # Function `left_of()`:
 def left_of(way: QPointF) -> QPointF:
     """Return the unit vector a quarter turn counterclockwise from a
@@ -1208,11 +1009,6 @@ def left_of(way: QPointF) -> QPointF:
     if length == 0.0:
         return QPointF(0.0, 0.0)
     return QPointF(-way.y() / length, way.x() / length)
-
-
-# Two edges closer to parallel than this (the sine of the angle
-# between them) have no angle (#40).
-PARALLEL: float = 1e-6
 
 
 # Class `EdgeHandle`:
@@ -1493,6 +1289,8 @@ class DimensionHandle(QGraphicsEllipseItem):
     * `editor` (`OutlineView`): The view it is drawn in.
     * `index` (`int`): Its dimension's index in the drawing.
     * `before` (`Snapshot | None`): The drawing when a drag began.
+    * `grab` (`QPointF`): Where it sits from its letter's point (the
+      line's `at()`) when a drag began, so the letter does not jump.
     """
 
     # Method `DimensionHandle.__init__()`:
@@ -1508,31 +1306,33 @@ class DimensionHandle(QGraphicsEllipseItem):
         self.editor: OutlineView = editor
         self.index: int = index
         self.before: Snapshot | None = None
+        self.grab: QPointF = QPointF()
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
         self.setZValue(1.5)
 
     # Method `DimensionHandle.place()`:
     def place(self) -> None:
-        """Sit on the line, where the letter is (hidden for a fillet,
-        for now)."""
+        """Sit just off its letter's upper right corner (#315; hidden
+        for a fillet, for now)."""
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
         lined: bool = dimension.kind != RADIUS and not is_mark(dimension)
         self.setVisible(lined)
         if lined:
-            self.setPos(self.editor.measures[self.index].at())
+            self.setPos(self.editor.measures[self.index].handle_spot())
 
     # Method `DimensionHandle.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         """Select the dimension; get ready to move it."""
         self.editor.select_dimension(self.index)
         self.before = self.editor.drawing.snapshot()
+        self.grab = self.pos() - self.editor.measures[self.index].at()
         event.accept()
 
     # Method `DimensionHandle.mouseMoveEvent()`:
     def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         """Move the letter along the line, and the line across."""
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        where: QPointF = event.scenePos()
+        where: QPointF = event.scenePos() - self.grab
         free: bool = not self.editor.snap_on or bool(
             event.modifiers() & Qt.KeyboardModifier.ShiftModifier
         )
@@ -1670,154 +1470,29 @@ class DimensionItem(QGraphicsItem):
         if self.editor.drawing.dimensions[self.index].kind == RADIUS:
             return path  # Drawn as its outline's arc (#116).
         if is_mark(self.editor.drawing.dimensions[self.index]):
-            path.addRect(self.mark_box())  # Its glyph's box (#233).
+            path.addRect(stroke_box(self.strokes(), 0.0))  # (#233)
             return path
-        if self.editor.drawing.dimensions[self.index].kind == ANGLE:
-            path = self.arc_path()
-        else:
-            start: QPointF
-            end: QPointF
-            _, _, start, end = self.ends()
-            path.moveTo(start)
-            path.lineTo(end)
+        # A band along each line drawn, and its letter's box (#305).
+        strokes: list[Stroke] = self.strokes()
+        stroke: Stroke
+        for stroke in strokes:
+            if not stroke.filled and stroke.role != TEXT:
+                path.addPath(stroke_path(stroke))
         stroker: QPainterPathStroker = QPainterPathStroker()
         stroker.setWidth(SQUARE_PIXELS / max(self.editor.zoom(), 1e-12))
-        return stroker.createStroke(path)
+        band: QPainterPath = stroker.createStroke(path)
+        letter: QRectF = stroke_box(
+            [stroke for stroke in strokes if stroke.role == TEXT], 0.0
+        )
+        if not letter.isNull():
+            band.addRect(letter)
+        return band
 
     # Method `DimensionItem.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         """Select the dimension (its circle moves it, #64)."""
         self.editor.select_dimension(self.index)
         event.accept()
-
-    # Method `DimensionItem.mark_spot()`:
-    def mark_spot(self) -> QPointF:
-        """Return where a mark's glyph sits: out from its edge's middle
-        (#233), or from its corner for one on an axis, away from the
-        outline's middle, `MARK_GAP_PIXELS` on screen.
-
-        Returns:
-        * (`QPointF`): The glyph's middle, in drawing steps.
-        """
-        dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        points: list[tuple[float, float]] = self.editor.drawing.points
-        middle: QPointF = QPointF(
-            sum(x for x, _ in points) / len(points),
-            sum(y for _, y in points) / len(points),
-        )
-        if dimension.kind == ANGLE:
-            return self.right_box()[0]
-        edge: int = mark_edge(dimension, len(points))
-        here: QPointF
-        out: QPointF
-        if edge >= 0:
-            start: QPointF = QPointF(*points[edge])
-            end: QPointF = QPointF(*points[(edge + 1) % len(points)])
-            here = (start + end) / 2.0
-            out = QPointF(start.y() - end.y(), end.x() - start.x())
-            if QPointF.dotProduct(out, here - middle) < 0.0:
-                out = -out
-        else:
-            corner: int = max(dimension.start, dimension.end)
-            here = QPointF(*points[corner])
-            out = here - middle
-        size: float = math.hypot(out.x(), out.y())
-        if size <= 0.0:
-            out, size = QPointF(1.0, 1.0), math.sqrt(2.0)
-        gap: float = MARK_GAP_PIXELS / max(self.editor.zoom(), 1e-12)
-        return here + out * (gap / size)
-
-    # Method `DimensionItem.right_box()`:
-    def right_box(self) -> tuple[QPointF, QPointF, QPointF, QPointF]:
-        """Return a right angle's square (#236), tucked into its
-        corner's sector along its two edges, `MARK_PIXELS` on screen.
-
-        Returns:
-        * (`tuple[QPointF, QPointF, QPointF, QPointF]`): Its middle,
-          then its three outer corners, the one on the first edge, the
-          far one, the one on the second edge (drawing steps).
-        """
-        dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        points: list[tuple[float, float]] = self.editor.drawing.points
-        count: int = len(points)
-        # The corner the two edges share: one edge ends where the other
-        # leaves.
-        corner: int = (
-            dimension.end
-            if (dimension.start + 1) % count == dimension.end
-            else dimension.start
-        )
-        here: QPointF = QPointF(*points[corner])
-        side: float = MARK_PIXELS / max(self.editor.zoom(), 1e-12)
-        ways: list[QPointF] = []
-        other: int
-        for other in ((corner - 1) % count, (corner + 1) % count):
-            way: QPointF = QPointF(*points[other]) - here
-            size: float = max(math.hypot(way.x(), way.y()), 1e-12)
-            ways.append(way * (side / size))
-        return (
-            here + (ways[0] + ways[1]) / 2.0,
-            here + ways[0],
-            here + ways[0] + ways[1],
-            here + ways[1],
-        )
-
-    # Method `DimensionItem.mark_box()`:
-    def mark_box(self) -> QRectF:
-        """Return a mark's glyph box, `MARK_PIXELS` on screen.
-
-        Returns:
-        * (`QRectF`): The box, in drawing steps.
-        """
-        side: float = MARK_PIXELS / max(self.editor.zoom(), 1e-12)
-        box: QRectF = QRectF(0.0, 0.0, side, side)
-        box.moveCenter(self.mark_spot())
-        return box
-
-    # Method `DimensionItem.paint_mark()`:
-    def paint_mark(self, painter: QPainter) -> None:
-        """Draw a mark (#233): a small box holding `—` for a level one
-        (or a corner on the X axis), `|` for an upright one (or on the
-        Y axis); red when one too many, as any dimension.
-
-        Arguments:
-        * `painter` (`QPainter`): What draws, its pen set.
-        """
-        dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        world: QTransform = painter.worldTransform()
-        if dimension.kind == ANGLE:
-            # The right angle's square: its two outer sides (#236).
-            square: tuple[QPointF, QPointF, QPointF, QPointF] = (
-                self.right_box()
-            )
-            painter.save()
-            painter.resetTransform()
-            painter.drawPolyline(
-                QPolygonF([world.map(point) for point in square[1:]])
-            )
-            painter.restore()
-            return
-        box: QRectF = world.mapRect(self.mark_box())
-        painter.save()
-        painter.resetTransform()
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(box)
-        stroke: QPen = QPen(painter.pen())
-        stroke.setWidthF(2.0)
-        painter.setPen(stroke)
-        inset: float = box.width() * 0.25
-        middle: QPointF = box.center()
-        if dimension.kind == VERTICAL:  # Level: the same Y.
-            painter.drawLine(
-                QPointF(box.left() + inset, middle.y()),
-                QPointF(box.right() - inset, middle.y()),
-            )
-        else:
-            painter.drawLine(
-                QPointF(middle.x(), box.top() + inset),
-                QPointF(middle.x(), box.bottom() - inset),
-            )
-        painter.restore()
 
     # Method `DimensionItem.at()`:
     def at(self) -> QPointF:
@@ -1837,55 +1512,26 @@ class DimensionItem(QGraphicsItem):
         # already gone (an undo).
         if self.index >= len(self.editor.drawing.dimensions):
             return QRectF()
-        if is_mark(self.editor.drawing.dimensions[self.index]):
-            box: QRectF = self.mark_box()
-            grow: float = 2.0 / max(self.editor.zoom(), 1e-12)
-            return box.adjusted(-grow, -grow, grow, grow)
-        if self.editor.drawing.dimensions[self.index].kind == RADIUS:
-            # Room around its arc's middle for its letter.
-            middle: tuple[QPointF, QPointF] | None = fillet_middle(
-                self.editor.drawing,
-                self.editor.drawing.dimensions[self.index].start,
-            )
-            if middle is None:
-                return QRectF()
-            room: float = 60.0 / max(self.editor.zoom(), 1e-12)
-            return QRectF(
-                middle[0].x() - room, middle[0].y() - room, 2 * room, 2 * room
-            )
         margin: float = 40.0 / max(self.editor.zoom(), 1e-12)
-        if self.editor.drawing.dimensions[self.index].kind == ANGLE:
-            # Its arc, and the extension lines out to it.
-            return (
-                self.arc_path()
-                .boundingRect()
-                .united(self.reach_path().boundingRect())
-                .adjusted(-margin, -margin, margin, margin)
-            )
-        corners: tuple[QPointF, QPointF, QPointF, QPointF] = self.ends()
-        xs: list[float] = [corner.x() for corner in corners]
-        ys: list[float] = [corner.y() for corner in corners]
-        return QRectF(
-            min(xs) - margin,
-            min(ys) - margin,
-            max(xs) - min(xs) + 2.0 * margin,
-            max(ys) - min(ys) + 2.0 * margin,
-        )
+        return stroke_box(self.strokes(), margin)
 
     # Method `DimensionItem.pen()`:
     def pen(self) -> QPen:
         """Return the pen it is drawn with: thin, red when one too
-        many; selected, colored and thicker, not told by color alone
-        (#131).
+        many or a fillet too big for its edges; selected, colored and
+        thicker, not told by color alone (#131).
 
         Returns:
         * (`QPen`): A cosmetic pen.
         """
         # One too many, or a mark the drawing breaks (#241).
-        extra: bool = self.index in self.editor.solution.extra or (
-            mark_broken(
-                self.editor.drawing.points,
-                self.editor.drawing.dimensions[self.index],
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        extra: bool = (
+            self.index in self.editor.solution.extra
+            or mark_broken(self.editor.drawing.points, dimension)
+            or (
+                dimension.kind == RADIUS
+                and dimension.start in self.editor.trouble
             )
         )
         ink: QColor = QColor(
@@ -1909,47 +1555,70 @@ class DimensionItem(QGraphicsItem):
         _option: QStyleOptionGraphicsItem,
         _widget: QWidget | None = None,
     ) -> None:
-        """Draw the extension lines, the line, its arrows and letter."""
+        """Draw its shared strokes (#S4): dimensions, marks and
+        fillets alike."""
         pen: QPen = self.pen()
         painter.setPen(pen)
         painter.setBrush(pen.color())
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        scale: float = max(abs(painter.worldTransform().m11()), 1e-12)
-        if self.editor.drawing.dimensions[self.index].kind == RADIUS:
-            self.paint_radius(painter)
-            return
-        if is_mark(self.editor.drawing.dimensions[self.index]):
-            self.paint_mark(painter)
-            return
-        if self.editor.drawing.dimensions[self.index].kind == ANGLE:
-            self.paint_angle(painter, scale)
-            return
-        first: QPointF
-        second: QPointF
-        start: QPointF
-        end: QPointF
-        first, second, start, end = self.ends()
+        self.paint_strokes(painter)
 
-        # Each extension line runs from its point a little past the
-        # dimension line.
-        point: QPointF
-        foot: QPointF
-        for point, foot in ((first, start), (second, end)):
-            past: QPointF = foot - point
-            length: float = (past.x() ** 2 + past.y() ** 2) ** 0.5
-            if length > 0.0:
-                past = past * (OVERSHOOT_PIXELS / scale / length)
-            painter.drawLine(point, foot + past)
+    # Method `DimensionItem.handle_spot()`:
+    def handle_spot(self) -> QPointF:
+        """Return where its circle sits (#315): just off its letter's
+        upper right corner (Y is up), clear of the letter.
 
-        # The line, an arrowhead at each end pointing out to its
-        # extension line.
-        painter.drawLine(start, end)
-        self.draw_reach(painter, start, end)
-        arrow: float = ARROW_PIXELS / scale
-        painter.drawPath(arrowhead(end, start, arrow))
-        painter.drawPath(arrowhead(start, end, arrow))
+        Returns:
+        * (`QPointF`): The circle's middle, in drawing steps.
+        """
+        letter: QRectF = stroke_box(
+            [stroke for stroke in self.strokes() if stroke.role == TEXT], 0.0
+        )
+        if letter.isNull():
+            return self.at()
+        off: float = HANDLE_PIXELS / max(self.editor.zoom(), 1e-12)
+        return QPointF(letter.right() + off, letter.bottom() + off)
 
-        self.draw_letter(painter, start, end)
+    # Method `DimensionItem.strokes()`:
+    def strokes(self) -> list[Stroke]:
+        """Return its strokes (`dimension_strokes()`), its text and
+        arrowheads `TEXT_PIXELS` high at the view's zoom (#311).
+
+        Returns:
+        * (`list[Stroke]`): In drawing steps.
+        """
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        return dimension_strokes(
+            self.editor.drawing,
+            dimension,
+            (
+                fillet_arcs(self.editor.drawing, self.editor.drawing.scale)
+                if dimension.kind == RADIUS
+                else {}
+            ),
+            TEXT_PIXELS / max(self.editor.zoom(), 1e-12),
+        )
+
+    # Method `DimensionItem.paint_strokes()`:
+    def paint_strokes(self, painter: QPainter) -> None:
+        """Draw its strokes: lines with the pen, arrowheads filled.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, pen and brush set.
+        """
+        pen: QPen = painter.pen()
+        letter: QPen = QPen(pen)
+        letter.setWidthF(max(pen.widthF(), TEXT_PEN_PIXELS))
+        stroke: Stroke
+        for stroke in self.strokes():
+            path: QPainterPath = stroke_path(stroke)
+            if stroke.filled:
+                path.closeSubpath()
+                painter.drawPath(path)
+            else:
+                painter.strokePath(
+                    path, letter if stroke.role == TEXT else pen
+                )
 
     # Method `DimensionItem.arc_point()`:
     def arc_point(self, share: float) -> QPointF:
@@ -1991,148 +1660,6 @@ class DimensionItem(QGraphicsItem):
             path.lineTo(self.arc_point(step / ARC_STEPS))
         return path
 
-    # Method `DimensionItem.reach_path()`:
-    def reach_path(self) -> QPainterPath:
-        """Return an angle's extension lines: along each edge's line,
-        from the edge's far end out to the arc, where the arc is past
-        it."""
-        dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        points: list[tuple[float, float]] = self.editor.drawing.points
-        path: QPainterPath = QPainterPath()
-        arc: tuple[QPointF, float, float] | None = angle_arc(points, dimension)
-        if arc is None:
-            return path
-        center: QPointF = arc[0]
-        edge: int
-        share: float
-        for edge, share in ((dimension.start, 0.0), (dimension.end, 1.0)):
-            if edge in AXES:
-                continue  # Drawn right across the window already.
-            tip: QPointF = self.arc_point(share)
-            ray: QPointF = tip - center
-            ends: list[QPointF] = [
-                QPointF(*points[edge]),
-                QPointF(*points[(edge + 1) % len(points)]),
-            ]
-            reach: float = max(
-                QPointF.dotProduct(end - center, ray) for end in ends
-            ) / max(QPointF.dotProduct(ray, ray), 1e-24)
-            if reach < 1.0:
-                path.moveTo(center + ray * max(reach, 0.0))
-                path.lineTo(tip)
-        return path
-
-    # Method `DimensionItem.paint_radius()`:
-    def paint_radius(self, painter: QPainter) -> None:
-        """Write a fillet's own letter out past its sharp corner, on
-        the line from its center through its arc's middle (#126); a
-        fillet on the note letter shows nothing.
-
-        Arguments:
-        * `painter` (`QPainter`): What draws, pen set.
-        """
-        dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        if dimension.letter == self.editor.drawing.note_radius:
-            return
-        middle: tuple[QPointF, QPointF] | None = fillet_middle(
-            self.editor.drawing, dimension.start
-        )
-        if middle is None:
-            return
-        # Out past the sharp corner's square, along the way out from
-        # the arc's center, clear of the square and the dashes.
-        if dimension.start in self.editor.trouble:
-            painter.setPen(QColor(theme.colors().problem))  # Too big.
-        world: QTransform = painter.worldTransform()
-        at: QPointF = world.map(
-            QPointF(*self.editor.drawing.points[dimension.start])
-        )
-        out: QPointF = world.map(middle[0] + middle[1]) - world.map(middle[0])
-        out /= max(_size(out), 1e-12)
-        at += out * (LETTER_POINTS + SQUARE_PIXELS)
-        painter.save()
-        painter.resetTransform()
-        font: QFont = QFont("sans-serif", LETTER_POINTS)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.drawText(
-            QRectF(at.x() - 50.0, at.y() - 40.0, 100.0, 80.0),
-            Qt.AlignmentFlag.AlignCenter,
-            dimension.letter,
-        )
-        painter.restore()
-
-    # Method `DimensionItem.paint_angle()`:
-    def paint_angle(self, painter: QPainter, scale: float) -> None:
-        """Draw an angle: its arc with an arrowhead at each end, the
-        extension lines out to it, and its letter.
-
-        Arguments:
-        * `painter` (`QPainter`): What draws, pen and brush set.
-        * `scale` (`float`): Pixels per drawing step.
-        """
-        arc: QPainterPath = self.arc_path()
-        if arc.isEmpty():
-            return
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(arc)
-        painter.drawPath(self.reach_path())
-        painter.setBrush(painter.pen().color())
-        arrow: float = ARROW_PIXELS / scale
-        near: float = 1.0 / ARC_STEPS
-        painter.drawPath(
-            arrowhead(self.arc_point(near), self.arc_point(0.0), arrow)
-        )
-        painter.drawPath(
-            arrowhead(self.arc_point(1.0 - near), self.arc_point(1.0), arrow)
-        )
-        self.draw_letter(painter, self.at(), self.at())
-
-    # Method `DimensionItem.draw_reach()`:
-    def draw_reach(
-        self, painter: QPainter, start: QPointF, end: QPointF
-    ) -> None:
-        """Draw the line on past an arrowhead, out to a letter there.
-
-        Arguments:
-        * `painter` (`QPainter`): What draws, in scene coordinates.
-        * `start` (`QPointF`): One end of the dimension line.
-        * `end` (`QPointF`): The other end.
-        """
-        along: float = self.editor.drawing.dimensions[self.index].along
-        if along < 0.0:
-            painter.drawLine(start, self.at())
-        elif along > 1.0:
-            painter.drawLine(end, self.at())
-
-    # Method `DimensionItem.draw_letter()`:
-    def draw_letter(
-        self, painter: QPainter, start: QPointF, end: QPointF
-    ) -> None:
-        """Draw the letter, upright, beside its point of the line, on
-        the side `letter_side()` gives.
-
-        Arguments:
-        * `painter` (`QPainter`): What draws, in scene coordinates.
-        * `start` (`QPointF`): One end of the dimension line.
-        * `end` (`QPointF`): The other end.
-        """
-        dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        world: QTransform = painter.worldTransform()
-        middle: QPointF = world.map(start + (end - start) * dimension.along)
-        side: QPointF = self.letter_side(world) * (
-            LETTER_POINTS + LETTER_GAP_PIXELS
-        )
-        painter.save()
-        painter.resetTransform()
-        font: QFont = QFont("sans-serif", LETTER_POINTS)
-        font.setBold(True)
-        painter.setFont(font)
-        box: QRectF = QRectF(middle.x() - 50.0, middle.y() - 40.0, 100.0, 80.0)
-        box.translate(side)
-        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, dimension.letter)
-        painter.restore()
-
     # Method `DimensionItem.letter_spot()`:
     def letter_spot(self) -> QPointF | None:
         """Return where its letter (or a mark's glyph) is drawn, for
@@ -2144,59 +1671,14 @@ class DimensionItem(QGraphicsItem):
         """
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
         if is_mark(dimension):
-            return self.mark_spot()
+            return stroke_box(self.strokes(), 0.0).center()
         if dimension.kind == RADIUS:
             return None
-        at: QPointF = self.at()
-        if dimension.kind == ANGLE:
-            return at
-        # Beside the line, as `draw_letter()` puts it.
-        world: QTransform = self.editor.viewportTransform()
-        back: QTransform = world.inverted()[0]
-        return back.map(
-            world.map(at)
-            + self.letter_side(world) * (LETTER_POINTS + LETTER_GAP_PIXELS)
+        # The middle of its letter as drawn (#305), else its point.
+        letter: QRectF = stroke_box(
+            [stroke for stroke in self.strokes() if stroke.role == TEXT], 0.0
         )
-
-    # Method `DimensionItem.letter_side()`:
-    def letter_side(self, world: QTransform) -> QPointF:
-        """Return which way, on screen, the letter sits from its line.
-
-        Horizontal and vertical ones go away from the outline's
-        middle, so the letter stays off the outline; a length goes on
-        the side its line was moved to.
-
-        Arguments:
-        * `world` (`QTransform`): The scene to screen transform.
-
-        Returns:
-        * (`QPointF`): A unit vector in screen pixels (Y down).
-        """
-        dimension: Dimension = self.editor.drawing.dimensions[self.index]
-        xs: list[float] = [x for x, _ in self.editor.drawing.points]
-        ys: list[float] = [y for _, y in self.editor.drawing.points]
-        if dimension.kind == HORIZONTAL:
-            below: bool = dimension.offset < (min(ys) + max(ys)) / 2.0
-            return QPointF(0.0, 1.0 if below else -1.0)
-        if dimension.kind == ANGLE:
-            arc: tuple[QPointF, float, float] | None = angle_arc(
-                self.editor.drawing.points, dimension
-            )
-            if arc is None:
-                return QPointF(0.0, 0.0)
-            out_of: QPointF = world.map(self.at()) - world.map(arc[0])
-            length: float = math.hypot(out_of.x(), out_of.y())
-            return out_of / length if length > 0.0 else out_of
-        if dimension.kind == LENGTH:
-            way: QPointF = world.map(
-                self.editor.point(dimension.end)
-            ) - world.map(self.editor.point(dimension.start))
-            # The screen's Y is down: flip, turn left, flip back.
-            out: QPointF = left_of(QPointF(way.x(), -way.y()))
-            sign: float = 1.0 if dimension.offset >= 0.0 else -1.0
-            return QPointF(out.x(), -out.y()) * sign
-        left: bool = dimension.offset < (min(xs) + max(xs)) / 2.0
-        return QPointF(-1.0 if left else 1.0, 0.0)
+        return self.at() if letter.isNull() else letter.center()
 
 
 # Class `OutlineView`:
@@ -2675,33 +2157,15 @@ class OutlineView(QGraphicsView):
     # Method `OutlineView.apply_values()`:
     def apply_values(self) -> None:
         """Put each coordinate the dimensions fix where the letters'
-        values put it, to scale (#148, #153); a coordinate not fixed
-        stays as drawn.  Values that cannot be drawn (a formula failing,
-        edges crossing) leave the drawing as it was (#154)."""
-        if self.letters_bad():
-            return
-        real: tuple[dict[int, float], dict[int, float]] | None = (
-            real_coordinates(
-                self.drawing.points,
-                self.drawing.letters,
-                self.drawing.dimensions,
-            )
+        values put it, to scale (`values.placed_corners()`, #148)."""
+        placed: list[tuple[float, float]]
+        placed, self.drawing.scale = placed_corners(
+            self.drawing.points,
+            self.drawing.letters,
+            self.drawing.dimensions,
+            self.drawing.scale,
         )
-        if real is None or not self.drawing.dimensions:
-            return
-        if self.drawing.scale <= 0.0:
-            self.drawing.scale = first_scale(self.drawing.points, real)
-            if self.drawing.scale <= 0.0:
-                return
-        scale: float = self.drawing.scale
-        placed: list[tuple[float, float]] = [
-            (
-                real[0][corner] * scale if corner in real[0] else x,
-                real[1][corner] * scale if corner in real[1] else y,
-            )
-            for corner, (x, y) in enumerate(self.drawing.points)
-        ]
-        if placed == self.drawing.points or crosses(placed):
+        if placed == self.drawing.points:
             return
         self.drawing.points[:] = placed
         self.placing = True
@@ -2710,28 +2174,6 @@ class OutlineView(QGraphicsView):
             square.setPos(*placed[square.index])
         self.placing = False
         self.outline.refresh()
-
-    # Method `OutlineView.letters_bad()`:
-    def letters_bad(self) -> bool:
-        """Return whether a letter a dimension uses has a bad value
-        (red in the table): the drawing then keeps its shape (#154).
-
-        Returns:
-        * (`bool`): Whether one has.
-        """
-        letter: Letter
-        for letter in self.drawing.letters:
-            kinds: set[str] = {
-                "angle" if dimension.kind == ANGLE else "length"
-                for dimension in self.drawing.dimensions
-                if dimension.letter == letter.letter
-            }
-            if kinds and (
-                value_problem(letter.default)
-                or use_problem(letter.letter, letter.default, kinds)
-            ):
-                return True
-        return False
 
     # Method `OutlineView.place_handles()`:
     def place_handles(self) -> None:
@@ -3434,9 +2876,14 @@ class OutlineView(QGraphicsView):
         * (`list[tuple[float, float]]`): Each arc's two ends.
         """
         return [
-            (start.y(), end.y()) if axis == HIDE_Y else (start.x(), end.x())
-            for start, end in fillet_ends(self.drawing)
-            if start != end
+            (
+                (fillet.arc.start[1], fillet.arc.end[1])
+                if axis == HIDE_Y
+                else (fillet.arc.start[0], fillet.arc.end[0])
+            )
+            for fillet in fillet_arcs(
+                self.drawing, self.drawing.scale
+            ).values()
         ]
 
     # Method `OutlineView.toggle_overview()`:
@@ -4804,15 +4251,21 @@ class OutlineEditor(QWidget):
     # Method `OutlineEditor.save()`:
     def save(self) -> None:
         """Rewrite the file if the outline changed (not mid-drag: the
-        view saves again when the mouse button comes up)."""
+        view saves again when the mouse button comes up), and its
+        diagram beside it (`svg_path()`, #248), written too when
+        missing."""
         if self.path is None or QApplication.mouseButtons() != (
             Qt.MouseButton.NoButton
         ):
             return
         text: str = outline_text(self.drawing)
-        if text != self.saved:
+        picture: Path = svg_path(self.path)
+        if text != self.saved or (self.path.exists() and not picture.exists()):
             self.path.write_text(text, encoding="utf-8")
             self.saved = text
+            picture.write_text(
+                svg(outline_sheet(self.drawing)), encoding="utf-8"
+            )
 
     # Method `OutlineEditor.show_message()`:
     def show_message(self, *_regions: object) -> None:
@@ -4888,6 +4341,8 @@ def drawing_from(path: Path) -> Drawing:
         outline.revolve,
         outline.note_radius,
         outline.hides,
+        outline.text_height,
+        outline.turns,
     )
 
 

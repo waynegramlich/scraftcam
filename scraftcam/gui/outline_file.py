@@ -32,7 +32,10 @@ steps; sizes come from the letters.  Since version 3 (`T.sfoe~6.4`
 #280) a `text_height` (grid steps) sets the diagram's lettering,
 written once [All Fonts +] or [All Fonts -] sets it (absent: picked
 from the outline's size), and a dimension's `font_step` its own
-letter's ([Font +], [Font -]; absent: 0).  A dimension's `from` and `to`
+letter's ([Font +], [Font -]; absent: 0).  `turns` (#300, 1 to 3;
+absent: 0) shows the drawing turned that many quarter turns
+clockwise, its letters upright; the file keeps the tool's axis
+along Y.  A dimension's `from` and `to`
 are a corner's index or `"origin"`, and for an angle an edge (by the
 corner it leaves) or `"x_axis"` / `"y_axis"`.
 """
@@ -83,8 +86,9 @@ class OutlineError(ValueError):
 
 
 # Class `Outline`:
+# One attribute per field of the file, which has eight.
 @dataclass(slots=True)
-class Outline:
+class Outline:  # pylint: disable=too-many-instance-attributes
     """What an outline file holds.
 
     Attributes:
@@ -98,10 +102,12 @@ class Outline:
     * `text_height` (`float`): The diagram's letter height (drawing
       steps); 0 picks one from the outline's size (`T.sfoe~6.4`
       #280).
+    * `turns` (`int`): How many quarter turns clockwise its diagram
+      is shown turned, 0 to 3, letters upright (#300).
 
     Constructor:
     * `Outline(points, letters, dimensions, revolve, note_radius,
-      hides, text_height)`
+      hides, text_height, turns)`
     """
 
     # Constructor arguments:
@@ -112,6 +118,7 @@ class Outline:
     note_radius: str = field(init=True, default="")
     hides: list[Hide] = field(init=True, default_factory=list)
     text_height: float = field(init=True, default=0.0)
+    turns: int = field(init=True, default=0)
 
 
 # Function `outline_text()`:
@@ -133,6 +140,8 @@ def outline_text(outline: Outline) -> str:
         lines.append(f"note_radius = {_string(outline.note_radius)}")
     if outline.text_height > 0.0:
         lines.append(f"text_height = {_number(outline.text_height)}")
+    if outline.turns:
+        lines.append(f"turns = {outline.turns}")
 
     # The letters, a table each, in the order of the table.
     letter: Letter
@@ -267,6 +276,10 @@ class _Reader:
         if not isinstance(note, str):
             self.note("note_radius", "is not a letter")
             note = ""
+        turns: object = data.get("turns", 0)
+        if isinstance(turns, bool) or turns not in (0, 1, 2, 3):
+            self.note("turns", "is not 0, 1, 2 or 3")
+            turns = 0
         height: object = data.get("text_height", 0.0)
         if not _is_number(height) or float(height) < 0.0:  # type: ignore[arg-type]  # Checked.
             self.note("text_height", "is not a number, 0 or more")
@@ -278,6 +291,7 @@ class _Reader:
             revolve,
             note,
             text_height=float(height),  # type: ignore[arg-type]  # Checked.
+            turns=turns,
         )
         if revolve and any(x < 0.0 for x, _ in outline.points):
             self.note("points", "a revolved outline has a corner at X < 0")

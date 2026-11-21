@@ -17,8 +17,8 @@ import re
 from collections.abc import Callable
 
 from ..model import Angle, Length
-from .dimensions import RADIUS, Dimension, Solution, solve
-from .letters import ANGLE_UNITS, Letter, value_problem
+from .dimensions import ANGLE, RADIUS, Dimension, Solution, solve
+from .letters import ANGLE_UNITS, Letter, use_problem, value_problem
 
 # The functions a formula may use, and the units it may name.
 FUNCTIONS: dict[str, Callable[..., float]] = {
@@ -338,6 +338,109 @@ def real_coordinates(
         )
     except (ValueError, ArithmeticError):
         return None
+
+
+# Function `first_scale()`:
+def first_scale(
+    points: list[tuple[float, float]],
+    real: tuple[dict[int, float], dict[int, float]],
+) -> float:
+    """Return drawing steps per millimeter, chosen once (#148): the
+    middle of the drawn-to-real ratios of the fixed coordinates.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `real` (`tuple[dict[int, float], dict[int, float]]`): The fixed
+      coordinates' real values (mm).
+
+    Returns:
+    * (`float`): The scale; 0 when nothing says.
+    """
+    # Each fixed coordinate's drawn over real value, when positive.
+    ratios: list[float] = sorted(
+        points[corner][axis] / value
+        for axis in (0, 1)
+        for corner, value in real[axis].items()
+        if abs(value) > 1e-9 and points[corner][axis] / value > 0.0
+    )
+    return ratios[len(ratios) // 2] if ratios else 0.0
+
+
+# Function `letters_bad()`:
+def letters_bad(letters: list[Letter], dimensions: list[Dimension]) -> bool:
+    """Return whether a letter a dimension uses has a bad value (red
+    in the editor's table): the drawing then keeps its shape (#154).
+
+    Arguments:
+    * `letters` (`list[Letter]`): The letters.
+    * `dimensions` (`list[Dimension]`): The dimensions.
+
+    Returns:
+    * (`bool`): Whether one has.
+    """
+    # A used letter whose value is bad, or the wrong kind for its use.
+    letter: Letter
+    for letter in letters:
+        kinds: set[str] = {
+            "angle" if dimension.kind == ANGLE else "length"
+            for dimension in dimensions
+            if dimension.letter == letter.letter
+        }
+        if kinds and (
+            value_problem(letter.default)
+            or use_problem(letter.letter, letter.default, kinds)
+        ):
+            return True
+    return False
+
+
+# Function `placed_corners()`:
+def placed_corners(
+    points: list[tuple[float, float]],
+    letters: list[Letter],
+    dimensions: list[Dimension],
+    scale: float = 0.0,
+) -> tuple[list[tuple[float, float]], float]:
+    """Return the corners where the letters' values put them, to scale
+    (#148, #153, #299): a coordinate the dimensions do not fix stays
+    as drawn.  Values that cannot be drawn (a bad letter, a formula
+    failing, edges crossing) leave the corners as they were (#154).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `letters` (`list[Letter]`): The letters.
+    * `dimensions` (`list[Dimension]`): The dimensions.
+    * `scale` (`float`):
+      Drawing steps per mm; 0 picks one (`first_scale()`).
+
+    Returns:
+    * (`tuple[list[tuple[float, float]], float]`): The corners (a new
+      list) and the scale used (0 when none could be picked).
+    """
+    # Nothing to place without good values and fixed coordinates.
+    if not dimensions or letters_bad(letters, dimensions):
+        return list(points), scale
+    real: tuple[dict[int, float], dict[int, float]] | None = real_coordinates(
+        points, letters, dimensions
+    )
+    if real is None:
+        return list(points), scale
+    if scale <= 0.0:
+        scale = first_scale(points, real)
+        if scale <= 0.0:
+            return list(points), scale
+
+    # Each fixed coordinate to scale, unless the edges would cross.
+    placed: list[tuple[float, float]] = [
+        (
+            real[0][corner] * scale if corner in real[0] else x,
+            real[1][corner] * scale if corner in real[1] else y,
+        )
+        for corner, (x, y) in enumerate(points)
+    ]
+    if crosses(placed):
+        return list(points), scale
+    return placed, scale
 
 
 # Function `crosses()`:
