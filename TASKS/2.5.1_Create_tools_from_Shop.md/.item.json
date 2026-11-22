@@ -1,7 +1,7 @@
 {
-  "state": "Suspended",
+  "state": "Closed",
   "created": "2026-11-02T15:29:57Z",
-  "updated": "2026-11-03T05:33:23Z",
+  "updated": "2026-11-22T20:33:15Z",
   "history": [
     {
       "state": "Pending",
@@ -14,6 +14,10 @@
     {
       "state": "Suspended",
       "time": "2026-11-03T05:33:23Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-22T20:33:15Z"
     }
   ],
   "tag": "ctfs"

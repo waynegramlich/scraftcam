@@ -1,7 +1,7 @@
 {
-  "state": "Open",
+  "state": "Closed",
   "created": "2026-11-03T21:14:46Z",
-  "updated": "2026-11-05T18:37:30Z",
+  "updated": "2026-11-22T20:33:15Z",
   "history": [
     {
       "state": "Pending",
@@ -10,6 +10,10 @@
     {
       "state": "Open",
       "time": "2026-11-05T18:37:30Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-22T20:33:15Z"
     }
   ],
   "tag": "cmt"

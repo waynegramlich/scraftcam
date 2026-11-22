@@ -102,7 +102,7 @@ arrowheads, and `DimensionHandle`'s drag math (`ends()`, `at()`,
   (`RoundedPolygon`, `SolidRoundedPolygon` of `Layer`s,
   `SolidRevolved`, `SolidAssembly`) and `gui/outline_polygon.py`
   (outline file to solid; refuses `[[holes]]` until #290).  Reopen
-  when `T.cett2e~6.5` reaches its first flat tool with holes.
+  when `T.tfo~6.5` reaches its first flat tool with holes.
 * #290 holes, paused: example Shars 202-1664 (6 in reversible jaw,
   `SharsMD/page_316/page_316.md:60`: L 6, W 1, H 2, D 3-7/8, E 1/2,
   F 0.937 in), counterbored both faces (#330), depth a value with no
@@ -116,7 +116,7 @@ arrowheads, and `DimensionHandle`'s drag math (`ends()`, `at()`,
   holes as cutting layers in `outline_polygon.py` (a counterbore a
   child layer with its clearance hole under it), the 202-1664 file
   (#333).
-* #260: no per-model `sketch()` method in Python (`T.ant~5.9` idea 1).
+* #260: no per-model `sketch()` method in Python (`T.ant~6.7` idea 1).
 * Work rules: ~3 minute chunks, several items per chunk when they
   fit; a top 5 after each round; renders for the user in `scratch/`
   with full `file:///` paths.

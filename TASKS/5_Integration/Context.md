@@ -1,66 +1,26 @@
 # LLM Agent Context Log
 
-Squeezed 2026-11-19: where things stand; the dated history is in
-`hg` and `git`.  The user expects things to change all over, and
-missing features to be found as they come.  Each sub-task's own
-`Context.md` holds its details.
+Squeezed 2026-11-22; the history is in `hg` and `git`.  Each
+sub-task's own notes hold its details.  The user expects things to
+change all over, and missing features to be found as they come.
 
 ## The Tree
 
-One repository (`T.rd~5.1`, closed), run from its top with `python3
--m`, nothing installed: package `scraftcam/` (`pybind/`, `lcnc/`,
-`hmi/`, `tooling/`, `gui/`, `catalog/`), `tests/`, `./show_demo.py`.
-`mypy.ini`, `ruff.toml` hold the checkers' settings.  The old
-`scraftpybind`, `scraftlinuxcnc` repositories are archived
-(`I.amgr~2`).  PySide6 comes from `packages.require()`
-(`scraftcam/pins.toml`), no venv; Linux is Wayland only, no macOS;
-to be published on PyPI.  The LinuxCNC end-to-end suite
-(`SCRAFTCNC_LINUXCNC=1`) has not been run since the reorganization.
+One repository, run from its top with `python3 -m`, nothing
+installed: package `scraftcam/` (`pybind/`, `lcnc/`, `hmi/`,
+`tooling/`, `gui/`, `catalog/`), `tests/`, `./show_demo.py`
+(`--headless` runs it all with no window).  `mypy.ini`, `ruff.toml`
+hold the checkers' settings.  PySide6 comes from
+`packages.require()` (`scraftcam/pins.toml`), no venv; Linux is
+Wayland only, no macOS; to be published on PyPI.  The LinuxCNC
+end-to-end suite (`SCRAFTCNC_LINUXCNC=1`) has not been run since the
+reorganization.
 
-## Done
+## Where the Work Went (2026-11-22)
 
-* `.nc` setup comments (`T.emsagc~5.2`, closed): the HMI draws the
-  mount from them, picks the origin, steps through items, toggles
-  keep-outs; `./show_demo.py --headless` (`T.hlp~3.3.1`).
-* The HMI is Qt (`T.hs~5.1.5`, closed): `scraftcam/hmi/lcnc_hmi.py`,
-  `hmi_machine.py`, and a panel of the one GUI.
-* The one GUI (`T.g~6`): the user's shop and designs in
-  their own version controlled directories, `~/.scraftcam/` always
-  deletable; any number of windows, each a tree driving panels ([<]
-  [>] Pin [Close]), no tabs, no [Save]; layouts kept per shop in
-  `~/.scraftcam/layouts/`.  Shop item panels edit fields in place
-  with sketches, help and [Enable Editing]; a `machines/` list;
-  controller templates in `controllers/`; the machine panel (core
-  strip over tabs Setup, Tools, G-code, Job, Execute); [Stop All],
-  [Exit].  Tests for windows and panels (#207) were next there.
-* Tooling ready to integrate: `SCMachineVise` with `SCJawPlate`,
-  `SCParallel` with holes, `SCGridPlate` (5 minute build after a
-  change to `tools.py`, `mount.py` or `scgeometry.py`, then 1 s from
-  the cache), every cutter kind from `examples/shop/tools.toml`, all
-  in `Tool_Models.md`.  Stock stays blocks (`T.sm~2.4`).
-* SolidCraft's hover translucency is a quirk (`I.mpgtis~3`, in
-  `README.md`).
-
-## Under Way
-
-* 2026-11-20: the GUI is now top-level task `T.g~6` (the one GUI,
-  the outline editor, its SVG, catalogs); its items left 5.
-
-* `T.cmt~5.3`: the parametric model library (`scraftcam/model.py`,
-  `SolidModel`, `SolidCraftLink`, live SolidCraft parameters;
-  `JawPlate`, `Parallel`).
-* `T.sfoe~6.4` (SVG from outlines) Suspended; its holes (#290)
-  wait until a flat tool needs them.  `T.oe~6.2`, the outline
-  editor, is Reference.
-* 2026-11-22: `T.rps~6.6` closed: `scraftcam/solid.py` (`Solid`,
-  `SolidStep`, `SolidRoundedPolygon`, `SolidRevolved`,
-  `SolidAssembly`), outline files to solids
-  (`gui/outline_polygon.py`), the Kurt DX6 vise and a setup with
-  parallels; `Profile` removed.  SolidCraft is an engine and a
-  renderer; models come from the GUI (the user).
-* 2026-11-22: `T.cett2e~6.5` opened: tool bits made from outline
-  files through the GUI, round tools first.
-* `T.cm~6.3` Suspended until 5.3 has tools; `T.ant~5.9` Open.
-* Pending: `T.npfetc~5.4` (a path per tool change), `T.sm2~5.5`,
-  `T.cpfj~5.7`, `T.rslsao~5.8`.
-  `T.oacv~6.1` Suspended (left as it is).
+* Tools, tooling and their models: `T.tfo~6.5` (outline files to
+  `solid.py` solids); hooking a tool into the shop: `T.ant~6.7`.
+* The GUI, HMI replacement, catalogs, the outline editor: `T.g~6`.
+* Keep-outs from the new solids: `T.ikz~4`.
+* Left here: `T.npfetc~5.4` to `T.rslsao~5.8`, all Pending, and the
+  "Left" list in `Details.md`.

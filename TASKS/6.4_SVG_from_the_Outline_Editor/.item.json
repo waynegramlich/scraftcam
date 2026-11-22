@@ -1,7 +1,7 @@
 {
-  "state": "Suspended",
+  "state": "Closed",
   "created": "2026-11-20T03:01:13Z",
-  "updated": "2026-11-22T16:56:18Z",
+  "updated": "2026-11-22T20:33:15Z",
   "history": [
     {
       "state": "Pending",
@@ -14,6 +14,10 @@
     {
       "state": "Suspended",
       "time": "2026-11-22T16:56:18Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-22T20:33:15Z"
     }
   ],
   "tag": "sfoe"

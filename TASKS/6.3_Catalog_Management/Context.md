@@ -1,8 +1,8 @@
 # LLM Agent Context Log
 
 Squeezed 2026-11-19; the full history is in `hg` and `git`.  Status:
-Reference while `T.cmt~5.3` makes tools to add (catalogs are of no
-use until an end user can model a tool and hook it in, `T.ant~5.9`).
+Suspended while `T.tfo~6.5` makes tools to add (catalogs are of no
+use until an end user can model a tool and hook it in, `T.ant~6.7`).
 Its decisions guide new tools' shop fields.
 
 ## `catxtract`
@@ -56,7 +56,7 @@ kinds; split merged columns ("Order No. Price", page 414);
 `catalog`/`catalog_page` fields; #46 carry-over of regions only on
 request; #64 a searchable index in the panel; #67 delete markup no
 item cites.  The user has not redone the catalog run (steps in
-`T.ant~5.9`'s `Details.md`).
+`T.ant~6.7`'s `Details.md`).
 
 ## Tried and Dropped
 

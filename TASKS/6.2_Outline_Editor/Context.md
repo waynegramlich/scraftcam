@@ -1,202 +1,159 @@
 # LLM Agent Context Log
 
-Squeezed 2026-11-19 (second time), touched 2026-11-22 for
-`T.rps~6.6`: only what is in force and where things stand; designs
-dropped and the full history are in `hg` and `git`.
+Squeezed 2026-11-22, with `T.sfoe~6.4` (the SVG) folded in: only
+what is in force and where things stand; the history is in `hg` and
+`git`.  Issue numbers are shared with `T.tfo~6.5` (next new one in
+its notes).
 
-## The Editor Today
-
-(2026-11-20: the drawing now sits in tabs [Drawing] and [SVG]; the
-diagram code is `T.sfoe~6.4`'s, see its `Context.md`.)
+## Files and Tests
 
 `python3 -m scraftcam.gui.outline_editor [FILE]` edits an outline
-file, rewriting it after every change (never mid-drag); a bad file is
-refused with every problem named, a missing one starts as the
-counterclockwise triangle (no marks, #238 open).  It makes a
-parametric `RoundedPolygon`: corners as formulas in letters, fillet
-radii by letter.  Light and dark (`gui/theme.py`); offscreen Qt
-tests, no SolidCraft except `test_outline_polygon`'s live ones.
+file, rewriting it and its `NAME.outline.svg` after every change
+(never mid-drag); a bad file is refused with every problem named, a
+missing one starts as the counterclockwise triangle.
 
-Files: `scraftcam/gui/outline_editor.py` (Qt), `letters.py`,
-`dimensions.py`, `outline_file.py`, `values.py`, `hides.py`,
-`outline_polygon.py` (no Qt); tests `test_outline_editor`,
-`test_letters`, `test_dimensions`, `test_outline_file`,
-`test_values`, `test_hides`, `test_outline_polygon`, plus
-`test_shops`, `test_gui_tree`, `test_gui_theme` when touched.
-Coverage target above 95% (`uvx --python /usr/bin/python3 coverage
-run --include=... -m unittest ...`).  Example:
-`examples/shop/tools/drill.outline.toml` (version 1, migrated on
-read).
+* Qt: `gui/outline_editor.py`.  No Qt: `gui/letters.py`,
+  `dimensions.py`, `outline_file.py`, `values.py`, `hides.py`,
+  `outline_cuts.py`, `outline_diagram.py`, `outline_polygon.py`;
+  `scraftcam/diagram.py`, `hershey.py`, `screws.py`.
+* Tests: `test_outline_editor`, `test_letters`, `test_dimensions`,
+  `test_outline_file`, `test_values`, `test_hides`,
+  `test_outline_cuts`, `test_outline_diagram`, `test_diagram`,
+  `test_hershey`, `test_outline_polygon` (live ones skip without
+  `solidcraft-cli`); plus `test_shops`, `test_gui_tree`,
+  `test_gui_theme` when touched.  Coverage above 95% (`uvx --python
+  /usr/bin/python3 coverage run --include=... -m unittest ...`).
+* Example: `examples/shop/tools/drill.outline.toml` (on its side,
+  `turns = 1`, two hide strips).  `scratch/shot.py IN OUT [ZOOM]`
+  grabs the editor (`PYTHONPATH=.`, `QT_QPA_PLATFORM=offscreen`).
 
-### View and Selection
+## Rules in Force (the user's)
 
-* `OutlineView(QGraphicsView)`, Y up, unitless drawing steps; grid
-  1, 2, 5 x 10^k at least `GRID_PIXELS` 12 apart, snap to it (Shift
-  or [Snap] off drags freely); wheel zooms about the pointer; `Home`
-  fits; X axis light red, Y axis light green.
-  `setItemIndexMethod(NoIndex)` (the index crashed on deleting a
-  dragged dimension).
-* No modes: a drag moves, a press nothing takes pans, a click adds to
-  the selection (empty space clears it).  Every circle is
-  `theme.Colors.handle` yellow, hollow, filled when selected (#237):
-  corners `CornerCircle` 9 px, edges `EdgeHandle` 7 px (dragged pulls
-  out a corner, clicked selects the edge), dimension and strip
-  circles; the origin a filled ink square; a click near an axis
-  selects it.  Not dimensioned: orange `warning` 3 px ring; fillet
-  too big: red ring.  Tooltips give the formulas.
-* Buttons with keys (`QShortcut`s on the window), in tabs (#319,
-  `T.sfoe~6.4`; `BUTTON_KEYS`, `BUTTON_TABS`): [Most Common] (Undo,
-  Redo, Delete, Dimension, Fit, Rotate Diagram), [Draw] (Delete,
-  Dimension, Dim. Kind, New Letter, Revolve), [Marks] (Horizontal,
-  Vertical, Right Angle), [View] (Grid, Snap, Fit, Overview, Hide,
-  Rotate Diagram, Font +, Font -).  Keys: Del, N, K, -, |, Shift+L,
-  R, T, H, O, G, S, Home, Ctrl+Z, Ctrl+Shift+Z, L, ], [.
-* [Dimension] works from the selection (`dimension_selected()`,
-  #234): one edge -> its length; one corner -> the angle there (under
-  180 as drawn); two edges, or an axis and an edge -> the angle
-  between; an axis and a corner -> across the axis; else the last
-  two points (`dimension_points()`, waits for them).
-* [Delete] (`OutlineEditor.delete()`): selected corners and
-  dimensions; with none, the letter armed in [Fillets] or the
-  table's current row, refused while in use (named and lit, #215,
-  #245).
+* We place things as well as we can at first; once the user moves
+  something, we respect it.  Nothing moves automatically; drawing may
+  adjust, saved values never (#317, #323).
+* One drawing code for the editor and the SVG (#S4); editing aids
+  (circles, selection, lighting, warning rings, crossings, drag
+  math) are Qt only, on top.
+* Buttons in tabs, the user's way for every GUI (#319).
+* Only the user edits letter values (#152); no grid in the working
+  view (#183); diameters and whole tip angles wait (#89); no drill
+  flutes or cutter teeth (#8).
+
+## The Editor
+
+* `OutlineView(QGraphicsView)`, Y up; grid 1, 2, 5 x 10^k at least
+  `GRID_PIXELS` apart, snapped (Shift or [Snap] off frees); wheel
+  zooms about the pointer.  Points follow the zoom; lines, handles,
+  text and arrowheads keep a fixed pixel size (zoom is `hypot(m11,
+  m12)`).  `setItemIndexMethod(NoIndex)` (the index crashed).
+* No modes: a drag moves, a press on nothing pans, a click adds to
+  the selection.  Circles are `theme.Colors.handle` yellow, filled
+  when selected: corners 9 px, edges 7 px (dragged pulls out a
+  corner); the origin a filled square.  Not dimensioned: orange ring;
+  fillet too big: red ring; crossing edges red and thick.
+* Tabs (`BUTTON_KEYS`, `BUTTON_TABS`; each a shared `QAction`, keys
+  on any tab, status line under the tabs): [Most Common] (Undo, Redo,
+  Delete, Dimension, Fit, Rotate Diagram), [Draw] (Delete, Dimension,
+  Dim. Kind, New Letter, Revolve), [Marks] (Horizontal, Vertical,
+  Right Angle), [View] (Grid, Snap, Fit, Overview, Hide, Rotate
+  Diagram, Font +, Font -).  Keys: Del, N, K, -, |, Shift+L, R, T, H,
+  O, G, S, Home, Ctrl+Z, Ctrl+Shift+Z, L, ], [.  Tabs [Drawing] and
+  [SVG] above.
+* [Dimension] from the selection (`dimension_selected()`): an edge ->
+  length; a corner -> its angle; two edges or an axis and an edge ->
+  the angle between; an axis and a corner -> across the axis; else
+  the last two points.  [Delete]: selected corners and dimensions,
+  else the armed or current letter, refused while in use.
 * `History` of `Snapshot`s: every change one undo step.
-* Crossing edges drawn red and thick, with a bar message
-  (`values.crossings()`, #242).
+* [Rotate Diagram (T)]: a quarter turn clockwise, letters upright
+  (`turns` 0-3).  [Font +]/[Font -]: nothing selected -> the
+  diagram's `text_height` x or / 1.25, else the selection's
+  `font_step` (+-6).
 
-### Dimensions, Marks and the Solver
+## Dimensions, Marks and the Solver
 
-* Dimensions: thin lines, extension lines, arrowheads, bold letter
-  away from the outline's middle; a circle moves the letter (`along`)
-  and the line (`offset`).  Angles: between two edges or an edge and
-  an axis, a positive value under 180 as drawn
-  (`Drawing.follow_angles()`), default the drawn angle.
-* Marks (#233, #236) are letterless dimensions (`is_mark()`): a
-  VERTICAL one across an edge = level `—`, HORIZONTAL = upright `|`
-  (`mark_edge()`), from `ORIGIN` = a corner on the X/Y axis (#239),
-  a letterless ANGLE between a corner's edges = right angle (the
-  solver reads "90 deg").  Made and removed only by the toggle
-  buttons (`toggle_mark()`, `toggle_right()`), drawn so at once.
-  Glyphs: a `MARK_PIXELS` box out from the edge's middle or corner
-  (`mark_spot()`, `paint_mark()`), the right angle's square in its
-  sector (`right_box()`); clicked selects; red when extra or broken
-  by the drawing (`mark_broken()`, #241).  Pulling a corner out of a
-  marked edge drops the mark.
-* `dimensions.solve(points, dimensions)` guesses nothing from the
-  drawing: from the origin, passes until nothing new; horizontal and
-  vertical chains, lengths (`sqrt`, side as drawn), angles direct
-  edges (`ways`; marked edges directed from the start,
-  `_drawn_way()`), a directed edge gives its far corner by `tan`.
-  Extras: an axis dimension between known points, an angle between
-  directed edges (#230).  `drawn_marks()` gives old files the marks
-  their drawing showed.  Formulas tidy (`grouped()`, `total()`, ...).
-* Drags obey marks (#243, `drag_marked()`, `mark_chain()`): marked
-  corners move together; a chain reaching the origin or a corner the
-  dimensions pin holds.  Right angles do not hold yet (#244, last).
-* The drawing follows the values (#148): `Drawing.scale` puts each
-  known coordinate at `real * scale`; nothing moves while a used
-  letter is bad, a formula fails or edges cross.
+* Dimensions: thin lines, extension lines, arrowheads, bold letter;
+  a circle moves the letter (`along`) and line (`offset`).  `along`
+  outside 0-1 puts the letter past an end, arrows pointing in, a
+  `TAIL` past the far arrow.  Angles: positive, under 180 as drawn.
+* Marks are letterless dimensions (`is_mark()`): level `—`, upright
+  `|`, on an axis, right angle; made only by toggles; red when extra
+  or broken (`mark_broken()`).  `—`/`|` boxes can be dragged
+  (`moved`); right angles stay in their corners.
+* `dimensions.solve()` guesses nothing from the drawing: passes from
+  the origin until nothing new (chains, lengths, angles directing
+  edges).  `drawn_marks()` gives old files their marks.  Drags obey
+  marks (`drag_marked()`); right angles do not hold yet (#244).
+* Corners are placed from the values and marks, the same for the
+  editor and the SVG (`values.placed_corners()`); nothing moves while
+  a used letter is bad, a formula fails or edges cross.
 
-### Letters Table and Fillets
+## Letters Table and Fillets
 
-* Below the drawing past a `QSplitter`: one table under a `QTabBar`
-  ([Dimensions] every letter; [Fillets] the fixed "No fillet" row and
-  the letters checked "Fillet", plus [New Fillet Dimension]).
-  Columns Letter, Name, Value, Fillet (check box), Help.  Table row
-  0 is "No fillet" (`NO_FILLET`, never edited or saved); letters
-  start at `LETTER_ROW` 1.
-* Letters: 1-3 characters, a letter first, not `RESERVED`, not
-  differing only in case; Value a `Length` or `Angle` with a unit;
-  problems in red under the table and in the cell
-  (`letters.use_problem()`, `fillet_kind_problem()`).  One click
-  edits in [Dimensions]; each keystroke kept (`LiveDelegate`).
-* Fillets: `RADIUS` dimensions on corners, true tangent arcs at the
-  letter's value, dashed lines to the sharp corner; the note letter
-  `UDF` ("All undimensioned fillets are radius UDF", no letter
-  shown); own letters shown past the arc's middle.  In [Fillets] a
-  click arms a row (`arm()`, `view.armed`; "" = sharp; selected
-  corners take it at once, #218), a plain click on a corner paints
-  it (one undo step), a drag still moves; disarm by the row again,
-  empty space or [Dimensions].  "Fillet" cannot be unchecked while
-  it rounds a corner (#225).
-* Hover (#224): a row lights its letter's dimensions and corners
-  (`lit_letter`, `corner_lit()`); a corner makes its letter's row
-  bold (`frame_row()`).
+* Under a `QSplitter`: one table under a `QTabBar` ([Dimensions],
+  [Fillets]); columns Letter, Name, Value, Fillet, Help; row 0 "No
+  fillet" (`NO_FILLET`), letters from `LETTER_ROW` 1.  Letters 1-3
+  characters, not `RESERVED`, not differing only in case; values a
+  `Length` or `Angle` with a unit; problems in red.
+* Fillets: `RADIUS` dimensions, true tangent arcs; note letter `UDF`
+  ("All undimensioned fillets are radius UDF").  In [Fillets] a click
+  arms a row and a click on a corner paints it.  Hover lights a
+  letter's dimensions and corners, and a corner's row.
 
-### Revolve and Hides
+## Revolve, Hides and Holes
 
-* [Revolve (R)]: half profile at X >= 0, the mirror half faint and
-  dashed; corners kept at X >= 0.  `outline_polygon.outline_revolved()`
-  makes it a `solid.SolidRevolved`, sharp tips cut flat (`TIP_FLAT`).
-* Hides (`gui/hides.py`): [Hide (H)] lays a strip in the [Overview
-  (O)] over straight stretches only; five circles resize and move
-  it; the working view cuts strips out with meshing break lines and
-  S-ended dimension lines.  A strip covering a letter or a mark's
-  glyph is red in the Overview, with a bar message (`covering()`,
-  `letter_spot()`, #182); letters are never moved for it.
+* [Revolve (R)]: half profile at X >= 0, mirror half faint and
+  dashed; `outline_polygon.outline_revolved()` makes a
+  `solid.SolidRevolved`, tips cut flat.
+* Hides (`gui/hides.py`): strips laid in the [Overview (O)] over
+  straight stretches; the working view cuts them out with break
+  lines; a strip over a letter or glyph is red.
+* Holes (`[[holes]]`, `Hole`: plain or counterbored, `at`, `letter`,
+  optional `clearance`, `counterbore`, `depth`), sizes from the
+  socket head cap screw table (`screws.py`, #4 to 1/2 in); the SVG
+  draws them with center marks.  Not yet in the editor or solids.
 
-### File Format (`outline_file.py`)
+## The SVG
 
-`kind = "outline"`, `version = 4` (3 added `text_height` and
-a dimension's `font_step`, 4 `[[holes]]`, both `T.sfoe~6.4`; `turns`,
-`moved` written when set), `revolve`, `note_radius`,
-`[letters]` (`name`, `default`, `help`, `fillet = true` when set),
-`[[points]]`, `[[dimensions]]` (`letter` "" for marks, `kind`,
-`from`/`to`, `offset`, `along`, `rays`, `places`), `[[hides]]`;
-fixed field order.  A file without `version` gets `drawn_marks()`
-ahead of its dimensions.  Outline files live in the shop's
-directories (`tools/NAME.outline.toml`); the shop reader and tree
+* Drawn as on paper from the text height h (ASME Y14.2, simple):
+  outline 0.2 h, thin lines 0.1 h, arrowheads h by h/3; h starts 1/30
+  of the larger side; letters print 3 mm (`LETTER_MM`).  Hershey
+  simplex text, `°`, `⌀`, `±` our own.  Black on white always; the
+  [SVG] tab uses the theme.  Letters carry hover titles (Firefox's
+  square kept until the letters table, #314).
+
+## File Format (`outline_file.py`)
+
+`kind = "outline"`, `version = 4`: `revolve`, `note_radius`,
+`text_height`, `turns`, `[letters]` (`name`, `default`, `help`,
+`fillet`), `[[points]]`, `[[dimensions]]` (`letter` "" for marks,
+`kind`, `from`/`to`, `offset`, `along`, `rays`, `places`,
+`font_step`, `moved`), `[[hides]]`, `[[holes]]`; optional fields
+written only when set; older versions migrated on read.  Files live
+in the shop as `tools/NAME.outline.toml`; the shop reader and tree
 skip them until #S7.
 
-## SolidCraft's 2D Solver (from `T.sdfm~2.5.2.1`, 2026-11-17)
+## SolidCraft's 2D Solver (if live sketches return)
 
-Moved here when `T.sdfm~2.5.2.1` was merged into `T.sfoe~6.4`
-(#259); they matter for #S7 and #S8.
+Fillets per corner and free arcs with given centers work; self
+crossings, holes touching the outline, edges too short for their
+fillets are taken silently, so we refuse them first.  At most about
+500 values a `parameters.change`; always send a unit.  Today solids
+are plain numbers (`T.rps~6.6`, #387).
 
-* Good: closed polylines, per-corner fillets, free arcs with given
-  centers (arc centers are always given), arc to arc, holes, two
-  outlines in one sketch, pockets cut into a plate; 204 segments
-  built in 1.3 s, changes 1-55 ms; areas exact, boxes to 1e-4 mm.
-  Driving each point and arc center as its own parameter (Python
-  computes them) matches dimensioned sketches exactly.
-* Taken silently, so our model must refuse them first: self-crossing
-  outlines (every region filled); holes touching, crossing or outside
-  the outline (dropped); an edge too short for its two fillets (the
-  solid goes back to the first build); a fillet radius using up an
-  edge, then the extrude fails ("no closed profiles").  `R = 0` and
-  over-half radii are refused, so sharp <-> rounded is a rebuild.
-* Limits: one `parameters.change` takes at most about 500 values
-  (send in chunks); tolerance near 1e-6 mm (1e-10 lines and 1e9 radii
-  refused); `arc_center_point` takes its radius from center and start.
-* Inches: bare parameter and point numbers are mm, a bare extrude
-  distance is inches, so always send a unit.
-* Volumes from `component.properties` are tessellated (compare boxes
-  or loose volumes); `parameters.list()` shows `used_by: []` for
-  parameters used only in point expressions.
-* `sketch.export_dxf(sketch=)` gives LINE and ARC entities, mm, no
-  dimensions; no SVG export.  A visible window builds ~10x slower.
+## Open (numbers sticky)
 
-## Steps Left and Open Items
-
-Numbers sticky; the next new one is #247.
-* #S5 SVG: now its own sub-task, `T.sfoe~6.4` (an SVG that
-  resembles the GUI; the user leans to an [SVG] tab, #189).
-* #S7 opened from the GUI tree with [Show in SolidCraft] (#115):
-  outline files make solids through `gui/outline_polygon.py`
-  (`outline_polygon()`, `outline_revolved()` -> `solid.SolidRevolved`;
-  fillets as arcs, plain numbers, no SolidCraft letter parameters,
-  #387).  #S8 done in `T.rps~6.6` (`solid.RoundedPolygon`).
-* #373a (from `T.rps~6.6`): a Mirror flag beside [Revolve]: the same
-  dashed mirror half, meaning "mirror about the Y axis, then extrude"
-  (a vise), made by `solid.RoundedPolygon.mirrored()`.  Not built.
-* #S9 leftovers: solver #83 (two slanted lengths at a corner), #84 (a
-  length along a directed edge); #244 drags holding right angles.
-* Open: #238 marks on the starting triangle (Claude: no).  Expected:
-  many corner cases to debug in the marks and solver (the user,
-  2026-11-19).  Four right angles on a quadrilateral: the fourth is
-  extra (red) by design.
-* Settled: no grid in the working view (#183); diameters and whole
-  tip angles wait for the catalog work (#89); drill flutes and cutter
-  teeth not planned (#8); only the user edits letter values (#152).
-* Work rules: ~3 minute chunks (longer when the user says), a top 5
-  each round with tokens left; `#N:` issues, never `1. 2. 3.`.
+* #290 holes: in the editor (click to place, dimensions to centers),
+  as cutting layers in `outline_polygon.py` (a counterbore a child
+  layer over its clearance hole), then Shars 202-1664's jaw file
+  (#333; L 6, W 1, H 2, D 3-7/8, E 1/2, F 0.937 in, counterbored both
+  faces #330, depth a value with no line #331).  Next, when
+  `T.tfo~6.5` reaches its first flat tool.
+* #373a a Mirror flag beside [Revolve]: mirror about Y, then extrude
+  (a vise), by `RoundedPolygon.mirrored()`.
+* #S7 [Show in SolidCraft] from the GUI tree (#115).
+* #314 a Markdown letters table (names, values, help) for documents.
+* #244 drags holding right angles; solver #83, #84.  #238 marks on
+  the starting triangle (Claude: no).
+* Expected: many corner cases in the marks and solver (the user).
