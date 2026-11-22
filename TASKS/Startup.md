@@ -25,6 +25,8 @@
 @6.4_SVG_from_the_Outline_Editor/Details.md
 @6.4_SVG_from_the_Outline_Editor/Context.md
 @6.5_Convert_Existing_Tools_to_the_2D_Editor/Details.md
+@6.6_Rounded_Polygon_Solids/Details.md
+@6.6_Rounded_Polygon_Solids/Context.md
 @../ISSUES/2_Archive_Merged_GitHub_Repositories/Summary.md
 @../ISSUES/3_Main_Part_Goes_Translucent_in_show_demo/Summary.md
 @../ISSUES/1_PathRack_Hidden_Path_Shows_Again/Summary.md

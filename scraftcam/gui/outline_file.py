@@ -37,7 +37,12 @@ letter's ([Font +], [Font -]; absent: 0).  A mark's `moved`
 its box.  `turns` (#300, 1 to 3;
 absent: 0) shows the drawing turned that many quarter turns
 clockwise, its letters upright; the file keeps the tool's axis
-along Y.  A dimension's `from` and `to`
+along Y.  Since version 4 (#290) `[[holes]]` hold round holes:
+`kind` `"plain"` (`letter` its diameter) or `"counterbored"`
+(`letter` its socket head cap screw's size, the holes from
+`screws.py`, #328), `at` its center as drawn, and, written only
+when they differ from the table, `clearance`, `counterbore` and
+`depth` (lengths with units).  A dimension's `from` and `to`
 are a corner's index or `"origin"`, and for an angle an edge (by the
 corner it leaves) or `"x_axis"` / `"y_axis"`.
 """
@@ -73,10 +78,19 @@ ENDS: dict[int, str] = {
 AXES: tuple[str, ...] = ("x", "y")
 
 # The file format's version: 2 since marks (#233), 3 since text sizes
-# (`T.sfoe~6.4` #280); a file without one is 1, and gets the marks
-# its drawing showed.
-VERSION: int = 3
-VERSIONS: tuple[int, ...] = (1, 2, 3)
+# (`T.sfoe~6.4` #280), 4 since holes (#290); a file without one is
+# 1, and gets the marks its drawing showed.
+VERSION: int = 4
+VERSIONS: tuple[int, ...] = (1, 2, 3, 4)
+
+# The kinds of hole (#290): a plain one is sized by its letter, a
+# counterbored one by its screw's.
+PLAIN: str = "plain"
+COUNTERBORED: str = "counterbored"
+HOLE_KINDS: tuple[str, ...] = (PLAIN, COUNTERBORED)
+
+# A counterbored hole's sizes that may differ from `screws.py`'s.
+HOLE_SIZES: tuple[str, ...] = ("clearance", "counterbore", "depth")
 
 # The kinds of dimension a file may hold.
 KINDS: tuple[str, ...] = (HORIZONTAL, VERTICAL, LENGTH, ANGLE, RADIUS)
@@ -87,8 +101,38 @@ class OutlineError(ValueError):
     """An outline file that cannot be read, with every problem found."""
 
 
+# Class `Hole`:
+@dataclass(slots=True)
+class Hole:
+    """A round hole through the outline (#290).
+
+    Attributes:
+    * `kind` (`str`): `PLAIN` or `COUNTERBORED`.
+    * `at` (`tuple[float, float]`): Its center, as drawn.
+    * `letter` (`str`): A plain hole's diameter, or a counterbored
+      one's screw size (Shars's E).
+    * `clearance` (`str`): The clearance hole's diameter, a length
+      with its unit; "" takes the screw's.
+    * `counterbore` (`str`): The counterbore's diameter; "" takes the
+      screw's.
+    * `depth` (`str`): The counterbore's depth; "" takes the screw's
+      head height.
+
+    Constructor:
+    * `Hole(kind, at, letter, clearance, counterbore, depth)`
+    """
+
+    # Constructor arguments:
+    kind: str = field(init=True)
+    at: tuple[float, float] = field(init=True)
+    letter: str = field(init=True)
+    clearance: str = field(init=True, default="")
+    counterbore: str = field(init=True, default="")
+    depth: str = field(init=True, default="")
+
+
 # Class `Outline`:
-# One attribute per field of the file, which has eight.
+# One attribute per field of the file, which has nine.
 @dataclass(slots=True)
 class Outline:  # pylint: disable=too-many-instance-attributes
     """What an outline file holds.
@@ -101,6 +145,7 @@ class Outline:  # pylint: disable=too-many-instance-attributes
     * `note_radius` (`str`): The letter of every fillet without a
       radius of its own ("" for none, #116).
     * `hides` (`list[Hide]`): The hide strips (#157).
+    * `holes` (`list[Hole]`): The holes (#290).
     * `text_height` (`float`): The diagram's letter height (drawing
       steps); 0 picks one from the outline's size (`T.sfoe~6.4`
       #280).
@@ -109,7 +154,7 @@ class Outline:  # pylint: disable=too-many-instance-attributes
 
     Constructor:
     * `Outline(points, letters, dimensions, revolve, note_radius,
-      hides, text_height, turns)`
+      hides, text_height, turns, holes)`
     """
 
     # Constructor arguments:
@@ -121,6 +166,7 @@ class Outline:  # pylint: disable=too-many-instance-attributes
     hides: list[Hide] = field(init=True, default_factory=list)
     text_height: float = field(init=True, default=0.0)
     turns: int = field(init=True, default=0)
+    holes: list[Hole] = field(init=True, default_factory=list)
 
 
 # Function `outline_text()`:
@@ -165,45 +211,98 @@ def outline_text(outline: Outline) -> str:
         lines += ["", "[[points]]", f"at = [{_number(x)}, {_number(y)}]"]
     dimension: Dimension
     for dimension in outline.dimensions:
-        lines += [
-            "",
-            "[[dimensions]]",
-            f"letter = {_string(dimension.letter)}",
-            f"kind = {_string(dimension.kind)}",
-            f"from = {_end(dimension.start)}",
-            f"to = {_end(dimension.end)}",
-            f"offset = {_number(dimension.offset)}",
-            f"along = {_number(dimension.along)}",
-        ]
-        if dimension.kind == ANGLE:
-            lines.append(f"rays = [{dimension.rays[0]}, {dimension.rays[1]}]")
-        if dimension.font_step:
-            lines.append(f"font_step = {dimension.font_step}")
-        if dimension.moved != (0.0, 0.0):
-            lines.append(
-                f"moved = [{_number(dimension.moved[0])},"
-                f" {_number(dimension.moved[1])}]"
-            )
-        if dimension.places:
-            places: str = ", ".join(
-                f"[{_string(kind)}, {_number(offset)}, {_number(along)}]"
-                for kind, offset, along in dimension.places
-            )
-            lines.append(f"places = [{places}]")
+        lines += _dimension_lines(dimension)
     hide: Hide
     for hide in outline.hides:
-        lines += [
-            "",
-            "[[hides]]",
-            f"axis = {_string(AXES[hide.axis])}",
-            f"below = {hide.below}",
-            f"above = {hide.above}",
-            f"low = {_number(hide.low)}",
-            f"high = {_number(hide.high)}",
-            f"under = {_number(hide.under)}",
-            f"over = {_number(hide.over)}",
-        ]
+        lines += _hide_lines(hide)
+    hole: Hole
+    for hole in outline.holes:
+        lines += _hole_lines(hole)
     return "\n".join(lines) + "\n"
+
+
+# Function `_dimension_lines()`:
+def _dimension_lines(dimension: Dimension) -> list[str]:
+    """Return a dimension's table, its optional fields only when set.
+
+    Arguments:
+    * `dimension` (`Dimension`): The dimension.
+
+    Returns:
+    * (`list[str]`): Its lines, a blank one first.
+    """
+    lines: list[str] = [
+        "",
+        "[[dimensions]]",
+        f"letter = {_string(dimension.letter)}",
+        f"kind = {_string(dimension.kind)}",
+        f"from = {_end(dimension.start)}",
+        f"to = {_end(dimension.end)}",
+        f"offset = {_number(dimension.offset)}",
+        f"along = {_number(dimension.along)}",
+    ]
+    if dimension.kind == ANGLE:
+        lines.append(f"rays = [{dimension.rays[0]}, {dimension.rays[1]}]")
+    if dimension.font_step:
+        lines.append(f"font_step = {dimension.font_step}")
+    if dimension.moved != (0.0, 0.0):
+        lines.append(
+            f"moved = [{_number(dimension.moved[0])},"
+            f" {_number(dimension.moved[1])}]"
+        )
+    if dimension.places:
+        places: str = ", ".join(
+            f"[{_string(kind)}, {_number(offset)}, {_number(along)}]"
+            for kind, offset, along in dimension.places
+        )
+        lines.append(f"places = [{places}]")
+    return lines
+
+
+# Function `_hide_lines()`:
+def _hide_lines(hide: Hide) -> list[str]:
+    """Return a hide strip's table.
+
+    Arguments:
+    * `hide` (`Hide`): The strip.
+
+    Returns:
+    * (`list[str]`): Its lines, a blank one first.
+    """
+    return [
+        "",
+        "[[hides]]",
+        f"axis = {_string(AXES[hide.axis])}",
+        f"below = {hide.below}",
+        f"above = {hide.above}",
+        f"low = {_number(hide.low)}",
+        f"high = {_number(hide.high)}",
+        f"under = {_number(hide.under)}",
+        f"over = {_number(hide.over)}",
+    ]
+
+
+# Function `_hole_lines()`:
+def _hole_lines(hole: Hole) -> list[str]:
+    """Return a hole's table, its sizes only when set.
+
+    Arguments:
+    * `hole` (`Hole`): The hole.
+
+    Returns:
+    * (`list[str]`): Its lines, a blank one first.
+    """
+    return [
+        "",
+        "[[holes]]",
+        f"kind = {_string(hole.kind)}",
+        f"at = [{_number(hole.at[0])}, {_number(hole.at[1])}]",
+        f"letter = {_string(hole.letter)}",
+    ] + [
+        f"{size} = {_string(getattr(hole, size))}"
+        for size in HOLE_SIZES
+        if getattr(hole, size)
+    ]
 
 
 # Function `outline_from_text()`:
@@ -315,6 +414,7 @@ class _Reader:
             if dimension is not None:
                 outline.dimensions.append(dimension)
         self.hides(data.get("hides", []), outline)
+        self.holes(data.get("holes", []), outline)
 
         # A file from before marks (#233) took its level and upright
         # edges and its corners on an axis from the drawing: they are
@@ -371,6 +471,52 @@ class _Reader:
                     float(table.get("over", 1.0)),
                 )
             )
+
+    # Method `_Reader.holes()`:
+    def holes(self, found: object, outline: Outline) -> None:
+        """Read the holes, their kinds, centers and sizes checked.
+
+        Arguments:
+        * `found` (`object`): The file's `holes`.
+        * `outline` (`Outline`): Given the good ones.
+        """
+        if not isinstance(found, list):
+            self.note("holes", "is not a list of tables")
+            return
+        index: int
+        table: object
+        for index, table in enumerate(found):
+            where: str = f"holes[{index}]"
+            if not isinstance(table, dict):
+                self.note(where, "is not a table")
+                continue
+            kind: object = table.get("kind")
+            at: object = table.get("at")
+            letter: object = table.get("letter")
+            sizes: list[object] = [table.get(size, "") for size in HOLE_SIZES]
+            if kind not in HOLE_KINDS:
+                self.note(where, f"kind is not one of {', '.join(HOLE_KINDS)}")
+            elif not (
+                isinstance(at, list)
+                and len(at) == 2
+                and all(_is_number(number) for number in at)
+            ):
+                self.note(where, "at is not [x, y]")
+            elif not isinstance(letter, str) or not letter:
+                self.note(where, "needs a letter")
+            elif not all(isinstance(size, str) for size in sizes):
+                self.note(where, f"{', '.join(HOLE_SIZES)} must be text")
+            elif kind == PLAIN and any(sizes):
+                self.note(where, "a plain hole has only its letter's size")
+            else:
+                outline.holes.append(
+                    Hole(
+                        str(kind),
+                        (float(at[0]), float(at[1])),
+                        letter,
+                        *(str(size) for size in sizes),
+                    )
+                )
 
     # Method `_Reader.points()`:
     def points(self, found: object) -> list[tuple[float, float]]:

@@ -20,6 +20,7 @@ from ..diagram import (
     Stroke,
     Weight,
     angle_dimension,
+    center_mark,
     dimension_line,
     edge_mark,
     length_dimension,
@@ -32,6 +33,8 @@ from ..diagram import (
     starting_height,
 )
 from ..geometry import ArcSegment, LineSegment, Point, XYSegment
+from ..model import Length
+from ..screws import Screw, screw
 from .dimensions import (
     ANGLE,
     HORIZONTAL,
@@ -48,7 +51,7 @@ from .dimensions import (
 )
 from .letters import Letter
 from .outline_cuts import cut_strokes
-from .outline_file import Outline
+from .outline_file import COUNTERBORED, Hole, Outline
 from .values import (
     first_scale,
     letter_values,
@@ -116,6 +119,12 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
         text_height = outline.text_height
     if text_height <= 0.0:
         text_height = starting_height((strokes[0],))
+
+    # The holes, each with its center mark (#290).
+    scale: float = _scale(outline)
+    hole: Hole
+    for hole in outline.holes:
+        strokes.extend(hole_strokes(outline, hole, scale, text_height))
 
     # Then each dimension and mark, its letter grown or shrunk by its
     # font steps, and the fillets' note.
@@ -387,6 +396,101 @@ def outline_strokes(
             if abs(segment.start[0]) > ON_AXIS or abs(segment.end[0]) > ON_AXIS
         )
     return strokes
+
+
+# Function `hole_sizes()`:
+def hole_sizes(outline: Outline, hole: Hole) -> tuple[Length, ...]:
+    """Return a hole's diameters, the through hole's first.
+
+    A plain hole is its letter's value; a counterbored one is its
+    screw's clearance and counterbore (`screws.py`, #328) unless the
+    hole gives its own.
+
+    Arguments:
+    * `outline` (`Outline`): The outline, for its letters.
+    * `hole` (`Hole`): The hole.
+
+    Returns:
+    * (`tuple[Length, ...]`): One diameter, or two for a
+      counterbored hole; none when its letter or sizes are bad.
+    """
+    # The letter's value, then the screw's holes from it.
+    values: dict[str, str] = {
+        letter.letter: letter.default for letter in outline.letters
+    }
+    try:
+        size: Length = Length.parse(values.get(hole.letter, ""))
+        if hole.kind != COUNTERBORED:
+            return (size,)
+        found: Screw = screw(size)
+        return (
+            (
+                Length.parse(hole.clearance)
+                if hole.clearance
+                else found.clearance
+            ),
+            (
+                Length.parse(hole.counterbore)
+                if hole.counterbore
+                else found.counterbore
+            ),
+        )
+    except (KeyError, ValueError):
+        return ()
+
+
+# Function `hole_strokes()`:
+def hole_strokes(
+    outline: Outline, hole: Hole, scale: float, height: float
+) -> list[Stroke]:
+    """Return a hole's circles, thick, and its center mark, thin.
+
+    Arguments:
+    * `outline` (`Outline`): The outline, for its letters.
+    * `hole` (`Hole`): The hole.
+    * `scale` (`float`): Drawing steps per millimeter (`_scale()`);
+      0 when nothing says, and the circles are then drawn one text
+      height across, so they still show.
+    * `height` (`float`): The text height (drawing steps).
+
+    Returns:
+    * (`list[Stroke]`): The circles, then the center mark.
+    """
+    # The radii, largest last, so the center lines reach past it.
+    radii: list[float] = [
+        size.mm() * scale / 2.0 for size in hole_sizes(outline, hole)
+    ]
+    if scale <= 0.0 or not radii:
+        radii = [
+            height / 2.0 * (index + 1) for index in range(len(radii) or 1)
+        ]
+    strokes: list[Stroke] = [
+        _circle(hole.at, radius) for radius in radii if radius > 0.0
+    ]
+    return strokes + center_mark(hole.at, max(radii), height)
+
+
+# Function `_circle()`:
+def _circle(center: Point, radius: float) -> Stroke:
+    """Return a thick full circle, as two half circles.
+
+    Arguments:
+    * `center` (`Point`): Its center.
+    * `radius` (`float`): Its radius.
+
+    Returns:
+    * (`Stroke`): The circle, counter-clockwise from its right.
+    """
+    # Right to left over the top, then back under the bottom.
+    right: Point = (center[0] + radius, center[1])
+    left: Point = (center[0] - radius, center[1])
+    return Stroke(
+        (
+            ArcSegment(right, left, center, radius, math.pi),
+            ArcSegment(left, right, center, radius, math.pi),
+        ),
+        Weight.THICK,
+    )
 
 
 # Function `fillet_arcs()`:

@@ -20,7 +20,13 @@ from scraftcam.gui.dimensions import (
 )
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_diagram import outline_sheet
-from scraftcam.gui.outline_file import Outline, outline_from_text
+from scraftcam.gui.outline_file import (
+    COUNTERBORED,
+    PLAIN,
+    Hole,
+    Outline,
+    outline_from_text,
+)
 
 DRILL: Path = Path("examples/shop/tools/drill.outline.toml")
 
@@ -65,6 +71,41 @@ def box() -> Outline:
 
 class TestOutlineDiagram(unittest.TestCase):
     """The outline, its dimensions and marks."""
+
+    def test_holes(self) -> None:
+        """Holes are thick circles to scale with center marks (#290): a
+        plain one its letter's size, a counterbored one its screw's
+        clearance and counterbore, a bad one a text height across."""
+        # A 6 in long box, 4 steps: 1 in is 2/3 of a step.
+        outline: Outline = box()
+        outline.letters = [
+            Letter("W", default="6 in"),
+            Letter("D", default="0.25 in"),
+            Letter("E", default="1/2 in"),
+        ]
+        outline.dimensions = [Dimension("W", HORIZONTAL, ORIGIN, 1, -1.0, 0.5)]
+        outline.holes = [
+            Hole(PLAIN, (1.0, 1.0), "D"),
+            Hole(COUNTERBORED, (3.0, 1.0), "E"),
+            Hole(PLAIN, (2.0, 1.0), "Q"),
+        ]
+        strokes: list[Stroke] = list(outline_sheet(outline, 0.5).strokes[1:])
+        circles: list[Stroke] = [
+            stroke for stroke in strokes if stroke.weight is Weight.THICK
+        ]
+        radii: list[float] = [
+            circle.segments[0].radius  # type: ignore[union-attr]  # Arcs.
+            for circle in circles
+        ]
+        step: float = 4.0 / 6.0
+        expected: list[float] = [0.125, 17 / 64, 13 / 32]
+        self.assertEqual(len(radii), 4)
+        each: float
+        want: float
+        for each, want in zip(radii[:3], expected, strict=True):
+            self.assertAlmostEqual(each, want * step)
+        self.assertAlmostEqual(radii[3], 0.25)
+        self.assertTrue(all(len(circle.segments) == 2 for circle in circles))
 
     def test_outline(self) -> None:
         """One thick closed stroke through the corners."""

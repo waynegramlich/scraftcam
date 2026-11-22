@@ -14,6 +14,9 @@ from scraftcam.gui.dimensions import (
 from scraftcam.gui.hides import Hide
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_file import (
+    COUNTERBORED,
+    PLAIN,
+    Hole,
     Outline,
     OutlineError,
     outline_from_text,
@@ -54,7 +57,7 @@ class OutlineFileTest(unittest.TestCase):
         """What is written reads back the same, and writes the same."""
         text: str = outline_text(HALF_DRILL)
         self.assertTrue(
-            text.startswith('kind = "outline"\nversion = 3\nrevolve = true')
+            text.startswith('kind = "outline"\nversion = 4\nrevolve = true')
         )
         self.assertIn('to = "y_axis"', text)
         self.assertIn('from = "origin"', text)
@@ -68,15 +71,15 @@ class OutlineFileTest(unittest.TestCase):
         """A file from before marks gets those its drawing showed,
         first; a version 2 file gets none; others are refused (#233).
         """
-        old: str = outline_text(HALF_DRILL).replace("version = 3\n", "")
+        old: str = outline_text(HALF_DRILL).replace("version = 4\n", "")
         back: Outline = outline_from_text(old, "old.outline.toml")
         marks: int = len(back.dimensions) - len(HALF_DRILL.dimensions)
         self.assertGreater(marks, 0)
         self.assertTrue(all(is_mark(each) for each in back.dimensions[:marks]))
         self.assertEqual(back.dimensions[marks:], HALF_DRILL.dimensions)
-        self.assertIn("version = 3", outline_text(back))
+        self.assertIn("version = 4", outline_text(back))
         two: str = outline_text(HALF_DRILL).replace(
-            "version = 3", "version = 2"
+            "version = 4", "version = 2"
         )
         self.assertEqual(outline_from_text(two), HALF_DRILL)
         with self.assertRaises(OutlineError) as caught:
@@ -130,6 +133,38 @@ class OutlineFileTest(unittest.TestCase):
         for bad in ("moved = [1.5]", 'moved = ["a", 2]', "moved = 3"):
             with self.assertRaises(OutlineError):
                 outline_from_text(text.replace("moved = [1.5, -2.0]", bad))
+
+    def test_holes(self) -> None:
+        """Holes are written only when there are some, their sizes only
+        when set, and read back (#290)."""
+        self.assertNotIn("holes", outline_text(HALF_DRILL))
+        holed: Outline = outline_from_text(outline_text(HALF_DRILL))
+        holed.holes = [
+            Hole(PLAIN, (0.5, 1.0), "D"),
+            Hole(COUNTERBORED, (2.0, 1.0), "E", depth="0.53 in"),
+        ]
+        text: str = outline_text(holed)
+        self.assertIn('kind = "counterbored"', text)
+        self.assertIn('depth = "0.53 in"', text)
+        self.assertNotIn("clearance", text)
+        self.assertEqual(outline_from_text(text), holed)
+        bad: str
+        good: str
+        for good, bad in (
+            ('kind = "plain"', 'kind = "square"'),
+            ("at = [0.5, 1.0]", "at = [0.5]"),
+            ('letter = "D"', 'letter = ""'),
+            ('depth = "0.53 in"', "depth = 0.53"),
+            ('letter = "D"', 'letter = "D"\ndepth = "1 in"'),
+        ):
+            # Only the holes' tables, after the drill's own.
+            head: str
+            holes: str
+            head, holes = text.split("[[holes]]", 1)
+            with self.assertRaises(OutlineError, msg=bad):
+                outline_from_text(
+                    head + "[[holes]]" + holes.replace(good, bad, 1)
+                )
 
     def test_order_fixed(self) -> None:
         """One moved corner changes one line (#92)."""

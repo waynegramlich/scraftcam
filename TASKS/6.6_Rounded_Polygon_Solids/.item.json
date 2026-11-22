@@ -1,0 +1,16 @@
+{
+  "state": "Open",
+  "created": "2026-11-22T16:12:54Z",
+  "updated": "2026-11-22T16:13:04Z",
+  "history": [
+    {
+      "state": "Pending",
+      "time": "2026-11-22T16:12:54Z"
+    },
+    {
+      "state": "Open",
+      "time": "2026-11-22T16:13:04Z"
+    }
+  ],
+  "tag": "rps"
+}
