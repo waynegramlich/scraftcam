@@ -2,10 +2,12 @@
 
 import math
 import unittest
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from fractions import Fraction
 
 from scraftcam.model import (
+    ORIGIN,
     Angle,
     Length,
     NotSettledError,
@@ -19,7 +21,9 @@ from scraftcam.model import (
 
 
 # Function `close()`:
-def close(a: Vector, b: Vector, tolerance: float = 1e-12) -> bool:
+def close(
+    a: Sequence[float], b: Sequence[float], tolerance: float = 1e-12
+) -> bool:
     """Return whether two vectors agree within `tolerance`."""
     return all(abs(p - q) <= tolerance for p, q in zip(a, b, strict=True))
 
@@ -132,6 +136,18 @@ class TestRotation(unittest.TestCase):
             )
             self.assertTrue(close(turned, unit), (axis, toward))
 
+    def test_xyzw_order(self) -> None:
+        """The constructor takes ROS order; both orders come back."""
+        half: float = math.sqrt(0.5)
+        quarter: Rotation = Rotation(0.0, 0.0, half, half)
+        expected: Rotation = Rotation.about((0, 0, 1), Angle(Fraction(90)))
+        self.assertTrue(close(quarter.xyzw(), expected.xyzw()))
+        self.assertTrue(close(quarter.wxyz(), (half, 0.0, 0.0, half)))
+        self.assertEqual(Rotation().xyzw(), (0.0, 0.0, 0.0, 1.0))
+        placement: Placement = Placement(ORIGIN, quarter)
+        self.assertEqual(placement.xyzw(), quarter.xyzw())
+        self.assertEqual(placement.wxyz(), quarter.wxyz())
+
     def test_long_chain(self) -> None:
         """3600 tenth-degree turns come back to where they started."""
         step: Rotation = Rotation.about((1, 2, 3), Angle(Fraction(1, 10)))
@@ -202,7 +218,9 @@ class TestPlacement(unittest.TestCase):
 
 
 # Class `Halver`:
+# Test models are settled, never built, so `build()` is not given.
 @dataclass(slots=True)
+# pylint: disable-next=abstract-method
 class Halver(SolidModel):
     """A child whose result moves half way to its target each pass.
 
@@ -231,7 +249,9 @@ class Halver(SolidModel):
 
 
 # Class `Pair`:
+# Test models are settled, never built, so `build()` is not given.
 @dataclass(slots=True)
+# pylint: disable-next=abstract-method
 class Pair(SolidModel):
     """A parent that sets its child's target and reads its result.
 
@@ -262,7 +282,9 @@ class Pair(SolidModel):
 
 
 # Class `Runaway`:
+# Test models are settled, never built, so `build()` is not given.
 @dataclass(slots=True)
+# pylint: disable-next=abstract-method
 class Runaway(SolidModel):
     """A model that never settles: its result doubles each pass.
 

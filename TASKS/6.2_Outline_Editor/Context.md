@@ -15,13 +15,13 @@ refused with every problem named, a missing one starts as the
 counterclockwise triangle (no marks, #238 open).  It makes a
 parametric `RoundedPolygon`: corners as formulas in letters, fillet
 radii by letter.  Light and dark (`gui/theme.py`); offscreen Qt
-tests, no SolidCraft except `test_outline_solid`.
+tests, no SolidCraft except `test_outline_polygon`'s live ones.
 
 Files: `scraftcam/gui/outline_editor.py` (Qt), `letters.py`,
 `dimensions.py`, `outline_file.py`, `values.py`, `hides.py`,
-`outline_solid.py` (no Qt); tests `test_outline_editor`,
+`outline_polygon.py` (no Qt); tests `test_outline_editor`,
 `test_letters`, `test_dimensions`, `test_outline_file`,
-`test_values`, `test_hides`, `test_outline_solid`, plus
+`test_values`, `test_hides`, `test_outline_polygon`, plus
 `test_shops`, `test_gui_tree`, `test_gui_theme` when touched.
 Coverage target above 95% (`uvx --python /usr/bin/python3 coverage
 run --include=... -m unittest ...`).  Example:
@@ -126,9 +126,8 @@ read).
 ### Revolve and Hides
 
 * [Revolve (R)]: half profile at X >= 0, the mirror half faint and
-  dashed; corners kept at X >= 0.  `gui/outline_solid.py FILE (PORT |
-  headless)` builds a revolved outline in SolidCraft, sharp tips cut
-  flat (`TIP_FLAT`).
+  dashed; corners kept at X >= 0.  `outline_polygon.outline_revolved()`
+  makes it a `solid.SolidRevolved`, sharp tips cut flat (`TIP_FLAT`).
 * Hides (`gui/hides.py`): [Hide (H)] lays a strip in the [Overview
   (O)] over straight stretches only; five circles resize and move
   it; the working view cuts strips out with meshing break lines and
@@ -182,12 +181,9 @@ Numbers sticky; the next new one is #247.
 * #S5 SVG: now its own sub-task, `T.sfoe~6.4` (an SVG that
   resembles the GUI; the user leans to an [SVG] tab, #189).
 * #S7 opened from the GUI tree with [Show in SolidCraft] (#115,
-  after #S5).  #S8 a separate class extruding a planar outline
-  (`RoundedPolygon` losing `z_start`, `z_end`, `children`;
-  `keepout.py`, `demo.py` follow; SolidCraft fillets, #140; #217
-  SolidCraft drops zero-length segments, so a value through 0
-  rebuilds).  #S9 leftovers: solver #83 (two slanted lengths at a
-  corner), #84 (a length along a directed edge); #244 drags holding
+  after #S5).  #S8 moved to `T.rps~6.6` (#345, 2026-11-22),
+  which builds the immutable RP and its solids.  #S9 leftovers:
+  solver #83 (two slanted lengths at a corner), #84 (a length along a directed edge); #244 drags holding
   right angles.
 * Open: #238 marks on the starting triangle (Claude: no).  Expected:
   many corner cases to debug in the marks and solver (the user,
@@ -198,3 +194,14 @@ Numbers sticky; the next new one is #247.
   teeth not planned (#8); only the user edits letter values (#152).
 * Work rules: ~3 minute chunks (longer when the user says), a top 5
   each round with tokens left; `#N:` issues, never `1. 2. 3.`.
+
+## 2026-11-22: From `T.rps~6.6`
+
+* #373a: a Mirror flag beside [Revolve]: the same dashed mirror half,
+  but meaning "mirror about the Y axis, then extrude" (a vise), made
+  by `solid.RoundedPolygon.mirrored()`.  Not built.
+* Outline files now make solids: `gui/outline_polygon.py`
+  (`outline_polygon()`, `outline_revolved()` -> `solid.SolidRevolved`,
+  fillets as arcs, no design-wide letter parameters).  #S7 [Show in
+  SolidCraft] can use it; `gui/outline_solid.py` (letters as
+  design-wide SolidCraft parameters) was deleted (#387).

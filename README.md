@@ -145,6 +145,12 @@ The code is the package `scraftcam/`:
   drilling, edge finishing).
 * `geometry.py`: outlines (`RoundedPolygon`, `Loop`) and the
   offsets that tool paths are made from.
+* `solid.py`: parts and assemblies built in SolidCraft: `SolidStep`
+  (a `.step` file), `SolidRoundedPolygon` (a tree of planar polygons
+  extruded to absolute heights, adding or cutting), `SolidRevolved`
+  (a half profile turned, for round tools) and `SolidAssembly` (solids
+  placed by position and quaternion, nested in SolidCraft's tree).
+  `gui/outline_polygon.py` makes them from outline files.
 * `shops.py` (with `Shops.md` and `examples/shop/`): the shop
   description files, their reader (every problem reported at its file
   and line), and the example shop that the demonstration uses.
@@ -171,6 +177,9 @@ The code is the package `scraftcam/`:
   * `tools.py`: tooling (mill tables, drills, a vise, a grid plate)
     and the keep-out regions around them.  Run it to see them in
     SolidCraft.
+  * `kurt_vise.py`, `vise_setup.py`: the Kurt DX6 vise as an
+    assembly (base, fixed jaw, movable jaw placed by the gap), and the
+    vise with a parallel against each jaw.
   * `cutter_models.py`: each cutter in the shop's tools files, with
     its holder.
   * `mount.py`: stacks of tooling and material that hold work on a

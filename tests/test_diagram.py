@@ -20,9 +20,9 @@ from scraftcam.diagram import (
     length_dimension,
     note,
     on_paper,
-    profile_sheet,
     radius_dimension,
     right_angle,
+    starting_height,
     svg,
 )
 from scraftcam.geometry import (
@@ -32,7 +32,6 @@ from scraftcam.geometry import (
     Point,
     XYSegment,
 )
-from scraftcam.outline import Profile
 
 SVG: str = "{http://www.w3.org/2000/svg}"
 
@@ -59,12 +58,23 @@ def circle(x: float, y: float, radius: float) -> Loop:
     return Loop("circle", (arc,))
 
 
+# Function `loop_sheet()`:
+def loop_sheet(loops: tuple[Loop, ...], text_height: float = 0.0) -> Sheet:
+    """Return loops drawn thick on paper, as an outline's sheet is."""
+    strokes: tuple[Stroke, ...] = tuple(
+        Stroke(loop.segments, Weight.THICK) for loop in loops
+    )
+    if text_height <= 0.0:
+        text_height = starting_height(strokes)
+    return on_paper(strokes, text_height)
+
+
 class TestSheet(unittest.TestCase):
-    """The strokes and paper of `profile_sheet()`."""
+    """The strokes and paper of `on_paper()` and `starting_height()`."""
 
     def test_square(self) -> None:
         """A square: one thick stroke, paper a margin wider."""
-        sheet: Sheet = profile_sheet(Profile("p", square(30.0)))
+        sheet: Sheet = loop_sheet((square(30.0),))
         height: float = TEXT_FRACTION * 30.0
         self.assertAlmostEqual(sheet.text_height, height)
         self.assertEqual(len(sheet.strokes), 1)
@@ -74,23 +84,21 @@ class TestSheet(unittest.TestCase):
 
     def test_given_height(self) -> None:
         """A text height given is kept."""
-        sheet: Sheet = profile_sheet(Profile("p", square(30.0)), 2.0)
+        sheet: Sheet = loop_sheet((square(30.0),), 2.0)
         self.assertEqual(sheet.text_height, 2.0)
         self.assertAlmostEqual(sheet.low[1], -2.0 * MARGIN)
 
     def test_arc_bounds(self) -> None:
         """An arc's bounds include the points it bulges through."""
         loop: Loop = circle(0.0, 0.0, 5.0)
-        sheet: Sheet = profile_sheet(Profile("c", loop), 1.0)
+        sheet: Sheet = loop_sheet((loop,), 1.0)
         self.assertAlmostEqual(sheet.low[0], -5.0 - MARGIN)
         self.assertAlmostEqual(sheet.high[1], 5.0 + MARGIN)
 
     def test_holes(self) -> None:
-        """Each hole is a stroke of its own."""
-        profile: Profile = Profile(
-            "p", square(30.0), (circle(10.0, 10.0, 3.0),)
-        )
-        self.assertEqual(len(profile_sheet(profile).strokes), 2)
+        """Each loop is a stroke of its own."""
+        sheet: Sheet = loop_sheet((square(30.0), circle(10.0, 10.0, 3.0)))
+        self.assertEqual(len(sheet.strokes), 2)
 
 
 def ends(stroke: Stroke) -> tuple[Point, Point]:
@@ -325,9 +333,9 @@ class TestMarks(unittest.TestCase):
 
     def test_note(self) -> None:
         """A note starts at the box's left, below it."""
-        outline: tuple[Stroke, ...] = profile_sheet(
-            Profile("p", square(30.0)), 1.0
-        ).strokes
+        outline: tuple[Stroke, ...] = (
+            Stroke(square(30.0).segments, Weight.THICK),
+        )
         strokes: list[Stroke] = note(outline, "UDF", 1.0)
         xs: list[float] = [
             point
@@ -351,7 +359,7 @@ class TestSvg(unittest.TestCase):
 
     def test_document(self) -> None:
         """Paper painted, sizes in mm, Y negated, widths from `h`."""
-        sheet: Sheet = profile_sheet(Profile("p", square(30.0)), 1.0)
+        sheet: Sheet = loop_sheet((square(30.0),), 1.0)
         root: ET.Element = ET.fromstring(svg(sheet))
         self.assertEqual(root.get("width"), "102mm")
         self.assertEqual(
@@ -369,7 +377,7 @@ class TestSvg(unittest.TestCase):
 
     def test_inks(self) -> None:
         """The ink and paper are the caller's."""
-        sheet: Sheet = profile_sheet(Profile("p", square(1.0)))
+        sheet: Sheet = loop_sheet((square(1.0),))
         text: str = svg(sheet, ink="white", paper="black")
         self.assertIn('fill="black"', text)
         self.assertIn('stroke="white"', text)
@@ -377,7 +385,7 @@ class TestSvg(unittest.TestCase):
     def test_unthemed(self) -> None:
         """Files are black on white whatever the viewer's theme
         (#285)."""
-        sheet: Sheet = profile_sheet(Profile("p", square(1.0)))
+        sheet: Sheet = loop_sheet((square(1.0),))
         text: str = svg(sheet)
         self.assertNotIn("<style>", text)
         self.assertIn('fill="white"', text)

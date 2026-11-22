@@ -426,26 +426,28 @@ def _cross(a: Vector, b: Vector) -> Vector:
 class Rotation:
     """A rotation, kept as a unit quaternion `w + xi + yj + zk`.
 
-    End users never see the quaternion: rotations are made with
-    `about()` or `pointing()`.  `a * b` is `b` then `a`, as with
-    matrices.  Every result is normalized again, so that a long chain
-    of compositions stays a rotation.
+    Rotations are usually made with `about()` or `pointing()`.  The
+    constructor takes the quaternion in `(x, y, z, w)` order, as ROS,
+    SciPy and game engines do; `xyzw()` and `wxyz()` give it back in
+    either order.  `a * b` is `b` then `a`, as with matrices.  Every
+    result is normalized again, so that a long chain of compositions
+    stays a rotation.
 
     Attributes:
-    * `w` (`float`): The scalar part.
     * `x` (`float`): The `i` part.
     * `y` (`float`): The `j` part.
     * `z` (`float`): The `k` part.
+    * `w` (`float`): The scalar part.
 
     Constructor:
-    * `Rotation(w, x, y, z)`
+    * `Rotation(x, y, z, w)`
     """
 
     # Constructor arguments:
-    w: float = field(default=1.0)
     x: float = field(default=0.0)
     y: float = field(default=0.0)
     z: float = field(default=0.0)
+    w: float = field(default=1.0)
 
     def __post_init__(self) -> None:
         """Normalize the quaternion.
@@ -483,10 +485,10 @@ class Rotation:
         half: float = angle.radians() / 2.0
         sine: float = math.sin(half)
         return Rotation(
-            math.cos(half),
             direction[0] * sine,
             direction[1] * sine,
             direction[2] * sine,
+            math.cos(half),
         )
 
     # Method `Rotation.pointing()`:
@@ -511,9 +513,27 @@ class Rotation:
             if abs(a[0]) > 0.9:
                 other = (0.0, 1.0, 0.0)
             perpendicular: Vector = _unit(_cross(a, other))
-            return Rotation(0.0, *perpendicular)
+            return Rotation(*perpendicular, 0.0)
         cross: Vector = _cross(a, b)
-        return Rotation(1.0 + dot, *cross)
+        return Rotation(*cross, 1.0 + dot)
+
+    # Method `Rotation.xyzw()`:
+    def xyzw(self) -> tuple[float, float, float, float]:
+        """Return the quaternion in ROS and SciPy order.
+
+        Returns:
+        * (`tuple[float, float, float, float]`): `(x, y, z, w)`.
+        """
+        return (self.x, self.y, self.z, self.w)
+
+    # Method `Rotation.wxyz()`:
+    def wxyz(self) -> tuple[float, float, float, float]:
+        """Return the quaternion with its scalar part first.
+
+        Returns:
+        * (`tuple[float, float, float, float]`): `(w, x, y, z)`.
+        """
+        return (self.w, self.x, self.y, self.z)
 
     # Method `Rotation.inverse()`:
     def inverse(self) -> "Rotation":
@@ -522,7 +542,7 @@ class Rotation:
         Returns:
         * (`Rotation`): The inverse rotation.
         """
-        return Rotation(self.w, -self.x, -self.y, -self.z)
+        return Rotation(-self.x, -self.y, -self.z, self.w)
 
     # Method `Rotation.apply()`:
     def apply(self, vector: Vector) -> Vector:
@@ -576,10 +596,10 @@ class Rotation:
         a: Rotation = self
         b: Rotation = other
         return Rotation(
-            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
             a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
             a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
             a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
         )
 
 
@@ -622,6 +642,24 @@ class Placement:
         """
         x, y, z = self.translation
         return (x.mm(), y.mm(), z.mm())
+
+    # Method `Placement.xyzw()`:
+    def xyzw(self) -> tuple[float, float, float, float]:
+        """Return the rotation's quaternion in ROS and SciPy order.
+
+        Returns:
+        * (`tuple[float, float, float, float]`): `(x, y, z, w)`.
+        """
+        return self.rotation.xyzw()
+
+    # Method `Placement.wxyz()`:
+    def wxyz(self) -> tuple[float, float, float, float]:
+        """Return the rotation's quaternion, scalar part first.
+
+        Returns:
+        * (`tuple[float, float, float, float]`): `(w, x, y, z)`.
+        """
+        return self.rotation.wxyz()
 
     # Method `Placement.compose()`:
     def compose(self, child: "Placement") -> "Placement":

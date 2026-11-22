@@ -6,9 +6,9 @@ Changes go one way, from our models to SolidCraft (#15, #22):
   a component of its own and places it.
 * After an edit, `send()` settles the model, then sends every value
   that changed (`SolidModel.solidcraft_values()`) as plain values, at
-  most `outline.CHANGE_LIMIT` to a call; a change to a field marked
-  `shape` (`meta(..., shape=True)`), or to the names of the values
-  (a `Profile` with more segments), deletes the model's component and
+  most `CHANGE_LIMIT` to a call; a change to a field marked
+  `shape` (`meta(..., shape=True)`), or to the names of the values,
+  deletes the model's component and
   parameters and builds it again (#19).
 * `place()` moves a model.  SolidCraft's `occurrence.move` is
   relative, so the link remembers where each model is and sends the
@@ -22,8 +22,11 @@ from dataclasses import Field, dataclass, field, fields
 from typing import Any
 
 from .model import Length, Placement, SolidModel
-from .outline import send_changes
 from .pybind.scraftpybind import JSON, PyBind
+
+# The most values one `parameters.change` takes (500 are taken, 510
+# refused).
+CHANGE_LIMIT: int = 500
 
 # A 3x4 rigid matrix as plain rows (rotation, then translation in mm).
 Rows = list[list[float]]
@@ -243,6 +246,55 @@ class SolidCraftLink:
             assert isinstance(parameter, str)
             if parameter.startswith(f"{name}__"):
                 self.solidcraft.parameters.delete(name=parameter)
+
+
+# Function `send_changes()`:
+def send_changes(
+    solidcraft: "PyBind",
+    old: dict[str, str],
+    new: dict[str, str],
+    *,
+    limit: int = CHANGE_LIMIT,
+) -> list["JSON"]:
+    """Send the values that changed, at most `limit` to a call.
+
+    More than `limit` values go in several calls, so SolidCraft may
+    see a state in between; the experiments found that it recovers
+    from one once the last call is in.
+
+    Arguments:
+    * `solidcraft` (`PyBind`): Where to send them.
+    * `old` (`dict[str, str]`): The values SolidCraft has.
+    * `new` (`dict[str, str]`): The values it should have, with the
+      same names.
+    * `limit` (`int`): The most values in one call.
+
+    Returns:
+    * (`list[JSON]`): The errors SolidCraft reported for the last call
+      (features that failed), empty when all is well.
+
+    Raises:
+    * `KeyError`: If `new` names a parameter `old` does not have.
+    """
+    # Only the values that moved are sent.
+    unknown: list[str] = [name for name in new if name not in old]
+    if unknown:
+        raise KeyError(f"not parameters yet: {unknown[:3]}")
+    changed: list[tuple[str, str]] = [
+        (name, value) for name, value in new.items() if old[name] != value
+    ]
+
+    # Send them in chunks, keeping the last call's errors.
+    errors: list[JSON] = []
+    start: int
+    for start in range(0, len(changed), limit):
+        chunk: dict[str, JSON] = dict(changed[start : start + limit])
+        result: JSON = solidcraft.parameters.change(changes=chunk)
+        assert isinstance(result, dict)
+        reported: JSON = result.get("errors", [])
+        assert isinstance(reported, list)
+        errors = list(reported)
+    return errors
 
 
 # Function `solidcraft_lengths()`:

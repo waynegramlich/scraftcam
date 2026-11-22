@@ -1,7 +1,7 @@
 {
-  "state": "Open",
+  "state": "Closed",
   "created": "2026-11-22T16:12:54Z",
-  "updated": "2026-11-22T16:13:04Z",
+  "updated": "2026-11-22T19:46:47Z",
   "history": [
     {
       "state": "Pending",
@@ -10,6 +10,10 @@
     {
       "state": "Open",
       "time": "2026-11-22T16:13:04Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-22T19:46:47Z"
     }
   ],
   "tag": "rps"

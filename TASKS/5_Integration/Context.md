@@ -49,13 +49,18 @@ to be published on PyPI.  The LinuxCNC end-to-end suite
 * `T.cmt~5.3`: the parametric model library (`scraftcam/model.py`,
   `SolidModel`, `SolidCraftLink`, live SolidCraft parameters;
   `JawPlate`, `Parallel`).
-* `T.sfoe~6.4`: SVG from outlines and `Profile`s (the current
-  focus; `T.sdfm~2.5.2.1` merged in, #259).  `T.oe~6.2`, the
-  outline editor, is Reference meanwhile.
-* 2026-11-22: `T.rps~6.6` opened: parts as Rounded Polygon Solids
-  (trees of planar outlines with absolute `z`), assemblies of them;
-  6.4's #290 (holes) paused for it.
+* `T.sfoe~6.4` (SVG from outlines) Suspended; its holes (#290)
+  wait until a flat tool needs them.  `T.oe~6.2`, the outline
+  editor, is Reference.
+* 2026-11-22: `T.rps~6.6` closed: `scraftcam/solid.py` (`Solid`,
+  `SolidStep`, `SolidRoundedPolygon`, `SolidRevolved`,
+  `SolidAssembly`), outline files to solids
+  (`gui/outline_polygon.py`), the Kurt DX6 vise and a setup with
+  parallels; `Profile` removed.  SolidCraft is an engine and a
+  renderer; models come from the GUI (the user).
+* 2026-11-22: `T.cett2e~6.5` opened: tool bits made from outline
+  files through the GUI, round tools first.
 * `T.cm~6.3` Suspended until 5.3 has tools; `T.ant~5.9` Open.
 * Pending: `T.npfetc~5.4` (a path per tool change), `T.sm2~5.5`,
-  `T.cpfj~5.7`, `T.rslsao~5.8`, `T.cett2e~6.5`.
+  `T.cpfj~5.7`, `T.rslsao~5.8`.
   `T.oacv~6.1` Suspended (left as it is).

@@ -107,3 +107,35 @@ Numbers are the plan's, kept.
   sent, and refused with the zone's name, but a move leading out is allowed.  A program not generated
   by `scraftcnc` reports that it is unchecked.  Each check must be quick.
 * Later: the tool holder's zone (the tool becomes a small stack of height range and radius).
+
+## 2026-11-22: From `T.rps~6.6` (keep-outs from solids)
+
+Moved here by the user's choice when 6.6 (Rounded Polygon Solids)
+was finished; see 6.6's `Summary.md` for the classes.
+
+* New classes in `scraftcam/solid.py`: `Solid`, `SolidStep`,
+  `SolidRoundedPolygon` (a tree of `Layer(polygon, dx, dy, z,
+  children, angle=, center=)`, each extruded from its parent's `z` to
+  its own, adding or cutting), `SolidAssembly` of `Placed(solid,
+  placement, appearance)`, flattened by `leaves()` (each `Leaf` with
+  its composed `Placement`).  `RoundedPolygon` there is immutable and
+  planar (mm corners plus `unit`; `flip()`, `rotate()`, `mirrored()`,
+  `circle()`).
+* The vise (`scraftcam/tooling/kurt_vise.py`, `kurt_dx6(gap)`, the
+  Kurt DX6 from Shars 202-1007) is an assembly of three parts, which
+  are its three keep-out zones (the user, #368): (1) `vise_base`,
+  bolted to the table; (2) `fixed_jaw` (block plus jaw plate); (3)
+  `movable_jaw` (jaw plate plus block), placed by the gap (#359a: in
+  tooling setups only the movable jaw moves, with its jaw plate and
+  the parallel against it).  `vise_setup.py` `vise_setup(gap)` adds a
+  parallel flat against each jaw; the tooling plate (on top of the
+  parallels) is left out until its grid of holes is discussed.
+* Plan (#374): build each zone from the assembly's leaves (each leaf
+  a `SolidRoundedPolygon` placed by its `Placement`), not by hand.
+  `keepout.py` and `demo.py` still use the old
+  `geometry.RoundedPolygon` (unitless, own heights and children); move
+  them onto the new solids, then make the old class's `unit` required
+  (no optional units: the user, #354) and fix its ~40 callers.
+* Most leaves are turned (jaw plates and parallels stand up by a
+  120 deg turn about (1, 1, 1)), so a zone from a leaf is its polygon
+  extruded and then placed, not always a vertical prism.

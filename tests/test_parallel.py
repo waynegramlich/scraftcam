@@ -1,4 +1,4 @@
-"""Tests for `scraftcam.tooling.parallel`: a model drawn from a profile.
+"""Tests for `scraftcam.tooling.parallel`: a model made of layers.
 
 The SolidCraft test runs a headless `solidcraft-cli`, and is skipped
 when there is none.
@@ -10,6 +10,7 @@ from fractions import Fraction
 
 from scraftcam.model import Length
 from scraftcam.pybind.scraftpybind import PyBind, connect
+from scraftcam.solid import Layer
 from scraftcam.solidcraft_link import SolidCraftLink
 from scraftcam.tooling.parallel import Parallel
 from tests.test_jaw_plate import body_facts
@@ -19,18 +20,21 @@ HAVE_SOLIDCRAFT: bool = shutil.which("solidcraft-cli") is not None
 
 # Class `TestParallel`:
 class TestParallel(unittest.TestCase):
-    """The parallel's checks and side."""
+    """The parallel's checks and layers."""
 
-    def test_side(self) -> None:
-        """Two holes by default, none when asked."""
+    def test_layers(self) -> None:
+        """Two holes by default, 3 in apart about its middle; none."""
         parallel: Parallel = Parallel()
-        self.assertEqual(parallel.side.structure(), ("llll", "a", "a"))
+        holes: tuple[Layer, ...] = tuple(parallel.solid.root.children)
+        self.assertEqual(
+            [round(hole.dx.mm(), 9) for hole in holes], [38.1, 114.3]
+        )
+        self.assertAlmostEqual(holes[0].dy.mm(), 12.7)
         values: dict[str, str] = parallel.solidcraft_values("p")
         self.assertEqual(values["p__height"], "1 in")
-        self.assertEqual(values["p__side__l1__c0x"], "-38.1 mm")
         parallel.hole_count = 0
         parallel.settle()
-        self.assertEqual(parallel.side.structure(), ("llll",))
+        self.assertEqual(tuple(parallel.solid.root.children), ())
 
     def test_refused(self) -> None:
         """Holes that do not fit are refused, in the user's units."""
@@ -54,7 +58,7 @@ class TestSolidCraft(unittest.TestCase):
     """A parallel kept up to date in a headless SolidCraft."""
 
     def test_link(self) -> None:
-        """A longer parallel is sent; more holes rebuild it."""
+        """Every change of size rebuilds it, at the volume it should."""
         parallel: Parallel = Parallel()
         with connect("headless") as transport:
             solidcraft: PyBind = PyBind(transport)
@@ -64,23 +68,23 @@ class TestSolidCraft(unittest.TestCase):
             top: list[float]
             volume, top = body_facts(solidcraft)
             self.assertAlmostEqual(volume / parallel.volume, 1.0, 4)
-            self.assertAlmostEqual(top[1], 76.2, 6)
+            self.assertAlmostEqual(top[0], 152.4, 6)
 
-            # Longer, and the holes further apart: values sent.
+            # Longer, and the holes further apart.
             parallel.length = Length(8, "in")
             parallel.hole_spacing = Length(4, "in")
-            self.assertEqual(link.send(name), "changed")
+            self.assertEqual(link.send(name), "rebuilt")
             volume, top = body_facts(solidcraft)
             self.assertAlmostEqual(volume / parallel.volume, 1.0, 4)
-            self.assertAlmostEqual(top[1], 101.6, 6)
+            self.assertAlmostEqual(top[0], 203.2, 6)
 
-            # A third hole changes the side's structure: rebuilt.
+            # A third hole.
             parallel.hole_spacing = Length(2, "in")
             parallel.hole_count = 3
             self.assertEqual(link.send(name), "rebuilt")
             volume, top = body_facts(solidcraft)
             self.assertAlmostEqual(volume / parallel.volume, 1.0, 4)
-            self.assertAlmostEqual(top[1], 101.6, 6)
+            self.assertAlmostEqual(top[0], 203.2, 6)
 
 
 if __name__ == "__main__":

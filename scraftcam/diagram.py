@@ -19,8 +19,7 @@ from enum import Enum
 from html import escape
 
 from . import hershey
-from .geometry import ArcSegment, LineSegment, Loop, Point, XYSegment
-from .outline import Profile
+from .geometry import ArcSegment, LineSegment, Point, XYSegment
 
 # Line widths and the margin, as fractions of the text height (#277).
 THICK: float = 0.2
@@ -118,30 +117,6 @@ class Sheet:
     low: Point = field(init=True)
     high: Point = field(init=True)
     text_height: float = field(init=True)
-
-
-# Function `profile_sheet()`:
-def profile_sheet(profile: Profile, text_height: float = 0.0) -> Sheet:
-    """Return a sheet with a profile's outline and holes drawn on it.
-
-    Arguments:
-    * `profile` (`Profile`): The profile (mm).
-    * `text_height` (`float`):
-      The text height (mm); 0 picks one from the profile's size.
-
-    Returns:
-    * (`Sheet`): The sheet, its paper the drawing plus a margin.
-    """
-    # Each loop is one thick stroke.
-    loops: list[Loop] = [profile.outer, *profile.holes]
-    strokes: tuple[Stroke, ...] = tuple(
-        Stroke(loop.segments, Weight.THICK) for loop in loops
-    )
-
-    # The paper is the drawing's box plus a margin of text heights.
-    if text_height <= 0.0:
-        text_height = starting_height(strokes)
-    return on_paper(strokes, text_height)
 
 
 # Function `starting_height()`:

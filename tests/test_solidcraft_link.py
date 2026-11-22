@@ -7,6 +7,7 @@ when it is not on the `PATH`.
 import shutil
 import unittest
 from dataclasses import dataclass, field
+from typing import cast
 
 from scraftcam.model import (
     Angle,
@@ -23,6 +24,7 @@ from scraftcam.solidcraft_link import (
     _inverse,
     _off,
     _rows,
+    send_changes,
     shape_paths,
     solidcraft_lengths,
 )
@@ -169,6 +171,72 @@ class TestSolidCraftLink(unittest.TestCase):
             self.assertAlmostEqual(top[0], 115.0, 6)
             self.assertLess(link.drift, 1e-8)
             self.assertEqual(link.add(Block(), "block"), "block_002")
+
+
+# Class `FakeParameters`:
+# It stands in for the one method the code under test calls.
+class FakeParameters:  # pylint: disable=too-few-public-methods
+    """Records `parameters.change` calls in place of SolidCraft.
+
+    Attributes:
+    * `calls` (`list[dict[str, JSON]]`): The changes sent, in order.
+    """
+
+    def __init__(self) -> None:
+        """Start with no calls."""
+        self.calls: list[dict[str, JSON]] = []
+
+    def change(self, *, changes: dict[str, JSON]) -> JSON:
+        """Record one change.
+
+        Arguments:
+        * `changes` (`dict[str, JSON]`): The values sent.
+
+        Returns:
+        * (`JSON`): No errors.
+        """
+        self.calls.append(changes)
+        return {"errors": []}
+
+
+# Class `FakeSolidCraft`:
+# It stands in for `PyBind`'s one namespace the code under test uses.
+class FakeSolidCraft:  # pylint: disable=too-few-public-methods
+    """Stands in for `PyBind` with only its parameters.
+
+    Attributes:
+    * `parameters` (`FakeParameters`): The recorder.
+    """
+
+    def __init__(self) -> None:
+        """Start a recorder."""
+        self.parameters: FakeParameters = FakeParameters()
+
+
+# Class `TestSendChanges`:
+class TestSendChanges(unittest.TestCase):
+    """Only what moved is sent, in chunks."""
+
+    def test_chunks(self) -> None:
+        """Seven changed values at most three a call: 3, 3, 1."""
+        old: dict[str, str] = {f"v{index}": "1 mm" for index in range(9)}
+        new: dict[str, str] = dict(old)
+        index: int
+        for index in range(7):
+            new[f"v{index}"] = "2 mm"
+        fake: FakeSolidCraft = FakeSolidCraft()
+        errors: list[JSON] = send_changes(
+            cast(PyBind, fake), old, new, limit=3
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual([len(c) for c in fake.parameters.calls], [3, 3, 1])
+        self.assertNotIn("v8", fake.parameters.calls[-1])
+
+    def test_unknown(self) -> None:
+        """A name SolidCraft does not have is refused."""
+        fake: FakeSolidCraft = FakeSolidCraft()
+        with self.assertRaises(KeyError):
+            send_changes(cast(PyBind, fake), {}, {"v0": "1 mm"})
 
 
 if __name__ == "__main__":

@@ -95,7 +95,7 @@ arrowheads, and `DimensionHandle`'s drag math (`ends()`, `at()`,
   OUT R_ALONG R_OFFSET A_ALONG A_RADIUS` renders the drill's tip (run
   with `PYTHONPATH=.` and `QT_QPA_PLATFORM=offscreen`).
 
-## Open (numbers sticky; next new one #344)
+## Open (numbers sticky; next new one #354)
 
 * 2026-11-22: the part vision (#260, #335, #337, the user's): an
   outline file (letters table plus sketch) gives both the `.svg` and
