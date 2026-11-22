@@ -11,7 +11,7 @@ now in `T.oe~6.2`'s `Context.md`), `scraftcam/outline.py` `Profile`
 `scraftcam/tooling/parallel.py` `Parallel` drawn from a `Profile`
 (tests `test_outline`, `test_parallel`).  Not done: #38, `Profile` to
 SVG, carried to `T.sfoe~6.4`.  A per-model `sketch()` method
-(`T.ant~6.7` idea 1) is dropped as a task (#260).
+(`T.tkis~6.7` idea 1) is dropped as a task (#260).
 
 Tags: `T.sfoe~6.4`, `T.oe~6.2`, `T.cmt~5.3`, `T.dtm~2.5.2`,
-`T.ant~6.7`.
+`T.tkis~6.7`.

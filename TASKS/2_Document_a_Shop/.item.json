@@ -1,7 +1,7 @@
 {
-  "state": "Suspended",
+  "state": "Closed",
   "created": "2026-10-26T20:13:34Z",
-  "updated": "2026-11-03T02:40:29Z",
+  "updated": "2026-11-22T20:42:53Z",
   "history": [
     {
       "state": "Pending",
@@ -14,6 +14,10 @@
     {
       "state": "Suspended",
       "time": "2026-11-03T02:40:29Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-22T20:42:53Z"
     }
   ],
   "tag": "ds"

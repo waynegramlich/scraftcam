@@ -1,4 +1,4 @@
-# 6.7 Adding a New Tool
+# 6.7 Tool Kinds in the Shop
 
 (Draft by Claude, 2026-11-15, from the user's discussion at the end of
 `T.cm~6.3`; brought up to date 2026-11-22.)

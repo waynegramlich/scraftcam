@@ -1,7 +1,7 @@
 {
-  "state": "Suspended",
+  "state": "Closed",
   "created": "2026-10-28T17:39:38Z",
-  "updated": "2026-11-03T02:27:41Z",
+  "updated": "2026-11-22T20:42:53Z",
   "history": [
     {
       "state": "Pending",
@@ -22,6 +22,10 @@
     {
       "state": "Suspended",
       "time": "2026-11-03T02:27:41Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-22T20:42:53Z"
     }
   ],
   "tag": "mlcp"

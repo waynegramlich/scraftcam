@@ -65,7 +65,7 @@ history is in `hg` and `git`.  Issue numbers were shared with
 ## Left for Other Tasks
 
 * Keep-outs from the vise's parts, `keepout.py` and `demo.py` onto
-  the new solids, the old class's `unit` made required: `T.ikz~4`.
+  the new solids, the old class's `unit` made required: `T.kz~4`.
 * The editor's Mirror flag (#373a): `T.oe~6.2`.
 * Holes as cutting layers (#290): `T.sfoe~6.4`.
 * The tooling plate's grid of holes (#379): to be discussed.

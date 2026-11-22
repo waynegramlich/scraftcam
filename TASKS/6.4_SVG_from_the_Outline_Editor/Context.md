@@ -116,7 +116,7 @@ arrowheads, and `DimensionHandle`'s drag math (`ends()`, `at()`,
   holes as cutting layers in `outline_polygon.py` (a counterbore a
   child layer with its clearance hole under it), the 202-1664 file
   (#333).
-* #260: no per-model `sketch()` method in Python (`T.ant~6.7` idea 1).
+* #260: no per-model `sketch()` method in Python (`T.tkis~6.7` idea 1).
 * Work rules: ~3 minute chunks, several items per chunk when they
   fit; a top 5 after each round; renders for the user in `scratch/`
   with full `file:///` paths.

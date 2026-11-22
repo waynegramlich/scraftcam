@@ -1,9 +1,9 @@
-# 5 Integration
+# 5 Planning and Running Jobs
 
-Bringing the separate pieces together into one working system: the
-shop, its machines, tooling and stock, the mount, the G-code and the
-controller.  (Rewritten by Claude 2026-11-22 at the user's request;
-the GUI side of this list is `T.g~6`, keep-out checking `T.ikz~4`.)
+Planning a job for a shop (tools, stock, setups, G-code) and running
+it on its machines.  (Was "Integration"; rewritten by Claude
+2026-11-22 at the user's request.  The GUI side is `T.g~6`,
+keep-out checking `T.kz~4`.)
 
 ## Done
 

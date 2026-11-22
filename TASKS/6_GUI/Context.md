@@ -87,6 +87,9 @@ Suspended while its children work; its own items resume after
   (#79); no speeds-and-feeds table (#72).
 * Per machine kind fields (mill only now, #137); a small controller
   interface, LinuxCNC only now (#138).
+* LinuxCNC 2.9 changes mode only when stopped: MDI, Set Origin and
+  jogs are refused while a program is paused; G54 is not kept
+  between starts (from `T.mlcp~3.4`).
 
 ## Where Things Are
 

@@ -17,6 +17,6 @@ with its diagram.
 * Today's diagrams are code written by hand per kind
   (`tool_models.py`, `Tool_Models.md`); one `sketch()` method (or the
   like) per model would make them the "one place per kind" of
-  `T.ant~6.7` idea 1.
+  `T.tkis~6.7` idea 1.
 * Questions to settle: what the diagram is drawn from; which views;
   how letters and the field labels and help meet; light and dark.

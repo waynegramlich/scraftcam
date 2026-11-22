@@ -14,7 +14,7 @@
   0.35`) around the plate, which can make the plate look translucent.
   Check: when it happens (before or after "Modeling the stack"), and
   whether hiding the raw material's body brings the plate back.
-  `T.i~5`'s `Details.md` wants the
+  `T.parj~5`'s `Details.md` wants the
   initial stock translucent and the final part solid.
 * Other thing that changed this session: the model cache was emptied
   (`~/.scraftcnc/tool_cache/`), so the stack's models were rebuilt

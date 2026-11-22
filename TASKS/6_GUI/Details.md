@@ -20,7 +20,7 @@ drives the machines (the LinuxCNC simulator today).
 * **Outline editor and its SVG** (`T.oe~6.2`): parametric 2D outlines
   with letters, the diagrams in panels and documents.
 * **Tools from outlines** (`T.tfo~6.5`) and hooking them into the
-  shop (`T.ant~6.7`).
+  shop (`T.tkis~6.7`).
 * **Catalogs** (`T.cm~6.3`): vendors' catalogs, marked with
   `catxtract`, from which shop items are made.
 * Later: the GUI starting LinuxCNC itself, several simulators at once

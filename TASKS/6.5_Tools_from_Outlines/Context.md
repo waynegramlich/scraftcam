@@ -2,7 +2,7 @@
 
 Squeezed 2026-11-22, after taking in `T.cmt~5.3` (closed) and
 `T.tm~2.5` with its children (closed).  Issue numbers are shared with
-`T.oe~6.2`; the next new one is #406.
+`T.oe~6.2`; the next new one is #415.
 
 ## Ready
 
@@ -49,7 +49,7 @@ The drill vise waits for the user's measurements (#47).
 * #391 one outline file per kind of tool (letters D, L, LOC, ...),
   each shop tool in `tools.toml` giving only its letter values, or
   one file per tool.  Claude leans to per kind; it is also
-  `T.ant~6.7`'s idea 1.  Blocks `T.ant~6.7`.
+  `T.tkis~6.7`'s idea 1.  Blocks `T.tkis~6.7`.
 * #387 whether `model.py`'s `SolidModel` and `SolidCraftLink` stay
   (the user expects live parameters to go).
 * #379 the grid plate's holes: to be discussed.

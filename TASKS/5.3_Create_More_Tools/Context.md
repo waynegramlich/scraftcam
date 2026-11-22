@@ -7,7 +7,7 @@ the full history is in `hg` and `git`.
 
 5.3 is the excuse to build the library that lets people (and agents)
 make parametric parts and assemblies in Python; it is also
-`T.ant~6.7`'s idea 1 (one place per kind).  Documented here for now,
+`T.tkis~6.7`'s idea 1 (one place per kind).  Documented here for now,
 later in public `.md` files (`Models.md`, a page per model,
 `T.dtm~2.5.2`).
 

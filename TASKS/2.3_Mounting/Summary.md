@@ -6,4 +6,4 @@ millimeters unless given units; `examples/setup/`).  `MIKINI_1610L` is the user'
 
 To measure on the user's mill: table thickness and slot spacing (2-1/2 and 2 in are estimates), whether Y travel is centered, column
 clearance; the tooling plate's 1/2 in thickness.  Not done: clamps, a `Mill` layer, merging G-code files, parts turned over, non-flat raw
-material, checking that items rest on each other (`T.ikz~4`), visual mounting instructions, `SCCNC` cutting `SCRoundedPolygon`'s holes.
+material, checking that items rest on each other (`T.kz~4`), visual mounting instructions, `SCCNC` cutting `SCRoundedPolygon`'s holes.

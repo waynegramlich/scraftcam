@@ -1,12 +1,9 @@
 <!-- Written by ai_contexts; do not edit. -->
-@2_Document_a_Shop/Details.md
-@2.4_Stock_Models/Details.md
-@3.4_Minimal_LinuxCNC_Control_Panel/Details.md
-@4_Implementing_Keepout_Zones/Details.md
-@5_Integration/Details.md
-@5_Integration/Context.md
+@4_Keep_out_Zones/Details.md
+@5_Planning_and_Running_Jobs/Details.md
+@5_Planning_and_Running_Jobs/Context.md
 @5.4_New_Path_for_Each_Tool_Change/Details.md
-@5.5_Standard_Materials/Details.md
+@5.5_Stock_and_Materials/Details.md
 @5.6_Import_a_Project_from_a_Different_Shop/Details.md
 @5.7_Carousel_Planning_for_a_Job/Details.md
 @5.8_Run_Several_LinuxCNC_Simulators_at_Once/Details.md
@@ -16,7 +13,8 @@
 @6.3_Catalog_Management/Details.md
 @6.5_Tools_from_Outlines/Details.md
 @6.5_Tools_from_Outlines/Context.md
-@6.7_Adding_a_New_Tool/Details.md
+@6.7_Tool_Kinds_in_the_Shop/Details.md
+@2_Document_a_Shop/Summary.md
 @../ISSUES/2_Archive_Merged_GitHub_Repositories/Summary.md
 @../ISSUES/3_Main_Part_Goes_Translucent_in_show_demo/Summary.md
 @../ISSUES/1_PathRack_Hidden_Path_Shows_Again/Summary.md

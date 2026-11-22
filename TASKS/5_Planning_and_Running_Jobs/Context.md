@@ -19,8 +19,8 @@ reorganization.
 ## Where the Work Went (2026-11-22)
 
 * Tools, tooling and their models: `T.tfo~6.5` (outline files to
-  `solid.py` solids); hooking a tool into the shop: `T.ant~6.7`.
+  `solid.py` solids); hooking a tool into the shop: `T.tkis~6.7`.
 * The GUI, HMI replacement, catalogs, the outline editor: `T.g~6`.
-* Keep-outs from the new solids: `T.ikz~4`.
+* Keep-outs from the new solids: `T.kz~4`.
 * Left here: `T.npfetc~5.4` to `T.rslsao~5.8`, all Pending, and the
   "Left" list in `Details.md`.

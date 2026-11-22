@@ -14,4 +14,4 @@ of tools to make and moving `JawPlate` and `z_setter()` onto outlines
 went to `T.tfo~6.5`; the drill vise waits for the user's
 measurements (#47).  SolidCraft facts learned here are in `hg`.
 
-Tags: `T.tfo~6.5`, `T.rps~6.6`, `T.ant~6.7`.
+Tags: `T.tfo~6.5`, `T.rps~6.6`, `T.tkis~6.7`.
