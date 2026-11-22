@@ -95,37 +95,28 @@ arrowheads, and `DimensionHandle`'s drag math (`ends()`, `at()`,
   OUT R_ALONG R_OFFSET A_ALONG A_RADIUS` renders the drill's tip (run
   with `PYTHONPATH=.` and `QT_QPA_PLATFORM=offscreen`).
 
-## Open (numbers sticky; next new one #354)
+## Open (numbers sticky; next new one #393, shared with 6.5, 6.6)
 
-* 2026-11-22: the part vision (#260, #335, #337, the user's): an
-  outline file (letters table plus sketch) gives both the `.svg` and
-  the solid; no per-model `sketch()` methods.  RP = an immutable,
-  planar `RoundedPolygon` (#S8 stands; `flip()`, `rotate()`); RPS =
-  a tree of `(RP, dx, dy, z, children)`, `z` absolute (equal `z` =
-  matching level), each node from its parent's `z` to its own;
-  Assembly = RPSs placed by (X, Y, Z) and a quaternion.  Built in
-  the new `T.rps~6.6` (#341, #342).  `[[holes]]` stay a face view
-  shorthand for now (#343).
-* #290 paused (2026-11-22) for `T.rps~6.6`: example Shars 202-1664 (6 in
-  reversible jaw, `SharsMD/page_316/page_316.md:60`: L 6, W 1, H 2,
-  D 3-7/8, E 1/2, F 0.937 in); reversible = flips face for face,
-  counterbored both faces (#330); depth a value, no dimension line
-  in the face view (#331).  Done: `scraftcam/screws.py` (#328, inch
-  SHCS clearance, counterbore, head-height depth; `test_screws`),
+* Suspended 2026-11-22 (#344).  The part vision (#260, #335, #337)
+  was built in `T.rps~6.6` (closed): `scraftcam/solid.py`
+  (`RoundedPolygon`, `SolidRoundedPolygon` of `Layer`s,
+  `SolidRevolved`, `SolidAssembly`) and `gui/outline_polygon.py`
+  (outline file to solid; refuses `[[holes]]` until #290).  Reopen
+  when `T.cett2e~6.5` reaches its first flat tool with holes.
+* #290 holes, paused: example Shars 202-1664 (6 in reversible jaw,
+  `SharsMD/page_316/page_316.md:60`: L 6, W 1, H 2, D 3-7/8, E 1/2,
+  F 0.937 in), counterbored both faces (#330), depth a value with no
+  dimension line in the face view (#331).  Done: `scraftcam/screws.py`
+  (#328, inch SHCS clearance, counterbore, head-height depth),
   `outline_file.py` version 4 `[[holes]]` (`Hole`: `kind`
   plain/counterbored, `at`, `letter`, optional `clearance`,
-  `counterbore`, `depth`); `outline_diagram.py` `hole_sizes()`,
-  `hole_strokes()`, `_circle()`: thick circles to scale plus
-  `center_mark()`, in the SVG.  Next: holes in the editor (and
-  click to place), dimensions to hole centers, the 202-1664 file
-  (#333).  Was: holes in the drawing and SVG,
-  dimensions to hole centers.  Original note: holes in the outline
-  file, the editor and the SVG (`outline.py`'s `Profile` has them),
-  dimensioned from their centers; first example the drill vise jaw
-  (5.3 #47: the user's measurements or Shars 202-1142's numbers).
-* The `Profile` sheet for `Parallel` in documents (`T.dtm~2.5.2`).
-* #260: no per-model `sketch()` method in Python (`T.ant~5.9` idea
-  1).
+  `counterbore`, `depth`), `outline_diagram.py` `hole_sizes()`,
+  `hole_strokes()` (circles to scale plus `center_mark()`).  Next:
+  holes in the editor (click to place), dimensions to hole centers,
+  holes as cutting layers in `outline_polygon.py` (a counterbore a
+  child layer with its clearance hole under it), the 202-1664 file
+  (#333).
+* #260: no per-model `sketch()` method in Python (`T.ant~5.9` idea 1).
 * Work rules: ~3 minute chunks, several items per chunk when they
   fit; a top 5 after each round; renders for the user in `scratch/`
   with full `file:///` paths.

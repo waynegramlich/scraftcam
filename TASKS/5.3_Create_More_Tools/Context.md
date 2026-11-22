@@ -109,8 +109,12 @@ later in public `.md` files (`Models.md`, a page per model,
   `tooling/setters.py` `z_setter(imperial)` (Shars 303-3104, approved;
   no shop kind, keep-out, sketch or tests).  Old `tools.JawPlate` and
   `tools.Parallel` stay until the GUI is debugged.
+* Since `T.rps~6.6`: new tooling is built as `solid.py` solids
+  (plain numbers, rebuilt on change), not SolidCraft parameters,
+  which the user expects to go (#387); `tooling/kurt_vise.py`
+  (`jaw_plate_solid()`, `kurt_dx6()`) and `vise_setup.py`.
 * Tests: `test_model`, `test_jaw_plate`, `test_solidcraft_link`,
-  `test_parallel`.
+  `test_parallel`, `test_solid`, `test_kurt_vise`.
 
 ## Next
 

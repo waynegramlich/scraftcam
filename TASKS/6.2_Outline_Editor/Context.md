@@ -1,8 +1,8 @@
 # LLM Agent Context Log
 
-Squeezed 2026-11-19 (second time): only what is in force and where
-things stand; designs dropped and the full history are in `hg` and
-`git` (last before this squeeze: `f51b4d0` and the commit after it).
+Squeezed 2026-11-19 (second time), touched 2026-11-22 for
+`T.rps~6.6`: only what is in force and where things stand; designs
+dropped and the full history are in `hg` and `git`.
 
 ## The Editor Today
 
@@ -137,8 +137,9 @@ read).
 
 ### File Format (`outline_file.py`)
 
-`kind = "outline"`, `version = 3` (3 added `text_height` and
-a dimension's `font_step`, `T.sfoe~6.4`), `revolve`, `note_radius`,
+`kind = "outline"`, `version = 4` (3 added `text_height` and
+a dimension's `font_step`, 4 `[[holes]]`, both `T.sfoe~6.4`; `turns`,
+`moved` written when set), `revolve`, `note_radius`,
 `[letters]` (`name`, `default`, `help`, `fillet = true` when set),
 `[[points]]`, `[[dimensions]]` (`letter` "" for marks, `kind`,
 `from`/`to`, `offset`, `along`, `rays`, `places`), `[[hides]]`;
@@ -180,11 +181,16 @@ Moved here when `T.sdfm~2.5.2.1` was merged into `T.sfoe~6.4`
 Numbers sticky; the next new one is #247.
 * #S5 SVG: now its own sub-task, `T.sfoe~6.4` (an SVG that
   resembles the GUI; the user leans to an [SVG] tab, #189).
-* #S7 opened from the GUI tree with [Show in SolidCraft] (#115,
-  after #S5).  #S8 moved to `T.rps~6.6` (#345, 2026-11-22),
-  which builds the immutable RP and its solids.  #S9 leftovers:
-  solver #83 (two slanted lengths at a corner), #84 (a length along a directed edge); #244 drags holding
-  right angles.
+* #S7 opened from the GUI tree with [Show in SolidCraft] (#115):
+  outline files make solids through `gui/outline_polygon.py`
+  (`outline_polygon()`, `outline_revolved()` -> `solid.SolidRevolved`;
+  fillets as arcs, plain numbers, no SolidCraft letter parameters,
+  #387).  #S8 done in `T.rps~6.6` (`solid.RoundedPolygon`).
+* #373a (from `T.rps~6.6`): a Mirror flag beside [Revolve]: the same
+  dashed mirror half, meaning "mirror about the Y axis, then extrude"
+  (a vise), made by `solid.RoundedPolygon.mirrored()`.  Not built.
+* #S9 leftovers: solver #83 (two slanted lengths at a corner), #84 (a
+  length along a directed edge); #244 drags holding right angles.
 * Open: #238 marks on the starting triangle (Claude: no).  Expected:
   many corner cases to debug in the marks and solver (the user,
   2026-11-19).  Four right angles on a quadrilateral: the fourth is
@@ -194,14 +200,3 @@ Numbers sticky; the next new one is #247.
   teeth not planned (#8); only the user edits letter values (#152).
 * Work rules: ~3 minute chunks (longer when the user says), a top 5
   each round with tokens left; `#N:` issues, never `1. 2. 3.`.
-
-## 2026-11-22: From `T.rps~6.6`
-
-* #373a: a Mirror flag beside [Revolve]: the same dashed mirror half,
-  but meaning "mirror about the Y axis, then extrude" (a vise), made
-  by `solid.RoundedPolygon.mirrored()`.  Not built.
-* Outline files now make solids: `gui/outline_polygon.py`
-  (`outline_polygon()`, `outline_revolved()` -> `solid.SolidRevolved`,
-  fillets as arcs, no design-wide letter parameters).  #S7 [Show in
-  SolidCraft] can use it; `gui/outline_solid.py` (letters as
-  design-wide SolidCraft parameters) was deleted (#387).
