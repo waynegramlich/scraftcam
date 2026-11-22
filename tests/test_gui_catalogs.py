@@ -1,4 +1,4 @@
-"""Tests of [New Catalog] and its helpers (`T.cm~6.3`)."""
+"""Tests of [New Catalog] and its helpers (`T.c~6.3`)."""
 
 import shutil
 import tempfile

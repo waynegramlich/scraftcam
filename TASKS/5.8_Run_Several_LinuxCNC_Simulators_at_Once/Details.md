@@ -3,10 +3,11 @@
 (Draft by Claude, 2026-11-13, from the user's request; the user's to
 revise.)
 
-The GUI shows one tab per machine, each with its own controls and a
-bar showing the time to its next operator intervention (`T.g~6`
-#101, #102).  Testing that needs more than one machine running at
-once, so more than one LinuxCNC simulator.
+The GUI's `machines/` list shows every machine, each with a bar
+showing the time to its next operator intervention, and opens one in
+its own panel (`T.g~6` #134-#138; the per-machine tabs went).
+Testing that needs more than one machine running at once, so more
+than one LinuxCNC simulator.
 
 * LinuxCNC uses fixed shared memory and real time keys, so two copies
   on one computer collide; each probably needs a container of its own

@@ -13,8 +13,11 @@ installed: package `scraftcam/` (`pybind/`, `lcnc/`, `hmi/`,
 hold the checkers' settings.  PySide6 comes from
 `packages.require()` (`scraftcam/pins.toml`), no venv; Linux is
 Wayland only, no macOS; to be published on PyPI.  The LinuxCNC
-end-to-end suite (`SCRAFTCNC_LINUXCNC=1`) has not been run since the
-reorganization.
+end-to-end suite: `podman start lcnc` first (the server quits at once
+if the container is stopped), then `SCRAFTCAM_LINUXCNC=1
+QT_QPA_PLATFORM=offscreen python3 -m unittest -v
+tests.test_lcnc_end_to_end` (about 30 s).  2026-11-22: 8 of 10 pass;
+see `T.g~6` #426.
 
 ## Where the Work Went (2026-11-22)
 

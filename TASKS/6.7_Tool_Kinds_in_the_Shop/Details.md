@@ -1,9 +1,9 @@
 # 6.7 Tool Kinds in the Shop
 
 (Draft by Claude, 2026-11-15, from the user's discussion at the end of
-`T.cm~6.3`; brought up to date 2026-11-22.)
+`T.c~6.3`; brought up to date 2026-11-22.)
 
-Catalogs (`T.cm~6.3`) are of no use until an end user can model a
+Catalogs (`T.c~6.3`) are of no use until an end user can model a
 tool and hook it into the shop.  Making the model is `T.tfo~6.5`
 (outline files); this task is the hooking in, which must be easy.
 
@@ -26,7 +26,7 @@ the JSON schemas and `Shops.md` generated from `KINDS`.
 3. **Assemblies**: tooling put together from parts (a vise with jaws
    and parallels, a fixture plate with clamps), each an outline solid
    or a STEP file, placed (`solid.SolidAssembly`).
-4. **Catalogs afterwards**: `T.cm~6.3`'s [New Tool from Row] offers
+4. **Catalogs afterwards**: `T.c~6.3`'s [New Tool from Row] offers
    any kind, so it stays generic.
 
 ## The Steps to Add a New Tool (the user's view)

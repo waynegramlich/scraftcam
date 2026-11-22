@@ -19,7 +19,7 @@ keep-out checking `T.kz~4`.)
 * A path per tool change (`T.npfetc~5.4`); a job as a directory of
   `.nc` files and its carousel plan (`T.cpfj~5.7`).
 * Standard materials (`T.sm2~5.5`); a project moved between shops
-  (`T.ipfds~5.6`); several LinuxCNC simulators at once
+  (`T.mdtas~5.6`); several LinuxCNC simulators at once
   (`T.rslsao~5.8`).
 * Automatic tool selection from the shop's tools.
 * Multipart manufacturing; probe support.

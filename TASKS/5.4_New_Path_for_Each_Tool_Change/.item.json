@@ -1,11 +1,15 @@
 {
-  "state": "Pending",
+  "state": "Closed",
   "created": "2026-11-04T00:48:26Z",
-  "updated": "2026-11-04T00:48:26Z",
+  "updated": "2026-11-22T20:48:56Z",
   "history": [
     {
       "state": "Pending",
       "time": "2026-11-04T00:48:26Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-22T20:48:56Z"
     }
   ],
   "tag": "npfetc"

@@ -47,4 +47,4 @@ full-size finishing lead sweeps its slug at full depth; through cuts
 enter the grid plate (spacers needed, forced once keep-out checking
 is on); #55 vise dimensions still unchecked against a real vise.
 
-Related: `T.hlp~3.3.1`, `T.sm2~5.5`, `T.ipfds~5.6`, `T.kz~4`.
+Related: `T.hlp~3.3.1`, `T.sm2~5.5`, `T.mdtas~5.6`, `T.kz~4`.

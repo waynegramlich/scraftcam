@@ -644,7 +644,7 @@ assumes the part is centered in the stock in X and Y and as thick as it.
   works in the "Developers Shop" (today's example shop); the built-in
   objects (tables, vise, parallels, `GRID_PLATE`) belong in its files
   eventually.
-* #63: `T.ipfds~5.6` Import a Project from a Different Shop created,
+* #63: `T.mdtas~5.6` Import a Project from a Different Shop created,
   Pending, with a draft `Details.md`.
 
 ## 2026-11-04: Chamfer-free plate in tests

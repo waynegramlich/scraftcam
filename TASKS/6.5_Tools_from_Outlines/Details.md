@@ -35,3 +35,7 @@ old model is kept until the new one is checked against it (#37a).
 
 * Every tool above is made from an outline file, and
   `Tool_Models.md` comes from those files.
+* The old model code is deleted: `tooling/tools.py`,
+  `tooling/cutter_models.py`, `tooling/tool_models.py`'s hand-drawn
+  sketches, and `model.py`/`solidcraft_link.py` unless #387 keeps
+  them.  Old and new are not left to live side by side.

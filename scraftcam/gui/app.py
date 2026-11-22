@@ -82,7 +82,7 @@ VERSION_CONTROLS: tuple[tuple[str, str], ...] = (
     ("hg", ".hg"),
 )
 
-# A catalog's `pages/` is never under version control (`T.cm~6.3`
+# A catalog's `pages/` is never under version control (`T.c~6.3`
 # #50, #58): the line that keeps it out, per ignore file, for any
 # catalog wherever the shop is in the repository.
 IGNORE_LINES: dict[str, str] = {
@@ -293,7 +293,7 @@ def pdf_pages(pdf: Path) -> int:
 
 # Function `new_catalog_text()`:
 def new_catalog_text(vendor: str, edition: str, pdf: str, pages: int) -> str:
-    """Write a new catalog's `catalog.toml` (`T.cm~6.3` #61).
+    """Write a new catalog's `catalog.toml` (`T.c~6.3` #61).
 
     Arguments:
     * `vendor` (`str`): Who publishes it (not empty).

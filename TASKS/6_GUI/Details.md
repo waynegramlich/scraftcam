@@ -21,7 +21,7 @@ drives the machines (the LinuxCNC simulator today).
   with letters, the diagrams in panels and documents.
 * **Tools from outlines** (`T.tfo~6.5`) and hooking them into the
   shop (`T.tkis~6.7`).
-* **Catalogs** (`T.cm~6.3`): vendors' catalogs, marked with
+* **Catalogs** (`T.c~6.3`): vendors' catalogs, marked with
   `catxtract`, from which shop items are made.
 * Later: the GUI starting LinuxCNC itself, several simulators at once
   (`T.rslsao~5.8`), a job's carousel plan (`T.cpfj~5.7`), operator

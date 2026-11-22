@@ -1,6 +1,8 @@
 # LLM Agent Context Log
 
-Squeezed 2026-11-22, with `T.sfoe~6.4` (the SVG) folded in: only
+Suspended 2026-11-22 while `T.tfo~6.5` works; reopen when it needs
+an editor feature (holes, #290, first).  Squeezed 2026-11-22, with
+`T.sfoe~6.4` (the SVG) folded in: only
 what is in force and where things stand; the history is in `hg` and
 `git`.  Issue numbers are shared with `T.tfo~6.5` (next new one in
 its notes).

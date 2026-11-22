@@ -1,4 +1,4 @@
-# 5.6 Import a Project from a Different Shop
+# 5.6 Moving a Design to Another Shop
 
 (Draft by Claude, 2026-11-04, from `T.emsagc~5.2` #63; the user's to
 revise.)

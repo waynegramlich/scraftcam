@@ -468,7 +468,7 @@ SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 # Where a directory's items are, when not its own `*.toml` files: a
-# catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.cm~6.3` #43).
+# catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.c~6.3` #43).
 CATALOG: str = "catalog.toml"
 
 # The outline editor's files (`T.oe~6.2` #S4), kept beside the
@@ -1901,7 +1901,7 @@ speed_factor = "250 %"
             "`catalogs/VENDOR/EDITION/catalog.toml`.  The catalog's "
             "PDF (or a link to it) and `catxtract`'s working files are "
             "in `pages/` beside it, never under version control "
-            "(`T.cm~6.3` #50, #58).",
+            "(`T.c~6.3` #50, #58).",
             (
                 TableField("vendor", "string", "Who publishes it.", True),
                 TableField(

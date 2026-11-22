@@ -735,7 +735,7 @@ class TestNotInitialized(CopiedShop):
 
 
 class TestCatalogs(CopiedShop):
-    """Catalogs, `catalogs/VENDOR/EDITION/catalog.toml` (T.cm~6.3)."""
+    """Catalogs, `catalogs/VENDOR/EDITION/catalog.toml` (T.c~6.3)."""
 
     CATALOG: str = "catalogs/shars/2026/catalog.toml"
 

@@ -165,7 +165,7 @@ WINDOWS: list["Window"] = []
 
 # The `catxtract` windows open, by their `catalog.toml`: one each, in
 # a window of its own, as a page needs all the screen it can get
-# (`T.cm~6.3` #68).
+# (`T.c~6.3` #68).
 CATALOG_WINDOWS: dict[str, "Pages"] = {}
 
 # [New Window] (#200).
@@ -462,7 +462,7 @@ class Window(QWidget):
     * `message_label` (`QLabel`): The latest message.
     * `action_rows` (`QWidget`): The action rows.
     * `new_catalog_row` (`QWidget`): The action row with [New
-      Catalog], for `catalogs/` and the shop (`T.cm~6.3` #61).
+      Catalog], for `catalogs/` and the shop (`T.c~6.3` #61).
     * `new_machine_row` (`QWidget`): The action row with [New
       Machine], for `machines/` (#141).
     * `new_shop_row` (`QWidget`): The action row with [New Shop].
@@ -1108,7 +1108,7 @@ class Window(QWidget):
         )
 
         # [New Catalog], for `catalogs/` and the shop itself, since a
-        # shop has no `catalogs/` until its first (`T.cm~6.3` #61).
+        # shop has no `catalogs/` until its first (`T.c~6.3` #61).
         catalogs: bool = node is not None and (
             node.kind == SHOP or is_catalogs_directory(node)
         )
@@ -1925,7 +1925,7 @@ class NewShopDialog(QDialog):
 
 # Class `NewCatalogDialog`:
 class NewCatalogDialog(QDialog):
-    """The questions for a new catalog (`T.cm~6.3` #61).
+    """The questions for a new catalog (`T.c~6.3` #61).
 
     Its vendor, its edition, its PDF, and whether the PDF is copied
     into the catalog's `pages/` or linked to.  [Create] stays grey

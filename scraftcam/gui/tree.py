@@ -468,7 +468,7 @@ def shop_children(directory: Path, skip: Path | None = None) -> list[Node]:
     path: Path
     for path in entries(directory):
         # A catalog's `pages/` is its PDF and `catxtract`'s working
-        # files, shown in the catalog's panel (`T.cm~6.3` #59).
+        # files, shown in the catalog's panel (`T.c~6.3` #59).
         if path.name == CATALOG_PAGES and (directory / CATALOG).is_file():
             continue
         if path.is_dir():

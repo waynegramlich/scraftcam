@@ -2,7 +2,7 @@
 
 Squeezed 2026-11-22, after taking in `T.cmt~5.3` (closed) and
 `T.tm~2.5` with its children (closed).  Issue numbers are shared with
-`T.oe~6.2`; the next new one is #415.
+`T.oe~6.2`; the next new one is #427.
 
 ## Ready
 
@@ -39,6 +39,17 @@ Squeezed 2026-11-22, after taking in `T.cmt~5.3` (closed) and
 
 ## Plan
 
+* #S1 (#423), the first step: the drill as a kind.  The example
+  `examples/shop/tools/drill.outline.toml` has letters A (half point
+  angle), R (radius), L (overall length); a shop drill
+  (`examples/shop/tools/1_8_in_cobalt_jobber_drill.toml`) has named
+  fields `diameter`, `point_angle`, `overall_length`,
+  `length_of_cut`.  #425 open: shop files give letter values, or
+  keep their named fields and the outline maps them (`R = diameter /
+  2`, `A = point_angle / 2`), leaving the schema, reader and GUI
+  alone.  Claude leans to the mapping.  Then check the outline drill
+  against `cutter_models`' drill (volume, box) for both shop drills.
+
 Round tools first (end mill, drill, chamfer, corner rounding, double
 angle, countersinks, Z setter); flat tools (parallel, jaw plate) when
 `T.oe~6.2` #290 (holes) is done.  New tools from `Details.md` after.
@@ -46,10 +57,10 @@ The drill vise waits for the user's measurements (#47).
 
 ## Open
 
-* #391 one outline file per kind of tool (letters D, L, LOC, ...),
-  each shop tool in `tools.toml` giving only its letter values, or
-  one file per tool.  Claude leans to per kind; it is also
-  `T.tkis~6.7`'s idea 1.  Blocks `T.tkis~6.7`.
+* #391 decided (the user, 2026-11-22): one drawing per tool kind.
+  Each kind is one outline file (letters D, L, LOC, ...); each shop
+  tool in `tools.toml` gives only its letter values.  This is
+  `T.tkis~6.7`'s idea 1, which can start after a few round tools.
 * #387 whether `model.py`'s `SolidModel` and `SolidCraftLink` stay
   (the user expects live parameters to go).
 * #379 the grid plate's holes: to be discussed.

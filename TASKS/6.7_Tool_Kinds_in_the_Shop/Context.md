@@ -1,8 +1,9 @@
 # LLM Agent Context Log
 
-Squeezed 2026-11-22: moved from 5.9 to 6.7 and Suspended until
-`T.tfo~6.5` #391 (one outline file per kind of tool, or per tool) is
-decided and a few round tools are made from outlines.
+Squeezed 2026-11-22: moved from 5.9 to 6.7 and Suspended until a
+few round tools are made from outlines in `T.tfo~6.5`.  #391 is
+decided (the user): one outline file per tool kind; each shop tool
+gives only its letter values.
 
 * Idea 1 (one place per kind) began as `meta()` field metadata in
   `scraftcam/model.py` (`T.cmt~5.3`, closed); with outline files, a
