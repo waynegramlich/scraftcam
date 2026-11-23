@@ -64,11 +64,49 @@ Issue numbers are shared with `T.tfo~6.5`, `T.oe~6.2` and
 ## The Plan (Steps added, removed and changed at will, #505)
 
 * #S1 `scraftcam/exposed/`: decorators, registry, `find`,
-  `describe`, `call`; tests without Qt.
+  `describe`, `call`; tests without Qt.  First chunk built
+  2026-11-23: `exposed.py` (`reads`, `changes`, `REGISTRY`,
+  `lookup()` takes a unique dotted ending, `find()`, `describe()`,
+  `call()` checks JSON kinds and unions, lists and tuples item by
+  item, `narration()` fills `{name}`s); `tests/test_exposed.py` (7
+  pass); all four checkers clean.  Left: methods on live objects
+  (handles, #488) and scraftcam types as text (`Length`, ...).
+* #507 (the user): a method is a function whose first argument is
+  `self`; live objects kept in a dictionary, a handle per object
+  (the user offered `id()`, with a sweep of the unreferenced).
+  Agreed instead: handles counted per class in the order made
+  (`OutlineView 1`, the same on every replay, #502), kept in a
+  `weakref.WeakValueDictionary` (no sweep), Qt ones checked with
+  `shiboken6.isValid()`; `self` is an argument like any other.
+  The counter lives in a `Handles` object in `exposed/handles.py`
+  (one per session, reset when a replay starts).  #508 values as text
+  in #S3.  Both wait for #S3.
 * #S2 `server.py` (stdlib, minimal MCP), its `urllib` test, the
   `.mcp.json` entry.
+  Built 2026-11-23: `server.py` (`Server(runner)`, `answer()`,
+  `serve(port)`, `ThreadingHTTPServer` on 127.0.0.1, each request
+  in its own thread; `main()` serves the named modules, by default
+  `samples.py`), `tests/test_exposed_server.py` (4 pass), checkers
+  clean; `.mcp.json` names `scraftcam` at `127.0.0.1:8765/mcp`.
+  #509 left: the user starts `python3 -m scraftcam.exposed.server`
+  before restarting Claude Code (it connects at start), approves
+  the server, and Claude tries `find`, `describe`, `call`.
 * #S3 the outline editor's `--mcp` and `--headless`, gestures, state
   text.
 * #S4 the narration panel.
 * #S5 `--record`, replay, `--update`; the first recording in
   `tests/steps/` (#479, the dimension across the axis).
+
+## Where It Stands (2026-11-23)
+
+* #S1 and #S2 built and committed.  Next session starts with the
+  #509 trial: the user has started `python3 -m
+  scraftcam.exposed.server` (port 8765) and restarted Claude Code;
+  Claude checks the `scraftcam` MCP tools are there, then tries
+  `find` (empty and `add`), `describe add`, `call add` (1, 2 -> 3),
+  `call corners` (count 2), and a bad call (`a` = "1").  If the
+  server was not up at start, `/mcp` reconnects (#511).
+* Calls arrive on a fresh thread per request (#512): #S3's Qt
+  runner must hand them to the main thread.
+* Then #S3: the outline editor's `--mcp` and `--headless`,
+  `exposed/handles.py`, gestures, state text, values as text.
