@@ -8,8 +8,10 @@ The Claude Code Session rules are:
   performed.  It may be followed by a `/clear`.
 * In order to conserve tokens, a coding Step is broken into smaller chunks
   of effort.  These effort chunks are typically limited to a modest number of
-  minutes (e.g. 3 minutes).  After each chunk, report the tokens
-  remaining, as a percentage of those available when the session started.
+  minutes (e.g. 3 minutes).  After each chunk, report the tokens used,
+  as a percentage of the context window: the last `/context` the user
+  ran plus a rough estimate since then, marked as an estimate.  Claude
+  cannot see its own token count; the user's `/context` is the measure.
 * Any issues that come up are given a sticky unique number, counting up
   from #1.  Each new issue gets a new number and resolved issue numbers
   do not get reused.  When asked for a prioritized issue list, just list the

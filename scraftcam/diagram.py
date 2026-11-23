@@ -185,8 +185,16 @@ def text(label: str, center: Point, height: float) -> list[Stroke]:
 
 
 # Function `length_dimension()`:
+# Its sizes and place are all needed; the last two are keyword-only.
+# pylint: disable-next=too-many-arguments
 def length_dimension(
-    start: Point, end: Point, offset: float, letter: str, height: float
+    start: Point,
+    end: Point,
+    offset: float,
+    letter: str,
+    *,
+    height: float,
+    along: float = 0.5,
 ) -> list[Stroke]:
     """Return a length dimension, its line parallel to its points.
 
@@ -199,6 +207,8 @@ def length_dimension(
     * `offset` (`float`): How far out the dimension line is.
     * `letter` (`str`): Its letter.
     * `height` (`float`): The text height.
+    * `along` (`float`): Where the letter sits along the line, 0 at
+      `start`'s end, 1 at `end`'s (`T.tfo~6.5` #442).
 
     Returns:
     * (`list[Stroke]`): Its thin strokes and filled arrowheads.
@@ -214,6 +224,7 @@ def length_dimension(
         (_step(start, out, offset), _step(end, out, offset)),
         letter=letter,
         height=height,
+        along=along,
     )
 
 

@@ -9,6 +9,7 @@ from scraftcam.geometry import ArcSegment, LineSegment, Point
 from scraftcam.gui import outline_diagram
 from scraftcam.gui.dimensions import (
     ANGLE,
+    DIAMETER,
     HORIZONTAL,
     LENGTH,
     ORIGIN,
@@ -69,7 +70,8 @@ def box() -> Outline:
     return Outline(points=list(BOX))
 
 
-class TestOutlineDiagram(unittest.TestCase):
+# One test per kind of stroke: many methods by design.
+class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-methods
     """The outline, its dimensions and marks."""
 
     def test_holes(self) -> None:
@@ -125,6 +127,20 @@ class TestOutlineDiagram(unittest.TestCase):
         ends: list[Point] = [strokes[2].segments[0].start]
         self.assertEqual(ends, [(0.0, -1.0)])
 
+    def test_diameter(self) -> None:
+        """A diameter runs from its corner's mirror image across the
+        axis to the corner (#437)."""
+        drill: Outline = plain_drill()
+        corner: Point = drill.points[1]
+        strokes: list[Stroke] = drawn(
+            drill, Dimension("D", DIAMETER, ORIGIN, 1, -1.0, 0.5)
+        )
+        horizontal: list[Stroke] = drawn(
+            plain_drill(), Dimension("D", HORIZONTAL, ORIGIN, 1, -1.0, 0.5)
+        )
+        self.assertEqual(len(strokes), len(horizontal))
+        self.assertEqual(strokes[2].segments[0].start, (-corner[0], -1.0))
+
     def test_vertical(self) -> None:
         """A vertical dimension's line sits at its offset's X."""
         strokes: list[Stroke] = drawn(
@@ -139,6 +155,26 @@ class TestOutlineDiagram(unittest.TestCase):
         )
         start: Point = strokes[2].segments[0].start
         self.assertAlmostEqual(start[1] / start[0], -2.0)
+
+    def test_length_along(self) -> None:
+        """A length dimension's letter sits where `along` puts it
+        (#442: it was always in the middle)."""
+        lefts: list[float] = []
+        along: float
+        for along in (0.2, 0.8):
+            strokes: list[Stroke] = drawn(
+                box(), Dimension("W", LENGTH, ORIGIN, 2, 1.0, along)
+            )
+            lefts.append(
+                min(
+                    point[0]
+                    for stroke in strokes
+                    if stroke.role == TEXT
+                    for segment in stroke.segments
+                    for point in (segment.start, segment.end)
+                )
+            )
+        self.assertGreater(lefts[1] - lefts[0], 1.0)
 
     def test_angle(self) -> None:
         """An angle's arc is about where its edges' lines cross."""
@@ -224,7 +260,7 @@ class TestOutlineDiagram(unittest.TestCase):
         """With the values fixing a scale, the letter's value is used."""
         outline: Outline = plain_drill()
         outline.letters.append(Letter("F", default="1/64 in", fillet=True))
-        outline.dimensions.append(Dimension("F", RADIUS, 2, 2, 0.0, 0.5))
+        outline.dimensions.append(Dimension("F", RADIUS, 3, 3, 0.0, 0.5))
         # The scale is private, but the radius must follow it.
         # pylint: disable-next=protected-access
         scale: float = outline_diagram._scale(outline)
@@ -265,7 +301,7 @@ class TestOutlineDiagram(unittest.TestCase):
         outline.dimensions = []
         sheet: Sheet = outline_sheet(outline, 0.5)
         mirror: list[Stroke] = [s for s in sheet.strokes if s.dashed]
-        self.assertEqual(len(mirror), 3)
+        self.assertEqual(len(mirror), 4)  # An edge each side of FL (#434).
         corner: Point = outline.points[1]
         self.assertEqual(mirror[0].segments[0].end, (-corner[0], corner[1]))
         self.assertIn("stroke-dasharray", svg(sheet))

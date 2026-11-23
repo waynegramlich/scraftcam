@@ -12,6 +12,7 @@ yet (`T.sfoe~6.4` #290: their centers are not dimensioned), and are
 refused.
 """
 
+import math
 from pathlib import Path
 
 from ..geometry import Corner
@@ -21,6 +22,10 @@ from .dimensions import RADIUS, Dimension
 from .letters import Letter
 from .outline_file import Outline, outline_from_text
 from .values import letter_values, real_corners
+
+# A corner whose edges turn by less than this (the sine of the angle)
+# is on a straight edge: dropped from the solid (#434).
+STRAIGHT: float = 1e-9
 
 
 # Function `outline_unit()`:
@@ -127,10 +132,37 @@ def _polygon(outline: Outline, name: str) -> RoundedPolygon:
         [
             Corner(x, y, radii.get(index, 0.0))
             for index, (x, y) in enumerate(corners)
+            if index in radii or not _straight(corners, index)
         ],
         name,
         outline_unit(outline),
     )
+
+
+# Function `_straight()`:
+def _straight(corners: list[tuple[float, float]], index: int) -> bool:
+    """Return whether a corner lies on a straight edge, its edges
+    going on the same way (`T.tfo~6.5` #434): such a corner is only a
+    place to dimension to (a drill's flutes' end), not a corner of the
+    solid.
+
+    Arguments:
+    * `corners` (`list[tuple[float, float]]`): The real corners (mm).
+    * `index` (`int`): The corner.
+
+    Returns:
+    * (`bool`): Whether it is straight.
+    """
+    # Straight when the edges in and out are parallel and the same way.
+    before: tuple[float, float] = corners[index - 1]
+    here: tuple[float, float] = corners[index]
+    after: tuple[float, float] = corners[(index + 1) % len(corners)]
+    ins: tuple[float, float] = (here[0] - before[0], here[1] - before[1])
+    out: tuple[float, float] = (after[0] - here[0], after[1] - here[1])
+    cross: float = ins[0] * out[1] - ins[1] * out[0]
+    dot: float = ins[0] * out[0] + ins[1] * out[1]
+    scale: float = math.hypot(*ins) * math.hypot(*out)
+    return dot > 0.0 and abs(cross) <= STRAIGHT * scale
 
 
 # Function `polygon_from_file()`:

@@ -4,6 +4,7 @@ import unittest
 
 from scraftcam.gui.dimensions import (
     ANGLE,
+    DIAMETER,
     HORIZONTAL,
     LENGTH,
     ORIGIN,
@@ -18,8 +19,10 @@ from scraftcam.gui.dimensions import (
     grouped,
     is_mark,
     mark_edge,
+    placement_problem,
     product,
     solve,
+    tip_on_origin,
     total,
 )
 
@@ -302,6 +305,63 @@ class DimensionsTest(unittest.TestCase):
             .y[0]
             .terms,
             ((-1, "D"),),
+        )
+
+
+class TestDiameter(unittest.TestCase):
+    """A revolved outline's diameter (`T.tfo~6.5` #437)."""
+
+    def test_half_x(self) -> None:
+        """A diameter gives its corner's X as half its letter, once."""
+        points: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 8.0),
+            (0.0, 8.0),
+        ]
+        sizes: list[Dimension] = [
+            *drawn_marks(points),
+            Dimension("D", DIAMETER, ORIGIN, 1),
+            Dimension("L", VERTICAL, ORIGIN, 2),
+        ]
+        solution: Solution = solve(points, sizes)
+        self.assertEqual(str(solution.x[1]), "(D / 2)")
+        self.assertEqual(str(solution.x[2]), "(D / 2)")
+        self.assertEqual(str(solution.y[2]), "L")
+        twice: Solution = solve(
+            points, [*sizes, Dimension("E", DIAMETER, ORIGIN, 2)]
+        )
+        self.assertEqual(twice.extra, [len(sizes)])
+
+
+class TestPlacement(unittest.TestCase):
+    """What keeps an outline from its real sizes (#445, #448)."""
+
+    def test_problems(self) -> None:
+        """Floating corners are named; a revolved tip must be on the
+        origin."""
+        points: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 8.0),
+            (0.0, 8.0),
+        ]
+        sizes: list[Dimension] = [
+            Dimension("D", HORIZONTAL, ORIGIN, 1),
+            Dimension("L", VERTICAL, ORIGIN, 2),
+        ]
+        self.assertIn(
+            "Every corner floats", placement_problem(points, [], False)
+        )
+        self.assertIn(
+            "Corners 0, 1, 2, 3 float", placement_problem(points, sizes, False)
+        )
+        marked: list[Dimension] = [*drawn_marks(points), *sizes]
+        self.assertEqual(placement_problem(points, marked, False), "")
+        self.assertTrue(tip_on_origin(marked))
+        self.assertEqual(placement_problem(points, marked, True), "")
+        self.assertIn(
+            "tip goes on the origin", placement_problem(points, sizes, True)
         )
 
 

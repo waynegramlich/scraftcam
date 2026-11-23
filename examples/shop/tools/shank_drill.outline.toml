@@ -1,0 +1,147 @@
+kind = "outline"
+version = 4
+revolve = true
+turns = 1
+
+[letters.OAL]
+name = "Over All Length"
+default = "1 in"
+help = ""
+
+[letters.HPA]
+name = "Half Point Angle"
+default = "45 deg"
+help = ""
+
+[letters.SL]
+name = "Shank Length"
+default = "1 in"
+help = ""
+
+[letters.FL]
+name = "Flute Length"
+default = "1 in"
+help = ""
+
+[letters.SR]
+name = "Shank Radius"
+default = "1 in"
+help = ""
+
+[letters.DR]
+name = "Drill Radius"
+default = "1 in"
+help = ""
+
+[[points]]
+at = [0.0, -10.0]
+
+[[points]]
+at = [2.0, -8.5]
+
+[[points]]
+at = [2.0, -5.5]
+
+[[points]]
+at = [2.0, 2.0]
+
+[[points]]
+at = [1.0, 2.0]
+
+[[points]]
+at = [1.0, 7.5]
+
+[[points]]
+at = [0.0, 7.5]
+
+[[dimensions]]
+letter = "OAL"
+kind = "vertical"
+from = 5
+to = 0
+offset = 7.0
+along = 0.8285714285714286
+
+[[dimensions]]
+letter = "HPA"
+kind = "angle"
+from = 0
+to = 6
+offset = 2.23606797749979
+along = 0.5
+rays = [1, -1]
+
+[[dimensions]]
+letter = "SL"
+kind = "length"
+from = 4
+to = 5
+offset = -2.5
+along = 0.2727272727272727
+
+[[dimensions]]
+letter = "FL"
+kind = "vertical"
+from = 0
+to = 2
+offset = 3.5
+along = 0.6363636363636364
+
+[[dimensions]]
+letter = "SR"
+kind = "length"
+from = 5
+to = 6
+offset = -1.5
+along = -2.0
+
+[[dimensions]]
+letter = "DR"
+kind = "horizontal"
+from = 0
+to = 1
+offset = -12.0
+along = 2.25
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = 1
+to = 2
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = 4
+to = 5
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = 6
+to = 0
+offset = 0.0
+along = 0.5
+moved = [0.0, -4.0]
+
+[[hides]]
+axis = "y"
+below = 3
+above = 5
+low = 2.73200158227848
+high = 1.6638647151898747
+under = 3.225
+over = 6.872502966772149
+
+[[hides]]
+axis = "y"
+below = 2
+above = 3
+low = 2.187598892405064
+high = 3.4511471518987342
+under = 3.375
+over = 6.5806962025316444

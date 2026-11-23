@@ -16,7 +16,7 @@ import math
 import re
 from collections.abc import Callable
 
-from ..model import Angle, Length
+from ..model import MM_PER, Angle, Length
 from .dimensions import ANGLE, RADIUS, Dimension, Solution, solve
 from .letters import ANGLE_UNITS, Letter, use_problem, value_problem
 
@@ -48,10 +48,11 @@ def letter_values(letters: list[Letter]) -> dict[str, float]:
     Returns:
     * (`dict[str, float]`): By letter; bad values left out.
     """
+    # The letters given values first, as the formulas use only those.
     values: dict[str, float] = {}
     letter: Letter
     for letter in letters:
-        if value_problem(letter.default):
+        if letter.formula or value_problem(letter.default):
             continue
         if letter.default.split()[-1] in ANGLE_UNITS:
             values[letter.letter] = math.radians(
@@ -59,7 +60,160 @@ def letter_values(letters: list[Letter]) -> dict[str, float]:
             )
         else:
             values[letter.letter] = Length.parse(letter.default).mm()
+
+    # Then the formula letters, worked out exactly (not from the text
+    # of their `default`, which is rounded).
+    given: dict[str, float] = dict(values)
+    for letter in letters:
+        if letter.formula and not _formula_problem(letter, letters):
+            values[letter.letter] = evaluate(letter.formula, given)
     return values
+
+
+# Function `formula_names()`:
+def formula_names(formula: str) -> list[str]:
+    """Return the letters a formula names, in order, each once.
+
+    Arguments:
+    * `formula` (`str`): The formula (`PA / 2`).
+
+    Returns:
+    * (`list[str]`): The names that are not functions or units; empty
+      when the formula cannot be read.
+    """
+    text: str = NUMBER_UNIT.sub(r"\1 * \2", formula).replace("^", "**")
+    try:
+        tree: ast.Expression = ast.parse(text, mode="eval")
+    except SyntaxError:
+        return []
+    names: list[str] = []
+    node: ast.AST
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Name)
+            and node.id not in FUNCTIONS
+            and node.id not in UNITS
+            and node.id not in names
+        ):
+            names.append(node.id)
+    return names
+
+
+# Function `formula_problem()`:
+def formula_problem(letters: list[Letter], index: int) -> str:
+    """Return what is wrong with one letter's formula ("" if nothing,
+    or if it has none).
+
+    Arguments:
+    * `letters` (`list[Letter]`): All of the outline's letters.
+    * `index` (`int`): The one to check.
+
+    Returns:
+    * (`str`): The problem, as the user should read it.
+    """
+    return _formula_problem(letters[index], letters)
+
+
+# Function `_formula_problem()`:
+def _formula_problem(letter: Letter, letters: list[Letter]) -> str:
+    """Return what is wrong with a letter's formula ("" if nothing).
+
+    A formula may name only letters given values, never another formula
+    letter, so that there are no loops and the order does not matter.
+
+    Arguments:
+    * `letter` (`Letter`): The letter.
+    * `letters` (`list[Letter]`): All of the outline's letters.
+
+    Returns:
+    * (`str`): The problem, as the user should read it.
+    """
+    # No formula: nothing to check.
+    if not letter.formula:
+        return ""
+
+    # Each name must be a letter given a good value.
+    named: str = _names_problem(letter, letters)
+    if named:
+        return named
+
+    # And it must work out.
+    given: dict[str, float] = letter_values(
+        [each for each in letters if not each.formula]
+    )
+    try:
+        evaluate(letter.formula, given)
+    except ValueError as error:
+        return f"{letter.letter} = {letter.formula}: {error}"
+    return ""
+
+
+# Function `_names_problem()`:
+def _names_problem(letter: Letter, letters: list[Letter]) -> str:
+    """Return what is wrong with the letters a formula names ("" if
+    nothing): each must be a letter given a good value.
+
+    Arguments:
+    * `letter` (`Letter`): The formula letter.
+    * `letters` (`list[Letter]`): All of the outline's letters.
+
+    Returns:
+    * (`str`): The problem, as the user should read it.
+    """
+    by_name: dict[str, Letter] = {each.letter: each for each in letters}
+    names: list[str] = formula_names(letter.formula)
+    head: str = f"{letter.letter} = {letter.formula}"
+    if not names:
+        return f"{head}: names no letter."
+    name: str
+    for name in names:
+        other: Letter | None = by_name.get(name)
+        if other is None:
+            return f"{head}: no letter {name}."
+        if other.formula:
+            return (
+                f"{head}: {name} is a formula letter too; name only "
+                "letters given values."
+            )
+        if value_problem(other.default):
+            return f"{head}: {name} is bad."
+    return ""
+
+
+# Function `refresh_formulas()`:
+def refresh_formulas(letters: list[Letter]) -> None:
+    """Set each formula letter's `default` to its worked out value.
+
+    An angle when every letter it names is an angle (in `deg`), else a
+    length in the unit of the first length letter it names; "" when
+    the formula has a problem (`formula_problem()`).
+
+    Arguments:
+    * `letters` (`list[Letter]`): The outline's letters, changed in
+      place.
+    """
+    values: dict[str, float] = letter_values(letters)
+    by_name: dict[str, Letter] = {each.letter: each for each in letters}
+    letter: Letter
+    for letter in letters:
+        if not letter.formula:
+            continue
+        if letter.letter not in values or _formula_problem(letter, letters):
+            letter.default = ""
+            continue
+        units: list[str] = [
+            by_name[name].default.split()[-1]
+            for name in formula_names(letter.formula)
+        ]
+        lengths: list[str] = [
+            unit for unit in units if unit not in ANGLE_UNITS
+        ]
+        value: float = values[letter.letter]
+        letter.default = (
+            f"{value / float(MM_PER[lengths[0]]):.6g} {lengths[0]}"
+            if lengths
+            else f"{math.degrees(value):.6g} deg"
+        )
 
 
 # Function `evaluate()`:

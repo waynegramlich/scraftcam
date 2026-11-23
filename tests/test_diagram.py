@@ -112,7 +112,7 @@ class TestDimensions(unittest.TestCase):
     def test_length(self) -> None:
         """Extension lines, a broken line, arrows out, the letter."""
         strokes: list[Stroke] = length_dimension(
-            (0.0, 0.0), (20.0, 0.0), -5.0, "L", 2.0
+            (0.0, 0.0), (20.0, 0.0), -5.0, "L", height=2.0
         )
         # Extension lines: from a gap below the point to past the line.
         first: Point
@@ -136,7 +136,7 @@ class TestDimensions(unittest.TestCase):
     def test_length_vertical(self) -> None:
         """A vertical dimension's break fits an upright letter."""
         strokes: list[Stroke] = length_dimension(
-            (0.0, 0.0), (0.0, 20.0), -5.0, "H", 2.0
+            (0.0, 0.0), (0.0, 20.0), -5.0, "H", height=2.0
         )
         self.assertAlmostEqual(ends(strokes[2])[1][0], 5.0)
         self.assertAlmostEqual(ends(strokes[2])[1][1], 10.0 - 2.0)
@@ -286,14 +286,14 @@ class TestDimensions(unittest.TestCase):
     def test_paper(self) -> None:
         """The paper takes in the dimensions."""
         strokes: list[Stroke] = length_dimension(
-            (0.0, 0.0), (20.0, 0.0), -5.0, "L", 2.0
+            (0.0, 0.0), (20.0, 0.0), -5.0, "L", height=2.0
         )
         self.assertAlmostEqual(on_paper(tuple(strokes), 2.0).low[1], -10.0)
 
     def test_filled_svg(self) -> None:
         """A filled stroke is filled with ink in the SVG."""
         strokes: list[Stroke] = length_dimension(
-            (0.0, 0.0), (20.0, 0.0), -5.0, "L", 2.0
+            (0.0, 0.0), (20.0, 0.0), -5.0, "L", height=2.0
         )
         self.assertIn(
             'class="ink solid" fill="black"',

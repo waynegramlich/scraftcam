@@ -37,6 +37,7 @@ from ..model import Length
 from ..screws import Screw, screw
 from .dimensions import (
     ANGLE,
+    DIAMETER,
     HORIZONTAL,
     LENGTH,
     ON_AXIS,
@@ -336,7 +337,9 @@ def letter_title(letter: Letter) -> str:
     """
     # The parts it has, the help as its own sentence.
     head: str = letter.letter + (f": {letter.name}" if letter.name else "")
-    if letter.default:
+    if letter.formula:
+        head += f" = {letter.formula}"
+    elif letter.default:
         head += f" = {letter.default}"
     return f"{head}.  {letter.help}" if letter.help else head
 
@@ -736,12 +739,20 @@ def _dimension(
     second: Point = _point(outline, dimension.end)
     if dimension.kind == LENGTH:
         return length_dimension(
-            first, second, dimension.offset, dimension.letter, height
+            first,
+            second,
+            dimension.offset,
+            dimension.letter,
+            height=height,
+            along=dimension.along,
         )
     if dimension.kind == ANGLE:
         return _angle(outline, dimension, height)
     ends: tuple[Point, Point]
-    if dimension.kind == HORIZONTAL:
+    if dimension.kind == DIAMETER:
+        # From the corner's mirror image across the axis (#437).
+        first = (-second[0], second[1])
+    if dimension.kind in (HORIZONTAL, DIAMETER):
         ends = ((first[0], dimension.offset), (second[0], dimension.offset))
     elif dimension.kind == VERTICAL:
         ends = ((dimension.offset, first[1]), (dimension.offset, second[1]))

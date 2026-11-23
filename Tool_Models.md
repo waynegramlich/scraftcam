@@ -254,21 +254,21 @@ name = "Sample end mill"
 kind = "end_mill"
 language = "English"
 version = "0.0.1"
-unique_id = 1
-diameter = "1/2 in"
-length_of_cut = "1 in"
-flutes = 4
-end = "bull_nose"
 corner_radius = "1/8 in"
-shank = "3/8 in"
-overall_length = "3 in"
-material = "carbide"
+diameter = "1/2 in"
+end = "bull_nose"
 finish = "uncoated"
+flutes = 4
+length_of_cut = "1 in"
+material = "carbide"
+overall_length = "3 in"
+shank = "3/8 in"
+unique_id = 1
 ```
 
 ## Drill
 
-A twist drill.
+A twist drill, its sizes the letters of `drill.outline.toml`.
 
 ![Drill sketch](docs/tool_models/drill.svg)
 
@@ -297,12 +297,12 @@ python3 -m scraftcam.tooling.cutter_models 8080 '{
   "kind": "drill",
   "material": "HSS",
   "finish": "black oxide",
-  "diameter": "5/8 in",
+  "D": "5/8 in",
   "shank": "1/2 in",
   "shank_length": "1-1/2 in",
-  "length_of_cut": "2-1/2 in",
-  "overall_length": "4-1/2 in",
-  "point_angle": "118 deg"
+  "FL": "2-1/2 in",
+  "OAL": "4-1/2 in",
+  "PA": "118 deg"
 }'
 ```
 
@@ -319,12 +319,12 @@ with connect("8080") as transport:
             "kind": "drill",
             "material": "HSS",
             "finish": "black oxide",
-            "diameter": "5/8 in",
+            "D": "5/8 in",
             "shank": "1/2 in",
             "shank_length": "1-1/2 in",
-            "length_of_cut": "2-1/2 in",
-            "overall_length": "4-1/2 in",
-            "point_angle": "118 deg",
+            "FL": "2-1/2 in",
+            "OAL": "4-1/2 in",
+            "PA": "118 deg",
         },
     )
 ```
@@ -336,15 +336,15 @@ name = "Sample drill"
 kind = "drill"
 language = "English"
 version = "0.0.1"
-unique_id = 1
-diameter = "5/8 in"
-length_of_cut = "2-1/2 in"
-point_angle = "118 deg"
-shank_length = "1-1/2 in"
-shank = "1/2 in"
-overall_length = "4-1/2 in"
-material = "HSS"
+D = "5/8 in"
+FL = "2-1/2 in"
+OAL = "4-1/2 in"
+PA = "118 deg"
 finish = "black oxide"
+material = "HSS"
+shank = "1/2 in"
+shank_length = "1-1/2 in"
+unique_id = 1
 ```
 
 ## Chamfer Mill
@@ -412,14 +412,14 @@ name = "Sample chamfer mill"
 kind = "chamfer_mill"
 language = "English"
 version = "0.0.1"
-unique_id = 1
-diameter = "1/2 in"
-tip_diameter = "1/4 in"
 angle = "90 deg"
-shank = "1/2 in"
-overall_length = "2 in"
-material = "carbide"
+diameter = "1/2 in"
 finish = "uncoated"
+material = "carbide"
+overall_length = "2 in"
+shank = "1/2 in"
+tip_diameter = "1/4 in"
+unique_id = 1
 ```
 
 ## Corner Rounding Mill
@@ -485,13 +485,13 @@ name = "Sample corner rounding mill"
 kind = "corner_rounding_mill"
 language = "English"
 version = "0.0.1"
-unique_id = 1
-radius = "1/4 in"
-tip_diameter = "1/4 in"
-shank = "3/4 in"
-overall_length = "2-1/2 in"
-material = "carbide"
 finish = "uncoated"
+material = "carbide"
+overall_length = "2-1/2 in"
+radius = "1/4 in"
+shank = "3/4 in"
+tip_diameter = "1/4 in"
+unique_id = 1
 ```
 
 ## Double Angle Cutter
@@ -568,16 +568,16 @@ name = "Sample double angle cutter"
 kind = "double_angle_cutter"
 language = "English"
 version = "0.0.1"
-unique_id = 1
-diameter = "3/4 in"
 angle = "90 deg"
-width = "3/8 in"
+diameter = "3/4 in"
+finish = "uncoated"
+material = "carbide"
 neck_diameter = "1/4 in"
 neck_length = "1/2 in"
-shank = "1/2 in"
 overall_length = "2-1/2 in"
-material = "carbide"
-finish = "uncoated"
+shank = "1/2 in"
+unique_id = 1
+width = "3/8 in"
 ```
 
 ## Single End Countersink
@@ -655,16 +655,16 @@ name = "Sample single end countersink"
 kind = "single_countersink"
 language = "English"
 version = "0.0.1"
-unique_id = 1
+angle = "60 deg"
 diameter = "3/4 in"
 drill_diameter = "3/8 in"
 drill_length = "1/2 in"
-angle = "60 deg"
+finish = "uncoated"
+material = "HSS"
+overall_length = "2-1/2 in"
 point_angle = "90 deg"
 shank = "3/4 in"
-overall_length = "2-1/2 in"
-material = "HSS"
-finish = "uncoated"
+unique_id = 1
 ```
 
 ## Double End Countersink
@@ -740,15 +740,15 @@ name = "Sample double end countersink"
 kind = "double_countersink"
 language = "English"
 version = "0.0.1"
-unique_id = 1
+angle = "60 deg"
 diameter = "3/4 in"
 drill_diameter = "3/8 in"
 drill_length = "1/2 in"
-angle = "60 deg"
-point_angle = "90 deg"
-overall_length = "3 in"
-material = "HSS"
 finish = "uncoated"
+material = "HSS"
+overall_length = "3 in"
+point_angle = "90 deg"
+unique_id = 1
 ```
 
 ## Machine Vise
@@ -1449,9 +1449,9 @@ A grid plate: a plate with a grid of holes, for holding work down.
 
 The grid is `rows` by `columns` holes, with the same pitch along X and
 Y, its outer holes `edge` in from all four sides; the plate's length and
-width follow (`T.g~6` #29).  Each hole's top edge may be
-chamfered at 45 degrees, `chamfer_width` wide, and the plate's top outer
-edge too, `edge_chamfer` wide (#37).
+width follow (`T.g~6` #29).  Each hole's top edge may be chamfered at 45
+degrees, `chamfer_width` wide, and the plate's top outer edge too,
+`edge_chamfer` wide (#37).
 
 It may also have tooling holes, on a square pattern `tooling_pitch`
 apart, centered on the plate, each one dead center between four of the

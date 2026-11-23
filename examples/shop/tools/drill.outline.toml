@@ -1,19 +1,28 @@
 kind = "outline"
-version = 3
+version = 4
 revolve = true
-turns = 1
 
-[letters.A]
+[letters.D]
+name = "Diameter"
+default = "1/4 in"
+help = "The drill's diameter, across its margins."
+
+[letters.PA]
+name = "Point angle"
+default = "118 deg"
+help = "The angle across the point (118 deg, 135 deg)."
+
+[letters.HPA]
 name = "Half point angle"
-default = "59 deg"
-help = "Half of the drill's point angle (118 deg drills: 59 deg)."
+formula = "PA / 2"
+help = "Half of the point angle, as drawn."
 
-[letters.R]
-name = "Radius"
-default = "1/8 in"
-help = "Half of the drill's diameter."
+[letters.FL]
+name = "Flute length"
+default = "2-3/4 in"
+help = "From the point's tip to the end of the flutes."
 
-[letters.L]
+[letters.OAL]
 name = "Overall length"
 default = "4 in"
 help = "From the point's tip to the end of the shank."
@@ -23,6 +32,9 @@ at = [0.0, 0.0]
 
 [[points]]
 at = [1.9971353788206216, 1.2]
+
+[[points]]
+at = [1.9971353788206216, 43.93697833405368]
 
 [[points]]
 at = [1.9971353788206216, 63.90833212225989]
@@ -50,7 +62,7 @@ along = 0.5
 letter = ""
 kind = "horizontal"
 from = "origin"
-to = 3
+to = 4
 offset = 0.0
 along = 0.5
 
@@ -61,54 +73,53 @@ from = 1
 to = 2
 offset = 0.0
 along = 0.5
+moved = [0.0, 8.0]
 
 [[dimensions]]
 letter = ""
-kind = "vertical"
+kind = "horizontal"
 from = 2
 to = 3
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
-letter = "A"
+letter = ""
+kind = "vertical"
+from = 3
+to = 4
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "HPA"
 kind = "angle"
 from = 0
 to = "y_axis"
-offset = 0.5830951894845301
-along = 0.5
+offset = 5.0
+along = 1.9005102093924737
 rays = [1, 1]
 
 [[dimensions]]
-letter = "R"
-kind = "horizontal"
+letter = "D"
+kind = "diameter"
 from = "origin"
 to = 1
-offset = -0.4
-along = 0.5
+offset = -8.0
+along = -1.6666666666666667
 
 [[dimensions]]
-letter = "L"
+letter = "FL"
 kind = "vertical"
 from = "origin"
 to = 2
-offset = 4.0
-along = 0.42
+offset = 10.0
+along = 0.4551974386572427
 
-[[hides]]
-axis = "y"
-below = 1
-above = 2
-low = 6.0
-high = 43.0
-under = 1.0
-over = 1.0
-
-[[hides]]
-axis = "y"
-below = 1
-above = 2
-low = 36.0
-high = 6.0
-under = 1.0
-over = 1.0
+[[dimensions]]
+letter = "OAL"
+kind = "vertical"
+from = "origin"
+to = 3
+offset = 16.0
+along = 0.46942235861528153

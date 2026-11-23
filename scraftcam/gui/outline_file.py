@@ -53,6 +53,7 @@ from dataclasses import dataclass, field
 
 from .dimensions import (
     ANGLE,
+    DIAMETER,
     HORIZONTAL,
     LENGTH,
     ORIGIN,
@@ -65,6 +66,7 @@ from .dimensions import (
 )
 from .hides import Hide
 from .letters import Letter
+from .values import refresh_formulas
 
 # The words a file uses for the points that are not corners.
 ENDS: dict[int, str] = {
@@ -93,7 +95,14 @@ HOLE_KINDS: tuple[str, ...] = (PLAIN, COUNTERBORED)
 HOLE_SIZES: tuple[str, ...] = ("clearance", "counterbore", "depth")
 
 # The kinds of dimension a file may hold.
-KINDS: tuple[str, ...] = (HORIZONTAL, VERTICAL, LENGTH, ANGLE, RADIUS)
+KINDS: tuple[str, ...] = (
+    HORIZONTAL,
+    VERTICAL,
+    LENGTH,
+    ANGLE,
+    RADIUS,
+    DIAMETER,
+)
 
 
 # Class `OutlineError`:
@@ -198,7 +207,11 @@ def outline_text(outline: Outline) -> str:
             "",
             f"[letters.{letter.letter}]",
             f"name = {_string(letter.name)}",
-            f"default = {_string(letter.default)}",
+            (
+                f"formula = {_string(letter.formula)}"
+                if letter.formula
+                else f"default = {_string(letter.default)}"
+            ),
             f"help = {_string(letter.help)}",
         ]
         if letter.fillet:
@@ -550,7 +563,9 @@ class _Reader:
 
     # Method `_Reader.letters()`:
     def letters(self, found: object) -> list[Letter]:
-        """Read the letters: `name`, `default`, `help`, maybe `fillet`.
+        """Read the letters: `name`, `default` (or `formula`, #430),
+        `help`, maybe `fillet`.  Formula letters' values are worked
+        out.
 
         Arguments:
         * `found` (`object`): The file's `letters`.
@@ -565,10 +580,16 @@ class _Reader:
         name: str
         table: object
         for name, table in found.items():
+            # A formula letter has a `formula` in place of `default`.
+            formula: object = (
+                table.get("formula", "") if isinstance(table, dict) else ""
+            )
             texts: list[object] = [
                 table.get(key) if isinstance(table, dict) else None
                 for key in ("name", "default", "help")
             ]
+            if isinstance(formula, str) and formula and texts[1] is None:
+                texts[1] = ""
             fillet: object = (
                 table.get("fillet", False)
                 if isinstance(table, dict)
@@ -576,6 +597,8 @@ class _Reader:
             )
             if not isinstance(fillet, bool):
                 self.note(f"letters.{name}.fillet", "is not true or false")
+            elif not isinstance(formula, str):
+                self.note(f"letters.{name}.formula", "is not text")
             elif all(isinstance(text, str) for text in texts):
                 letters.append(
                     Letter(
@@ -584,12 +607,15 @@ class _Reader:
                         str(texts[1]),
                         str(texts[2]),
                         fillet,
+                        formula,
                     )
                 )
             else:
                 self.note(
-                    f"letters.{name}", "needs name, default and help (text)"
+                    f"letters.{name}",
+                    "needs name, default (or formula) and help (text)",
                 )
+        refresh_formulas(letters)
         return letters
 
     # Method `_Reader.dimension()`:

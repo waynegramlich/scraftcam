@@ -154,5 +154,64 @@ class TestCut(unittest.TestCase):
         self.assertEqual(len(cut_strokes(tall(), [plain], 0.5)), 4)
 
 
+# A 12 x 12 square with three strips across each axis, each hiding 2:
+# 1 to 3, 5 to 7 and 9 to 11 (as the grid plate will need).
+SQUARE: list[tuple[float, float]] = [
+    (0.0, 0.0),
+    (12.0, 0.0),
+    (12.0, 12.0),
+    (0.0, 12.0),
+]
+STRIPS: tuple[tuple[float, float], ...] = ((1.0, 9.0), (5.0, 5.0), (9.0, 1.0))
+
+# What is left of 0 to 12 on each axis, each gap closed to 1.
+KEPT: list[tuple[float, float]] = [
+    (0.0, 1.0),
+    (2.0, 4.0),
+    (5.0, 7.0),
+    (8.0, 9.0),
+]
+
+
+def nine() -> Outline:
+    """Return the square with its three strips across each axis."""
+    hides: list[Hide] = [
+        Hide(HIDE_Y, 1, 2, low, high) for low, high in STRIPS
+    ] + [Hide(HIDE_X, 0, 1, low, high) for low, high in STRIPS]
+    return Outline(points=list(SQUARE), hides=hides)
+
+
+class TestThreeByThree(unittest.TestCase):
+    """Three hide strips across each axis at once."""
+
+    def test_sides(self) -> None:
+        """Each side is cut in four, and moved in by the strips."""
+        right: Stroke = polyline([(12.0, 0.0), (12.0, 12.0)])
+        bottom: Stroke = polyline([(0.0, 0.0), (12.0, 0.0)])
+        found: list[Stroke] = cut_strokes(nine(), [right, bottom], 0.5)
+        spans: list[tuple[Point, Point]] = [
+            (stroke.segments[0].start, stroke.segments[-1].end)
+            for stroke in found[:8]
+        ]
+        self.assertEqual(
+            spans[:4], [((9.0, low), (9.0, high)) for low, high in KEPT]
+        )
+        self.assertEqual(
+            spans[4:], [((low, 0.0), (high, 0.0)) for low, high in KEPT]
+        )
+
+    def test_breaks(self) -> None:
+        """Two break lines per strip, each cut in four by the others."""
+        found: list[Stroke] = cut_strokes(nine(), [], 0.5)
+        self.assertEqual(len(found), 6 * 2 * 4)
+        self.assertTrue(all(len(stroke.segments) == 5 for stroke in found))
+        across: set[float] = {
+            stroke.segments[0].start[1]
+            for stroke in found
+            if stroke.segments[0].start[0] == 0.0
+        }
+        self.assertEqual(across, {1.0, 2.0, 4.0, 5.0, 7.0, 8.0})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -43,10 +43,11 @@ def flat_drill() -> Outline:
 
 # Function `filleted_drill()`:
 def filleted_drill() -> Outline:
-    """Return the flat drill with its shank's outer end rounded."""
+    """Return the flat drill with its shank's outer end (corner 3)
+    rounded."""
     outline: Outline = flat_drill()
     outline.letters.append(Letter("F", "Fillet", "1/32 in", fillet=True))
-    outline.dimensions.append(Dimension("F", RADIUS, 2, 2))
+    outline.dimensions.append(Dimension("F", RADIUS, 3, 3))
     return outline
 
 
@@ -55,13 +56,16 @@ class TestOutlinePolygon(unittest.TestCase):
     """The letters' values place and round the corners."""
 
     def test_drill(self) -> None:
-        """The corners are where the values put them, rounded by them."""
+        """The corners are where the values put them, rounded by them;
+        the flutes' end (corner 2), on a straight edge, is left out
+        (#434)."""
         outline: Outline = filleted_drill()
         polygon: RoundedPolygon = outline_polygon(outline, "drill")
         expected: list[tuple[float, float]] | None = real_corners(
             outline.points, outline.letters, outline.dimensions
         )
         assert expected is not None
+        del expected[2]
         self.assertEqual(
             [(corner.x, corner.y) for corner in polygon.corners], expected
         )
@@ -71,12 +75,9 @@ class TestOutlinePolygon(unittest.TestCase):
             for dimension in outline.dimensions
             if dimension.kind == RADIUS
         }
-        self.assertEqual(list(rounded), [2])
-        self.assertAlmostEqual(rounded[2], 25.4 / 32)
-        index: int
-        radius: float
-        for index, radius in rounded.items():
-            self.assertEqual(polygon.corners[index].radius, radius)
+        self.assertEqual(list(rounded), [3])
+        self.assertAlmostEqual(rounded[3], 25.4 / 32)
+        self.assertEqual(polygon.corners[2].radius, rounded[3])
         self.assertEqual(polygon.unit, outline_unit(outline))
 
     def test_from_file(self) -> None:

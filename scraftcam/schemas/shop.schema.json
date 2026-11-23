@@ -1080,7 +1080,7 @@
       "additionalProperties": false
     },
     "drill": {
-      "description": "A twist drill.",
+      "description": "A twist drill, its sizes the letters of `drill.outline.toml`.",
       "type": "object",
       "properties": {
         "name": {
@@ -1113,12 +1113,12 @@
           "description": "What it is, in a few words.",
           "type": "string"
         },
-        "diameter": {
+        "D": {
           "description": "The cutting diameter.",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
         },
-        "length_of_cut": {
+        "FL": {
           "description": "How deep it can cut (LOC).",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
@@ -1127,7 +1127,7 @@
           "description": "How many flutes (2 if not given).",
           "type": "integer"
         },
-        "point_angle": {
+        "PA": {
           "description": "The included angle.",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:deg)\\s*$"
@@ -1165,7 +1165,7 @@
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
         },
-        "overall_length": {
+        "OAL": {
           "description": "Its whole length (OAL).",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
@@ -1242,10 +1242,10 @@
       },
       "required": [
         "unique_id",
-        "diameter",
-        "length_of_cut",
-        "point_angle",
-        "overall_length",
+        "D",
+        "FL",
+        "PA",
+        "OAL",
         "material"
       ],
       "additionalProperties": false

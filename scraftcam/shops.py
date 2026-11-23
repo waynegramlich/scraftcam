@@ -37,7 +37,7 @@ import sys
 import textwrap
 import tomllib
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, TypeAlias, cast
 
@@ -45,6 +45,15 @@ from .machine import DrillCycle, Machine, ToolEntry, ToolKind
 
 # The format version that this module reads and describes.
 FORMAT_VERSION: str = "0.0.1"
+
+# A drill's sizes, by key: the letters of its outline drawing,
+# `drill.outline.toml`, which a drill file writes (`T.tfo~6.5` #435).
+DRILL_LETTERS: dict[str, str] = {
+    "diameter": "D",
+    "length_of_cut": "FL",
+    "overall_length": "OAL",
+    "point_angle": "PA",
+}
 
 # Where a value is in a file: its keys, and its indices in lists.
 KeyPath: TypeAlias = tuple[str | int, ...]
@@ -227,10 +236,13 @@ class TableField:  # pylint: disable=too-many-instance-attributes
       sketch.
     * `how` (`str`): How to fill it in, in Markdown, shown under the
       field's ▶ (`T.g~6` #149), or `""`.
+    * `short` (`str`): The letter of the kind's outline drawing
+      (`FL`), written in a file in place of `key` (`T.tfo~6.5` #435),
+      or `""`.
 
     Constructor:
     * `TableField(key, form, meaning, required, of, choices, open, letter,
-      needed, how)`
+      needed, how, short)`
     """
 
     # Constructor arguments:
@@ -244,6 +256,7 @@ class TableField:  # pylint: disable=too-many-instance-attributes
     letter: str = field(init=True, default="")
     needed: bool = field(init=True, default=False)
     how: str = field(init=True, default="")
+    short: str = field(init=True, default="")
 
     # Method `TableField.__post_init__()`:
     def __post_init__(self) -> None:
@@ -569,6 +582,27 @@ def _tool_fields(*special: TableField) -> tuple[TableField, ...]:
         ),
         TableField("feed", "feed", "The feed to cut at."),
         TableField("plunge", "feed", "The feed going straight down."),
+    )
+
+
+# Function `_size_fields()`:
+def _shorts(
+    fields: tuple[TableField, ...], shorts: dict[str, str]
+) -> tuple[TableField, ...]:
+    """Return fields with the letters of a kind's outline drawing as
+    the keys written in files (`T.tfo~6.5` #435).
+
+    Arguments:
+    * `fields` (`tuple[TableField, ...]`): The fields.
+    * `shorts` (`dict[str, str]`): By key, its letter (`FL`).
+
+    Returns:
+    * (`tuple[TableField, ...]`): The fields, those named given their
+      `short`.
+    """
+    return tuple(
+        replace(each, short=shorts[each.key]) if each.key in shorts else each
+        for each in fields
     )
 
 
@@ -1226,10 +1260,10 @@ material = "carbide"
 [[drills]]
 name = "15/64 in HSS jobber drill"
 unique_id = 5
-diameter = "15/64 in"
-length_of_cut = "2-5/8 in"
-overall_length = "3-7/8 in"
-point_angle = "118 deg"
+D = "15/64 in"
+FL = "2-5/8 in"
+OAL = "3-7/8 in"
+PA = "118 deg"
 holder = ["r8", "er32", "1/4 in"]
 material = "HSS"
 """,
@@ -1286,44 +1320,51 @@ acquired = 2026-10-27
         ),
         TableKind(
             "drill",
-            "A twist drill.",
-            _tool_fields(
-                *_size_fields(),
-                TableField(
-                    "flutes", "integer", "How many flutes (2 if not given)."
+            "A twist drill, its sizes the letters of `drill.outline.toml`.",
+            _shorts(
+                _tool_fields(
+                    *_size_fields(),
+                    TableField(
+                        "flutes",
+                        "integer",
+                        "How many flutes (2 if not given).",
+                    ),
+                    TableField(
+                        "point_angle",
+                        "angle",
+                        "The included angle.",
+                        True,
+                        letter="P",
+                    ),
+                    TableField(
+                        "shank_length",
+                        "length",
+                        "How far its shank comes down from its top; if not "
+                        "given, a `shank` starts where its flutes stop.",
+                        letter="Sl",
+                    ),
+                    TableField(
+                        "split_point",
+                        "boolean",
+                        "True if it has a split point.",
+                    ),
+                    TableField(
+                        "peck_depth",
+                        "length",
+                        "How deep each peck goes (0 for none).",
+                    ),
+                    _cutting_field(),
                 ),
-                TableField(
-                    "point_angle",
-                    "angle",
-                    "The included angle.",
-                    True,
-                    letter="P",
-                ),
-                TableField(
-                    "shank_length",
-                    "length",
-                    "How far its shank comes down from its top; if not "
-                    "given, a `shank` starts where its flutes stop.",
-                    letter="Sl",
-                ),
-                TableField(
-                    "split_point", "boolean", "True if it has a split point."
-                ),
-                TableField(
-                    "peck_depth",
-                    "length",
-                    "How deep each peck goes (0 for none).",
-                ),
-                _cutting_field(),
+                DRILL_LETTERS,
             ),
             True,
             """\
 name = "1/8 in cobalt jobber drill"
 unique_id = 6
-diameter = "1/8 in"
-length_of_cut = "1-5/8 in"
-overall_length = "2-3/4 in"
-point_angle = "135 deg"
+D = "1/8 in"
+FL = "1-5/8 in"
+OAL = "2-3/4 in"
+PA = "135 deg"
 split_point = true
 holder = ["r8", "er32", "1/8 in"]
 material = "cobalt"
@@ -2735,27 +2776,30 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
             )
             return {}
 
-        # Check every key.
+        # Check every key; a field with a `short` letter is written
+        # by it (#435), kept by its key.
         fields: dict[str, TableField] = {
-            field.key: field for field in HEADER + kind.fields
+            field.short or field.key: field for field in HEADER + kind.fields
         }
         contents: dict[str, object] = {}
         for key, item in value.items():
             if key not in fields:
-                known: str = ", ".join(f.key for f in kind.fields)
+                known: str = ", ".join(f.short or f.key for f in kind.fields)
                 self.problem(
                     source,
                     path + (key,),
                     f"is not a key of `{kind.kind}` (its keys are {known})",
                 )
             else:
-                contents[key] = self.value(
+                contents[fields[key].key] = self.value(
                     item, fields[key], path + (key,), source
                 )
 
         # Note the keys that are missing, and a `kind` that does not
         # fit.
-        required: list[str] = [f.key for f in kind.fields if f.required]
+        required: list[str] = [
+            f.short or f.key for f in kind.fields if f.required
+        ]
         if whole:
             required = [f.key for f in HEADER if f.required] + required
         elif kind.named:
@@ -4321,7 +4365,12 @@ def _fields_table(fields: tuple[TableField, ...]) -> str:
             "yes" if schema.required else "to run" if schema.needed else "no"
         )
         rows.append(
-            [f"`{schema.key}`", schema.shown(), required, schema.meaning]
+            [
+                f"`{schema.short or schema.key}`",
+                schema.shown(),
+                required,
+                schema.meaning,
+            ]
         )
     return markdown_table(rows)
 

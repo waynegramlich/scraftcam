@@ -564,10 +564,10 @@ material = "carbide"
 [[drills]]
 name = "15/64 in HSS jobber drill"
 unique_id = 5
-diameter = "15/64 in"
-length_of_cut = "2-5/8 in"
-overall_length = "3-7/8 in"
-point_angle = "118 deg"
+D = "15/64 in"
+FL = "2-5/8 in"
+OAL = "3-7/8 in"
+PA = "118 deg"
 holder = ["r8", "er32", "1/4 in"]
 material = "HSS"
 ```
@@ -660,7 +660,8 @@ acquired = 2026-10-27
 
 ## `drill`
 
-A twist drill.  It has a `name` even when it is not a file of its own.
+A twist drill, its sizes the letters of `drill.outline.toml`.  It has a
+`name` even when it is not a file of its own.
 
 | Key               | Value                | Required | Meaning               |
 | ----------------- | -------------------- | -------- | --------------------- |
@@ -671,12 +672,12 @@ A twist drill.  It has a `name` even when it is not a file of its own.
 |                   |                      |          | not a T number).      |
 | `description`     | string               | no       | What it is, in a few  |
 |                   |                      |          | words.                |
-| `diameter`        | length               | yes      | The cutting diameter. |
-| `length_of_cut`   | length               | yes      | How deep it can cut   |
+| `D`               | length               | yes      | The cutting diameter. |
+| `FL`              | length               | yes      | How deep it can cut   |
 |                   |                      |          | (LOC).                |
 | `flutes`          | integer              | no       | How many flutes (2 if |
 |                   |                      |          | not given).           |
-| `point_angle`     | angle                | yes      | The included angle.   |
+| `PA`              | angle                | yes      | The included angle.   |
 | `shank_length`    | length               | no       | How far its shank     |
 |                   |                      |          | comes down from its   |
 |                   |                      |          | top; if not given, a  |
@@ -696,7 +697,7 @@ A twist drill.  It has a `name` even when it is not a file of its own.
 |                   |                      |          | cobalt or carbide).   |
 | `shank`           | length               | no       | The shank diameter,   |
 |                   |                      |          | if not `diameter`.    |
-| `overall_length`  | length               | yes      | Its whole length      |
+| `OAL`             | length               | yes      | Its whole length      |
 |                   |                      |          | (OAL).                |
 | `holder`          | holder list          | no       | What holds it, from   |
 |                   |                      |          | the spindle to its    |
@@ -731,10 +732,10 @@ A twist drill.  It has a `name` even when it is not a file of its own.
 ```toml
 name = "1/8 in cobalt jobber drill"
 unique_id = 6
-diameter = "1/8 in"
-length_of_cut = "1-5/8 in"
-overall_length = "2-3/4 in"
-point_angle = "135 deg"
+D = "1/8 in"
+FL = "1-5/8 in"
+OAL = "2-3/4 in"
+PA = "135 deg"
 split_point = true
 holder = ["r8", "er32", "1/8 in"]
 material = "cobalt"

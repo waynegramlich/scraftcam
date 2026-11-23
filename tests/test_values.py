@@ -16,10 +16,12 @@ from scraftcam.gui.values import (
     evaluate,
     fillet_problems,
     first_scale,
+    formula_problem,
     letter_values,
     letters_bad,
     placed_corners,
     real_corners,
+    refresh_formulas,
 )
 
 # A plate W by H from the origin, its top corners rounded.
@@ -132,6 +134,51 @@ class ValuesTest(unittest.TestCase):
         bad[0] = Letter("W", "", "30 deg", "")
         self.assertTrue(letters_bad(bad, SIZES))
         self.assertEqual(placed_corners(PLATE, bad, SIZES), (PLATE, 0.0))
+
+
+# A drill's letters: two given values, two worked out (#430).
+def drill() -> list[Letter]:
+    """Return a drill's letters, with `HPA` and `R` from formulas."""
+    return [
+        Letter("D", "Diameter", "1/8 in"),
+        Letter("PA", "Point angle", "135 deg"),
+        Letter("HPA", "Half point angle", formula="PA / 2"),
+        Letter("R", "Radius", formula="D / 2"),
+    ]
+
+
+class TestFormulas(unittest.TestCase):
+    """Letters worked out from other letters (`T.tfo~6.5` #430)."""
+
+    def test_values(self) -> None:
+        """Formula letters are worked out exactly."""
+        values: dict[str, float] = letter_values(drill())
+        self.assertAlmostEqual(values["HPA"], math.radians(67.5))
+        self.assertAlmostEqual(values["R"], 25.4 / 16.0)
+
+    def test_refresh(self) -> None:
+        """Each formula letter's `default` shows its value."""
+        found: list[Letter] = drill()
+        refresh_formulas(found)
+        self.assertEqual(found[2].default, "67.5 deg")
+        self.assertEqual(found[3].default, "0.0625 in")
+
+    def test_problems(self) -> None:
+        """Unknown names, formula letters and bad values are refused."""
+        found: list[Letter] = drill()
+        self.assertEqual(formula_problem(found, 0), "")
+        self.assertEqual(formula_problem(found, 2), "")
+        found[2].formula = "Q / 2"
+        self.assertIn("no letter Q", formula_problem(found, 2))
+        found[2].formula = "R / 2"
+        self.assertIn("formula letter too", formula_problem(found, 2))
+        found[2].formula = "2"
+        self.assertIn("names no letter", formula_problem(found, 2))
+        found[2].formula = "PA / (D - D)"
+        self.assertNotEqual(formula_problem(found, 2), "")
+        refresh_formulas(found)
+        self.assertEqual(found[2].default, "")
+        self.assertNotIn("HPA", letter_values(found))
 
 
 if __name__ == "__main__":

@@ -47,12 +47,39 @@ ANGLE: str = "angle"
 # stays where its edges meet, as in SolidCraft.
 RADIUS: str = "radius"
 
+# A revolved outline's diameter (`T.tfo~6.5` #437): from `end`'s mirror
+# image across the Y axis to `end` (`start` is `ORIGIN`), so `end`'s X
+# is half its letter.  Not in `AXIS`: drawn across the axis.
+DIAMETER: str = "diameter"
+
 # What [Dim. Kind] turns each kind into.
 NEXT_KIND: dict[str, str] = {
     HORIZONTAL: LENGTH,
     LENGTH: VERTICAL,
     VERTICAL: HORIZONTAL,
 }
+
+
+# Function `next_kind()`:
+def next_kind(dimension: "Dimension", revolve: bool) -> str:
+    """Return the kind [Dim. Kind] turns a dimension into: on a
+    revolved outline, one from the origin goes horizontal, diameter
+    (#437), length, vertical.
+
+    Arguments:
+    * `dimension` (`Dimension`): The dimension (not an angle, fillet
+      or mark).
+    * `revolve` (`bool`): Whether the outline is revolved.
+
+    Returns:
+    * (`str`): The next kind.
+    """
+    if dimension.kind == DIAMETER:
+        return LENGTH
+    if revolve and dimension.start == ORIGIN and dimension.kind == HORIZONTAL:
+        return DIAMETER
+    return NEXT_KIND[dimension.kind]
+
 
 # A corner drawn this close to an axis is on it (snapped corners are
 # exactly on it), so that coordinate is 0 (#23).
@@ -325,6 +352,74 @@ def solve(
     return solution
 
 
+# Function `tip_on_origin()`:
+def tip_on_origin(dimensions: list[Dimension]) -> bool:
+    """Return whether a corner is marked onto both axes, so it sits on
+    the origin, as a revolved tool's tip must (`T.tfo~6.5` #448).
+
+    Arguments:
+    * `dimensions` (`list[Dimension]`): The dimensions and marks.
+
+    Returns:
+    * (`bool`): Whether one corner has both marks from the origin.
+    """
+    found: dict[int, set[str]] = {}
+    dimension: Dimension
+    for dimension in dimensions:
+        if is_mark(dimension) and ORIGIN in (dimension.start, dimension.end):
+            corner: int = max(dimension.start, dimension.end)
+            found.setdefault(corner, set()).add(dimension.kind)
+    return any({HORIZONTAL, VERTICAL} <= kinds for kinds in found.values())
+
+
+# Function `placement_problem()`:
+def placement_problem(
+    points: list[tuple[float, float]],
+    dimensions: list[Dimension],
+    revolve: bool,
+) -> str:
+    """Return what keeps the outline from its real sizes ("" if
+    nothing): a revolved tool's tip off the origin (#448), or corners
+    no marks and dimensions tie to the origin (#445).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `dimensions` (`list[Dimension]`): The dimensions and marks.
+    * `revolve` (`bool`): Whether the outline is revolved.
+
+    Returns:
+    * (`str`): The problem, as the user should read it.
+    """
+    # A round tool is measured from its tip.
+    if revolve and not tip_on_origin(dimensions):
+        return (
+            "A revolved tool's tip goes on the origin: select its corner "
+            "and press [Horizontal] and [Vertical]."
+        )
+
+    # Then every corner must be reached from the origin.
+    solution: Solution = solve(points, dimensions)
+    floating: list[int] = [
+        corner
+        for corner in range(len(points))
+        if corner not in solution.x or corner not in solution.y
+    ]
+    if not floating:
+        return ""
+    if not any(
+        ORIGIN in (dimension.start, dimension.end) for dimension in dimensions
+    ):
+        return (
+            "Every corner floats: no mark or dimension ties the outline "
+            "to the origin."
+        )
+    named: str = ", ".join(str(corner) for corner in floating)
+    return (
+        f"Corners {named} float: no marks or dimensions tie them to the "
+        "origin (a corner's tooltip says which way)."
+    )
+
+
 # Function `is_mark()`:
 def is_mark(dimension: Dimension) -> bool:
     """Return whether a dimension is a mark (#233): letterless, a
@@ -491,6 +586,15 @@ def _apply(
         return _along_axis(points, dimension, known[axis], axis)
     if dimension.kind == LENGTH:
         return _along_length(points, dimension, known)
+    if dimension.kind == DIAMETER:
+        if dimension.end in known[0]:
+            extra.append(index)
+        else:
+            sign: int = -1 if _drawn(points, dimension.end, 0) < 0 else 1
+            known[0][dimension.end] = Formula().plus(
+                sign, f"({dimension.letter} / 2)"
+            )
+        return True
     return False
 
 

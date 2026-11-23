@@ -168,14 +168,15 @@ def kind_schema(kind: TableKind) -> dict[str, object]:
     * (`dict[str, object]`): Its schema.
     """
     properties: dict[str, object] = {
-        schema.key: field_schema(schema) for schema in HEADER + kind.fields
+        schema.short or schema.key: field_schema(schema)
+        for schema in HEADER + kind.fields
     }
     properties["kind"] = {
         "description": "What the rest of the file is.",
         "const": kind.kind,
     }
     required: list[str] = [
-        schema.key for schema in kind.fields if schema.required
+        schema.short or schema.key for schema in kind.fields if schema.required
     ]
     return {
         "description": kind.summary,

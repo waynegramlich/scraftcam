@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="121.7494mm" height="60.9857mm" viewBox="-13.6528 -3.1667 23.6735 11.8583">
+<rect x="-13.6528" y="-3.1667" width="23.6735" height="11.8583" class="paper" fill="white"/>
+<path d="M -10 0 L -8.5 2 L -5.5 2 L -3.3124 2" class="ink" fill="none" stroke="black" stroke-width="0.1167" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -3.3124 0 L -10 0" class="ink" fill="none" stroke="black" stroke-width="0.1167" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -2.1457 2 L 1.3054 2 L 1.3054 1 L 4.0374 1" class="ink" fill="none" stroke="black" stroke-width="0.1167" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.0374 0 L -2.1457 0" class="ink" fill="none" stroke="black" stroke-width="0.1167" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2041 1 L 6.8679 1 L 6.8679 0 L 5.2041 0" class="ink" fill="none" stroke="black" stroke-width="0.1167" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 0 L -8.5 -2" class="ink" fill="none" stroke="black" stroke-dasharray="0.5833 0.2917" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -8.5 -2 L -5.5 -2" class="ink" fill="none" stroke="black" stroke-dasharray="0.5833 0.2917" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.5 -2 L -3.3124 -2" class="ink" fill="none" stroke="black" stroke-dasharray="0.5833 0.2917" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -2.1457 -2 L 1.3054 -2" class="ink" fill="none" stroke="black" stroke-dasharray="0.5833 0.2917" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.3054 -2 L 1.3054 -1" class="ink" fill="none" stroke="black" stroke-dasharray="0.5833 0.2917" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.3054 -1 L 4.0374 -1" class="ink" fill="none" stroke="black" stroke-dasharray="0.5833 0.2917" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2041 -1 L 6.8679 -1" class="ink" fill="none" stroke="black" stroke-dasharray="0.5833 0.2917" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.8679 -1 L 6.8679 0" class="ink" fill="none" stroke="black" stroke-dasharray="0.5833 0.2917" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.8679 1.2917 L 6.8679 7.2917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 0.2917 L -10 7.2917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -3.3124 7 L -6.4167 7" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.0374 7 L -2.1457 7" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.8679 7 L 5.2041 7" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.5833 7 L -10 7" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.8679 7 L 6.2846 7.0972 L 6.2846 6.9028 L 6.8679 7" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 7 L -9.4167 6.9028 L -9.4167 7.0972 L -10 7" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>OAL: Over All Length = 1 in</title>
+<rect x="-8.3194" y="6.1528" width="2.6389" height="1.75" fill="none" pointer-events="all"/>
+<path d="M -7.5694 6.7361 L -7.625 6.7639 L -7.6806 6.8194 L -7.7083 6.875 L -7.7361 6.9583 L -7.7361 7.0972 L -7.7083 7.1806 L -7.6806 7.2361 L -7.625 7.2917 L -7.5694 7.3194 L -7.4583 7.3194 L -7.4028 7.2917 L -7.3472 7.2361 L -7.3194 7.1806 L -7.2917 7.0972 L -7.2917 6.9583 L -7.3194 6.875 L -7.3472 6.8194 L -7.4028 6.7639 L -7.4583 6.7361 L -7.5694 6.7361" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -6.9583 6.7361 L -7.1806 7.3194" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -6.9583 6.7361 L -6.7361 7.3194" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.0972 7.125 L -6.8194 7.125" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -6.5972 6.7361 L -6.5972 7.3194" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -6.5972 7.3194 L -6.2639 7.3194" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M -8.6584 1.7889 A 2.2361 2.2361 0 0 0 -7.7639 0" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -8.6584 1.7889 L -8.25 1.3611 L -8.1334 1.5166 L -8.6584 1.7889" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.7639 0 L -7.6667 0.5833 L -7.8612 0.5833 L -7.7639 0" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>HPA: Half Point Angle = 45 deg</title>
+<rect x="-8.8394" y="0.4275" width="2.7222" height="1.75" fill="none" pointer-events="all"/>
+<path d="M -8.256 1.0109 L -8.256 1.5942" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.8671 1.0109 L -7.8671 1.5942" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -8.256 1.2887 L -7.8671 1.2887" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.6449 1.0109 L -7.6449 1.5942" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.6449 1.0109 L -7.3949 1.0109 L -7.3116 1.0387 L -7.2838 1.0664 L -7.256 1.122 L -7.256 1.2053 L -7.2838 1.2609 L -7.3116 1.2887 L -7.3949 1.3164 L -7.6449 1.3164" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -6.9227 1.0109 L -7.1449 1.5942" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -6.9227 1.0109 L -6.7005 1.5942" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.0616 1.3998 L -6.7838 1.3998" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 1.3054 1.2917 L 1.3054 3.7917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.8679 1.2917 L 6.8679 3.7917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.3054 3.5 L 2.2221 3.5" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.3887 3.5 L 4.0374 3.5" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2041 3.5 L 6.8679 3.5" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.3054 3.5 L 1.8887 3.4028 L 1.8887 3.5972 L 1.3054 3.5" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.8679 3.5 L 6.2846 3.5972 L 6.2846 3.4028 L 6.8679 3.5" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>SL: Shank Length = 1 in</title>
+<rect x="1.7637" y="2.6528" width="2.0833" height="1.75" fill="none" pointer-events="all"/>
+<path d="M 2.736 3.3194 L 2.6804 3.2639 L 2.5971 3.2361 L 2.486 3.2361 L 2.4026 3.2639 L 2.3471 3.3194 L 2.3471 3.375 L 2.3749 3.4306 L 2.4026 3.4583 L 2.4582 3.4861 L 2.6249 3.5417 L 2.6804 3.5694 L 2.7082 3.5972 L 2.736 3.6528 L 2.736 3.7361 L 2.6804 3.7917 L 2.5971 3.8194 L 2.486 3.8194 L 2.4026 3.7917 L 2.3471 3.7361" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 2.9304 3.2361 L 2.9304 3.8194" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 2.9304 3.8194 L 3.2637 3.8194" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M -10 0.2917 L -10 3.7917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.5 2.2917 L -5.5 3.7917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 3.5 L -7.7197 3.5" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -6.553 3.5 L -5.5 3.5" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 3.5 L -9.4167 3.4028 L -9.4167 3.5972 L -10 3.5" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.5 3.5 L -6.0833 3.5972 L -6.0833 3.4028 L -5.5 3.5" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>FL: Flute Length = 1 in</title>
+<rect x="-8.1364" y="2.6667" width="2" height="1.75" fill="none" pointer-events="all"/>
+<path d="M -7.553 3.25 L -7.553 3.8333" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.553 3.25 L -7.1919 3.25" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.553 3.5278 L -7.3308 3.5278" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.053 3.25 L -7.053 3.8333" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.053 3.8333 L -6.7197 3.8333" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 7.1596 1 L 8.6596 1" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 7.1596 0 L 8.6596 0" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.3679 2.1389 L 8.3679 -1.1667" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.3679 1 L 8.4652 1.5833 L 8.2707 1.5833 L 8.3679 1" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.3679 0 L 8.2707 -0.5833 L 8.4652 -0.5833 L 8.3679 0" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>SR: Shank Radius = 1 in</title>
+<rect x="7.2985" y="2.125" width="2.1389" height="1.75" fill="none" pointer-events="all"/>
+<path d="M 8.2707 2.7917 L 8.2152 2.7361 L 8.1318 2.7083 L 8.0207 2.7083 L 7.9374 2.7361 L 7.8818 2.7917 L 7.8818 2.8472 L 7.9096 2.9028 L 7.9374 2.9306 L 7.9929 2.9583 L 8.1596 3.0139 L 8.2152 3.0417 L 8.2429 3.0694 L 8.2707 3.125 L 8.2707 3.2083 L 8.2152 3.2639 L 8.1318 3.2917 L 8.0207 3.2917 L 7.9374 3.2639 L 7.8818 3.2083" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.4652 2.7083 L 8.4652 3.2917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.4652 2.7083 L 8.7152 2.7083 L 8.7985 2.7361 L 8.8263 2.7639 L 8.8541 2.8194 L 8.8541 2.875 L 8.8263 2.9306 L 8.7985 2.9583 L 8.7152 2.9861 L 8.4652 2.9861" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.6596 2.9861 L 8.8541 3.2917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M -10.2917 0 L -12.2917 0" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -8.7917 2 L -12.2917 2" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -12 -1.1667 L -12 3.625" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -12 0 L -12.0972 -0.5833 L -11.9028 -0.5833 L -12 0" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -12 2 L -11.9028 2.5833 L -12.0972 2.5833 L -12 2" class="ink solid" fill="black" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>DR: Drill Radius = 1 in</title>
+<rect x="-13.0694" y="3.6389" width="2.1389" height="1.75" fill="none" pointer-events="all"/>
+<path d="M -12.4861 4.2222 L -12.4861 4.8056" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -12.4861 4.2222 L -12.2917 4.2222 L -12.2083 4.25 L -12.1528 4.3056 L -12.125 4.3611 L -12.0972 4.4444 L -12.0972 4.5833 L -12.125 4.6667 L -12.1528 4.7222 L -12.2083 4.7778 L -12.2917 4.8056 L -12.4861 4.8056" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -11.9028 4.2222 L -11.9028 4.8056" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -11.9028 4.2222 L -11.6528 4.2222 L -11.5694 4.25 L -11.5417 4.2778 L -11.5139 4.3333 L -11.5139 4.3889 L -11.5417 4.4444 L -11.5694 4.4722 L -11.6528 4.5 L -11.9028 4.5" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -11.7083 4.5 L -11.5139 4.8056" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M -7.2917 2.2917 L -7.2917 2.875 L -6.7083 2.875 L -6.7083 2.2917 L -7.2917 2.2917" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.1458 2.5833 L -6.8542 2.5833" class="ink" fill="none" stroke="black" stroke-width="0.1167" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.7637 0.125 L 3.7637 0.7083 L 4.0374 0.7083" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.0374 0.125 L 3.7637 0.125" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.9096 0.4167 L 4.0374 0.4167" class="ink" fill="none" stroke="black" stroke-width="0.1167" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.5417 -0.875 L -5.5417 -0.2917 L -4.9583 -0.2917 L -4.9583 -0.875 L -5.5417 -0.875" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.3958 -0.5833 L -5.1042 -0.5833" class="ink" fill="none" stroke="black" stroke-width="0.1167" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.0374 -1 L 4.0374 -0.5833 L 4.3874 -0.1944 L 3.6874 0.1944 L 4.0374 0.5833 L 4.0374 1" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2041 -1 L 5.2041 -0.5833 L 5.5541 -0.1944 L 4.8541 0.1944 L 5.2041 0.5833 L 5.2041 1" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -3.3124 -2 L -3.3124 -0.5833 L -2.9624 -0.1944 L -3.6624 0.1944 L -3.3124 0.5833 L -3.3124 2" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -2.1457 -2 L -2.1457 -0.5833 L -1.7957 -0.1944 L -2.4957 0.1944 L -2.1457 0.5833 L -2.1457 2" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.0374 6.475 L 4.102 6.6063 L 4.1112 6.7375 L 4.0836 6.8688 L 4.0374 7 L 3.9913 7.1312 L 3.9636 7.2625 L 3.9728 7.3937 L 4.0374 7.525" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.0374 2.975 L 4.102 3.1063 L 4.1112 3.2375 L 4.0836 3.3687 L 4.0374 3.5 L 3.9913 3.6313 L 3.9636 3.7625 L 3.9728 3.8937 L 4.0374 4.025" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2041 6.475 L 5.2687 6.6063 L 5.2779 6.7375 L 5.2502 6.8688 L 5.2041 7 L 5.1579 7.1312 L 5.1303 7.2625 L 5.1395 7.3937 L 5.2041 7.525" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2041 2.975 L 5.2687 3.1063 L 5.2779 3.2375 L 5.2502 3.3687 L 5.2041 3.5 L 5.1579 3.6313 L 5.1303 3.7625 L 5.1395 3.8937 L 5.2041 4.025" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -3.3124 6.475 L -3.2478 6.6063 L -3.2386 6.7375 L -3.2663 6.8688 L -3.3124 7 L -3.3585 7.1312 L -3.3862 7.2625 L -3.377 7.3937 L -3.3124 7.525" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -2.1457 6.475 L -2.0811 6.6063 L -2.0719 6.7375 L -2.0996 6.8688 L -2.1457 7 L -2.1919 7.1312 L -2.2196 7.2625 L -2.2103 7.3937 L -2.1457 7.525" class="ink" fill="none" stroke="black" stroke-width="0.0583" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

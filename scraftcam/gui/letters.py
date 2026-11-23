@@ -44,9 +44,13 @@ class Letter:
     * `help` (`str`): One line of help, for tooltips and documents.
     * `fillet` (`bool`): Listed in the [Fillets] tab as a fillet
       radius (#213; only a length letter).
+    * `formula` (`str`): Its value from other letters (`PA / 2`), or
+      "" for a letter given a value (`T.tfo~6.5` #430).  A formula
+      letter's `default` is its worked out value, kept up to date by
+      `values.refresh_formulas()`, and is never asked for.
 
     Constructor:
-    * `Letter(letter, name, default, help, fillet)`
+    * `Letter(letter, name, default, help, fillet, formula)`
     """
 
     # Constructor arguments:
@@ -55,6 +59,7 @@ class Letter:
     default: str = field(init=True, default="1 in")
     help: str = field(init=True, default="")
     fillet: bool = field(init=True, default=False)
+    formula: str = field(init=True, default="")
 
 
 # Function `value_problem()`:

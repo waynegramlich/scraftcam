@@ -67,6 +67,24 @@ class OutlineFileTest(unittest.TestCase):
         self.assertEqual(back, HALF_DRILL)
         self.assertEqual(outline_text(back), text)
 
+    def test_formula_letter(self) -> None:
+        """A formula letter is written as `formula`, read back with its
+        value worked out (#430)."""
+        drill: Outline = Outline(
+            list(HALF_DRILL.points),
+            [
+                Letter("PA", "Point angle", "118 deg", ""),
+                Letter("HPA", "Half point angle", "", "", formula="PA / 2"),
+            ],
+        )
+        text: str = outline_text(drill)
+        self.assertIn('formula = "PA / 2"', text)
+        self.assertEqual(text.count("default ="), 1)
+        back: Outline = outline_from_text(text, "drill.outline.toml")
+        self.assertEqual(back.letters[1].formula, "PA / 2")
+        self.assertEqual(back.letters[1].default, "59 deg")
+        self.assertEqual(outline_text(back), text)
+
     def test_old_file_marks(self) -> None:
         """A file from before marks gets those its drawing showed,
         first; a version 2 file gets none; others are refused (#233).
@@ -230,7 +248,7 @@ class OutlineFileTest(unittest.TestCase):
         )
         text: str = str(caught.exception)
         for expected in (
-            "letters.B: needs name, default and help",
+            "letters.B: needs name, default (or formula) and help",
             "points[2]: needs at = [x, y]",
             "a revolved outline has a corner at X < 0",
             "dimensions[0]: from = 7: not a corner 0-1 or origin",

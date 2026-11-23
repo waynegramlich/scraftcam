@@ -30,6 +30,7 @@ The scene is in unitless drawing steps (letters give the real sizes,
 """
 
 import math
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -105,9 +106,10 @@ from .dimensions import (  # noqa: E402
     ANGLE,
     AXES,
     AXIS,
+    DIAMETER,
     HORIZONTAL,
     LENGTH,
-    NEXT_KIND,
+    ON_AXIS,
     ORIGIN,
     RADIUS,
     VERTICAL,
@@ -119,7 +121,10 @@ from .dimensions import (  # noqa: E402
     is_mark,
     mark_broken,
     mark_edge,
+    next_kind,
+    placement_problem,
     solve,
+    tip_on_origin,
 )
 from .hides import (  # noqa: E402
     HIDE_X,
@@ -149,6 +154,7 @@ from .outline_diagram import (  # noqa: E402
 )
 from .outline_diagram import edge_arc as shared_arc  # noqa: E402
 from .outline_file import (  # noqa: E402
+    Hole,
     Outline,
     OutlineError,
     outline_from_text,
@@ -157,7 +163,9 @@ from .outline_file import (  # noqa: E402
 from .values import (  # noqa: E402
     crossings,
     fillet_problems,
+    formula_problem,
     placed_corners,
+    refresh_formulas,
 )
 from .window import make_application  # noqa: E402
 
@@ -209,7 +217,9 @@ NO_FILLET: tuple[str, ...] = ("", "No fillet", "0", "", "(No Edit Allowed)")
 COLUMNS: tuple[tuple[str, str], ...] = (
     ("Letter", "letter"),
     ("Name", "name"),
-    ("Value", "default"),  # Its value (#147); `default` in files.
+    # Its value (#147); `default` in files, or `= PA / 2`: a formula
+    # (`T.tfo~6.5` #430).
+    ("Value", "default"),
     ("Fillet", "fillet"),  # A check box: a fillet radius (#213).
     ("Help", "help"),
 )
@@ -476,8 +486,9 @@ class Drawing(Outline):
 
     # Method `Drawing.insert()`:
     def insert(self, index: int, point: tuple[float, float]) -> None:
-        """Insert a corner; the dimensions keep to their corners, and
-        a mark on the edge it splits goes (#233).
+        """Insert a corner; the dimensions and hide strips keep to
+        their corners (#446), and a mark on the edge it splits goes
+        (#233).
 
         Arguments:
         * `index` (`int`): Where the new corner goes.
@@ -496,10 +507,19 @@ class Drawing(Outline):
                 dimension.start += 1
             if dimension.end >= index:
                 dimension.end += 1
+        self.hides[:] = [
+            replace(
+                hide,
+                below=hide.below + (hide.below >= index),
+                above=hide.above + (hide.above >= index),
+            )
+            for hide in self.hides
+        ]
 
     # Method `Drawing.remove()`:
     def remove(self, index: int) -> None:
-        """Remove a corner, with the dimensions that measure it.
+        """Remove a corner, with the dimensions that measure it and
+        the hide strips placed from it (#446).
 
         Arguments:
         * `index` (`int`): The corner.
@@ -516,6 +536,15 @@ class Drawing(Outline):
                 dimension.start -= 1
             if dimension.end > index:
                 dimension.end -= 1
+        self.hides[:] = [
+            replace(
+                hide,
+                below=hide.below - (hide.below > index),
+                above=hide.above - (hide.above > index),
+            )
+            for hide in self.hides
+            if index not in (hide.below, hide.above)
+        ]
 
 
 # Class `History`:
@@ -2109,7 +2138,7 @@ class OutlineView(QGraphicsView):
         start: QPointF = self.point(first)
         end: QPointF = self.point(second)
         gap: float = 2.0 * self.step()
-        if kind == HORIZONTAL:
+        if kind in (HORIZONTAL, DIAMETER):
             return min(start.y(), end.y()) - gap
         if kind == LENGTH:
             # On the side away from the outline's middle.
@@ -2126,10 +2155,11 @@ class OutlineView(QGraphicsView):
     # Method `OutlineView.cycle_kind()`:
     def cycle_kind(self) -> None:
         """[Dim. Kind]: turn each selected dimension to its next kind
-        (horizontal, length, vertical, then horizontal again), as one
-        change.  Each kind keeps its own place: the line and letter go
-        back to where they were last time it was that kind, or the
-        first time to where a new one would go (#29)."""
+        (horizontal, length, vertical, then horizontal again; on a
+        revolved outline, from the origin, a diameter after horizontal,
+        #437), as one change.  Each kind keeps its own place: the line
+        and letter go back to where they were last time it was that
+        kind, or the first time to where a new one would go (#29)."""
         if not self.chosen_dimensions:
             self.message = "Select dimensions to change their kind."
             self.scene().update()
@@ -2141,7 +2171,7 @@ class OutlineView(QGraphicsView):
             if dimension.kind in (ANGLE, RADIUS) or is_mark(dimension):
                 continue  # Not cycled.
             self.measures[index].prepareGeometryChange()
-            kind: str = NEXT_KIND[dimension.kind]
+            kind: str = next_kind(dimension, self.drawing.revolve)
             dimension.become(
                 kind, self.offset_for(kind, dimension.start, dimension.end)
             )
@@ -2769,10 +2799,16 @@ class OutlineView(QGraphicsView):
         axis (#239), drawing them so at once; when all of them are
         marked so already, take the marks off.  One change.
 
+        The buttons mean what is seen: on a drawing turned an odd
+        number of quarter turns (#300), the file's Y runs across the
+        screen, so the two swap (`T.tfo~6.5` #444).
+
         Arguments:
         * `kind` (`str`): `VERTICAL` for [Horizontal] (the same Y),
-          `HORIZONTAL` for [Vertical] (the same X).
+          `HORIZONTAL` for [Vertical] (the same X), as on screen.
         """
+        if self.drawing.turns % 2:
+            kind = HORIZONTAL if kind == VERTICAL else VERTICAL
         count: int = len(self.drawing.points)
         wanted: list[Dimension] = [
             Dimension("", kind, edge, (edge + 1) % count)
@@ -3013,7 +3049,9 @@ class OutlineView(QGraphicsView):
     # Method `OutlineView.toggle_revolve()`:
     def toggle_revolve(self) -> None:
         """[Revolve]: turn revolving about the Y axis on or off, as one
-        change; refused while a corner is left of the axis."""
+        change; refused while a corner is left of the axis.  Turned on,
+        a corner drawn on the origin is marked onto both axes: the
+        tool's tip (`T.tfo~6.5` #448)."""
         if not self.drawing.revolve and any(
             x < 0.0 for x, _ in self.drawing.points
         ):
@@ -3025,6 +3063,25 @@ class OutlineView(QGraphicsView):
             return
         self.history.remember(self.drawing.snapshot())
         self.drawing.revolve = not self.drawing.revolve
+        tip: int = next(
+            (
+                corner
+                for corner, (x, y) in enumerate(self.drawing.points)
+                if abs(x) <= ON_AXIS and abs(y) <= ON_AXIS
+            ),
+            -1,
+        )
+        if (
+            self.drawing.revolve
+            and tip >= 0
+            and not tip_on_origin(self.drawing.dimensions)
+        ):
+            kind: str
+            for kind in (HORIZONTAL, VERTICAL):
+                self.drawing.dimensions.append(
+                    Dimension("", kind, ORIGIN, tip)
+                )
+            self.make_squares()
         self.message = ""
         self.outline.refresh()
         self.resetCachedContent()
@@ -3188,11 +3245,13 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.set_up_view()`:
     def set_up_view(self) -> None:
-        """Make Y point up, zoom about the pointer, and hide the scroll
-        bars (empty space is dragged to pan)."""
+        """Make Y point up and hide the scroll bars (empty space is
+        dragged to pan).  Zooming keeps the point under the pointer
+        itself (`wheelEvent()`): Qt's `AnchorUnderMouse` asks where the
+        cursor is on the screen, which Wayland does not tell."""
         self.turn_view()
         anchor: QGraphicsView.ViewportAnchor = (
-            QGraphicsView.ViewportAnchor.AnchorUnderMouse
+            QGraphicsView.ViewportAnchor.NoAnchor
         )
         self.setTransformationAnchor(anchor)
         self.setHorizontalScrollBarPolicy(
@@ -3243,7 +3302,12 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.wheelEvent()`:
     def wheelEvent(self, event: QWheelEvent) -> None:
-        """Zoom about the pointer, within `ZOOM_LIMITS`."""
+        """Zoom about the pointer, within `ZOOM_LIMITS`: the point
+        under it stays under it.
+
+        Arguments:
+        * `event` (`QWheelEvent`): The wheel turned, where it was.
+        """
         notches: float = event.angleDelta().y() / 120.0
         factor: float = ZOOM_PER_NOTCH**notches
         low: float
@@ -3251,7 +3315,18 @@ class OutlineView(QGraphicsView):
         low, high = ZOOM_LIMITS
         wanted: float = min(max(self.zoom() * factor, low), high)
         factor = wanted / self.zoom()
+        pointer: QPointF = event.position()
+        held: QPointF = self.mapToScene(pointer.toPoint())
         self.scale(factor, factor)
+
+        # Scroll so that the point held is back under the pointer.
+        moved: QPointF = QPointF(self.mapFromScene(held)) - pointer
+        self.horizontalScrollBar().setValue(
+            self.horizontalScrollBar().value() + round(moved.x())
+        )
+        self.verticalScrollBar().setValue(
+            self.verticalScrollBar().value() + round(moved.y())
+        )
         self.place_handles()
         event.accept()
 
@@ -3335,6 +3410,12 @@ class OutlineView(QGraphicsView):
         * `exposed` (`QRectF`): What is shown (cleared first).
         """
         painter.fillRect(exposed, QColor(theme.colors().paper))
+
+        # The grid stays under the pieces (#443): clearing hid it.
+        if self.grid_shown:
+            pen: QPen = QPen(QColor(theme.colors().quiet), THIN_PIXELS)
+            pen.setCosmetic(True)
+            self.draw_grid(painter, exposed, pen)
         across_x: list[tuple[float, float, float]] = self.cut_offsets(HIDE_X)
         across_y: list[tuple[float, float, float]] = self.cut_offsets(HIDE_Y)
         left: float
@@ -3803,6 +3884,11 @@ class OutlineEditor(QWidget):
       (only those checked "Fillet", #213), over the one table.
     * `problems` (`QLabel`): The letters' problems, a line each, red,
       right under the table (#141).
+    * `letter_lines` (`list[str]`): The letters' problems, a line
+      each, shown above the outline's own (`show_problems()`).
+    * `renaming` (`dict[int, str]`): By table row, a letter's last good
+      name while its name is being typed and is not good yet: the
+      name its uses still carry (`T.tfo~6.5` #441).
     * `splitter` (`QSplitter`): The drawing over the table.
     * `status` (`QLabel`): The last refusal, under the button tabs.
     * `table` (`QTableWidget`): The letters, a row each.
@@ -3854,6 +3940,8 @@ class OutlineEditor(QWidget):
         self.splitter.addWidget(self.views)
         self.table: QTableWidget = QTableWidget(0, len(COLUMNS))
         self.problems: QLabel = QLabel("")
+        self.renaming: dict[int, str] = {}
+        self.letter_lines: list[str] = []
         self.tabs: QTabBar = QTabBar()
         self.new_fillet: QPushButton = QPushButton("New Fillet Dimension")
         self.splitter.addWidget(self.letters_area())
@@ -4189,6 +4277,7 @@ class OutlineEditor(QWidget):
         edits), taking the keys the buttons answer to.
         """
         self.table.blockSignals(True)
+        self.renaming.clear()
         self.table.setRowCount(LETTER_ROW + len(self.drawing.letters))
         column: int
         text: str
@@ -4215,7 +4304,8 @@ class OutlineEditor(QWidget):
     @staticmethod
     def cell(letter: Letter, attribute: str) -> QTableWidgetItem:
         """Return a letter's cell: its text, or for "Fillet" a check
-        box that a click flips, never edited as text (#213).
+        box that a click flips, never edited as text (#213).  A formula
+        letter's value cell shows `= ` and its formula (#430).
 
         Arguments:
         * `letter` (`Letter`): The letter.
@@ -4224,6 +4314,8 @@ class OutlineEditor(QWidget):
         Returns:
         * (`QTableWidgetItem`): The cell.
         """
+        if attribute == "default" and letter.formula:
+            return QTableWidgetItem(f"= {letter.formula}")
         if attribute != "fillet":
             return QTableWidgetItem(getattr(letter, attribute))
         item: QTableWidgetItem = QTableWidgetItem()
@@ -4349,17 +4441,75 @@ class OutlineEditor(QWidget):
     def keep(self, row: int, column: int, text: str) -> None:
         """Keep a cell's text in its letter, then check the letters.
 
+        A value starting `=` makes a formula letter (#430); any other
+        makes it a letter given a value.  Formula letters' values are
+        worked out again after every change.
+
         Arguments:
         * `row` (`int`): The letter's table row (see `LETTER_ROW`).
         * `column` (`int`): The cell's column (see `COLUMNS`).
         * `text` (`str`): The cell's text so far.
         """
         attribute: str = COLUMNS[column][1]
-        setattr(
-            self.drawing.letters[row - LETTER_ROW], attribute, text.strip()
-        )
+        letter: Letter = self.drawing.letters[row - LETTER_ROW]
+        kept: str = text.strip()
+        if attribute == "letter":
+            self.rename(row, kept)
+            refresh_formulas(self.drawing.letters)
+            self.check_letters()
+            self.save()
+            return
+        if attribute == "default":
+            letter.formula = kept[1:].strip() if kept.startswith("=") else ""
+            if letter.formula:
+                kept = ""
+        setattr(letter, attribute, kept)
+        refresh_formulas(self.drawing.letters)
         self.check_letters()
         self.save()
+
+    # Method `OutlineEditor.rename()`:
+    def rename(self, row: int, name: str) -> None:
+        """Rename a letter, and everything that uses it with it (#441):
+        its dimensions, holes, the fillets' note letter and the
+        formulas that name it.  Its uses follow only a good name, one
+        not taken (`letter_problem()`), so that typing `OAL` through
+        `O` and `OA`, or a name half typed, never leaves them blank.
+
+        Arguments:
+        * `row` (`int`): The letter's table row (see `LETTER_ROW`).
+        * `name` (`str`): Its new name, as typed so far.
+        """
+        index: int = row - LETTER_ROW
+        letter: Letter = self.drawing.letters[index]
+        carried: str = self.renaming.get(row, letter.letter)
+        letter.letter = name
+        taken: bool = any(
+            other.letter.lower() == name.lower()
+            for place, other in enumerate(self.drawing.letters)
+            if place != index
+        )
+        if taken or letter_problem(self.drawing.letters, index):
+            self.renaming[row] = carried
+            return
+        self.renaming.pop(row, None)
+        if carried == name:
+            return
+        dimension: Dimension
+        for dimension in self.drawing.dimensions:
+            if dimension.letter == carried:
+                dimension.letter = name
+        hole: Hole
+        for hole in self.drawing.holes:
+            if hole.letter == carried:
+                hole.letter = name
+        if self.drawing.note_radius == carried:
+            self.drawing.note_radius = name
+        pattern: re.Pattern[str] = re.compile(rf"\b{re.escape(carried)}\b")
+        other: Letter
+        for other in self.drawing.letters:
+            if other.formula:
+                other.formula = pattern.sub(name, other.formula)
 
     # Method `OutlineEditor.check_letters()`:
     def check_letters(self) -> None:
@@ -4381,7 +4531,8 @@ class OutlineEditor(QWidget):
             for found, column in (
                 (letter_problem(self.drawing.letters, row), 0),
                 (
-                    value_problem(letter.default)
+                    formula_problem(self.drawing.letters, row)
+                    or value_problem(letter.default)
                     or use_problem(letter.letter, letter.default, kinds)
                     or trouble.get(letter.letter, ""),
                     2,
@@ -4393,7 +4544,15 @@ class OutlineEditor(QWidget):
                 )
                 if cell is not None:
                     cell.setBackground(bad if found else QColor(0, 0, 0, 0))
-                    cell.setToolTip(found)
+                    # A good formula letter's tip is its value (#430).
+                    cell.setToolTip(
+                        found
+                        or (
+                            f"= {letter.default}"
+                            if column == 2 and letter.formula
+                            else ""
+                        )
+                    )
                 if found:
                     # A message naming its letter first is not given it
                     # twice (#143).
@@ -4403,7 +4562,7 @@ class OutlineEditor(QWidget):
                         else f"{letter.letter}: {found}"
                     )
         self.table.blockSignals(False)
-        self.problems.setText("\n".join(problems))
+        self.letter_lines = problems
         self.show_message()
 
     # Method `OutlineEditor.fillet_trouble()`:
@@ -4499,6 +4658,20 @@ class OutlineEditor(QWidget):
         self.status.setText(problem or hint)
         self.status.setStyleSheet(
             f"color: {theme.colors().problem}" if problem else ""
+        )
+        self.show_problems()
+
+    # Method `OutlineEditor.show_problems()`:
+    def show_problems(self) -> None:
+        """Show the letters' problems under the table, then what keeps
+        the outline from its real sizes (#445, #448)."""
+        placed: str = placement_problem(
+            self.view.drawing.points,
+            self.view.drawing.dimensions,
+            self.view.drawing.revolve,
+        )
+        self.problems.setText(
+            "\n".join(self.letter_lines + ([placed] if placed else []))
         )
 
 
