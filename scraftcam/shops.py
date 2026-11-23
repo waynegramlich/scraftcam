@@ -55,6 +55,16 @@ DRILL_LETTERS: dict[str, str] = {
     "point_angle": "PA",
 }
 
+# An end mill's sizes, by key: the letters of its outline drawing,
+# `end_mill.outline.toml`, which an end mill file writes (`T.tfo~6.5`
+# #452).
+END_MILL_LETTERS: dict[str, str] = {
+    "diameter": "D",
+    "length_of_cut": "LOC",
+    "overall_length": "OAL",
+    "shank": "SD",
+}
+
 # Where a value is in a file: its keys, and its indices in lists.
 KeyPath: TypeAlias = tuple[str | int, ...]
 
@@ -1250,9 +1260,9 @@ version = "0.0.1"
 [[end_mills]]
 name = "1/4 in 2 flute carbide end mill"
 unique_id = 1
-diameter = "1/4 in"
-length_of_cut = "3/4 in"
-overall_length = "2-1/2 in"
+D = "1/4 in"
+LOC = "3/4 in"
+OAL = "2-1/2 in"
 flutes = 2
 end = "square"
 material = "carbide"
@@ -1271,42 +1281,46 @@ material = "HSS"
         TableKind(
             "end_mill",
             "An end mill: square, ball or bull nose (a square end with "
-            "rounded corners), and perhaps a rougher.",
-            _tool_fields(
-                *_size_fields(),
-                TableField("flutes", "integer", "How many flutes.", True),
-                TableField(
-                    "end",
-                    "choice",
-                    "The shape of its end.",
-                    required=True,
-                    choices=("square", "ball", "bull_nose"),
+            "rounded corners), and perhaps a rougher, its sizes the "
+            "letters of `end_mill.outline.toml`.",
+            _shorts(
+                _tool_fields(
+                    *_size_fields(),
+                    TableField("flutes", "integer", "How many flutes.", True),
+                    TableField(
+                        "end",
+                        "choice",
+                        "The shape of its end.",
+                        required=True,
+                        choices=("square", "ball", "bull_nose"),
+                    ),
+                    TableField(
+                        "corner_radius",
+                        "length",
+                        "A bull nose's corners.",
+                        letter="C",
+                    ),
+                    TableField(
+                        "center_cutting",
+                        "boolean",
+                        "True if it can plunge straight down.",
+                    ),
+                    TableField(
+                        "roughing",
+                        "boolean",
+                        "True for a rougher (serrated flutes).",
+                    ),
+                    _cutting_field(),
                 ),
-                TableField(
-                    "corner_radius",
-                    "length",
-                    "A bull nose's corners.",
-                    letter="C",
-                ),
-                TableField(
-                    "center_cutting",
-                    "boolean",
-                    "True if it can plunge straight down.",
-                ),
-                TableField(
-                    "roughing",
-                    "boolean",
-                    "True for a rougher (serrated flutes).",
-                ),
-                _cutting_field(),
+                END_MILL_LETTERS,
             ),
             True,
             """\
 name = "1/2 in 2 flute carbide end mill"
 unique_id = 2
-diameter = "1/2 in"
-length_of_cut = "1 in"
-overall_length = "3 in"
+D = "1/2 in"
+LOC = "1 in"
+OAL = "3 in"
 flutes = 2
 end = "square"
 center_cutting = true
@@ -2980,6 +2994,28 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
                 first[name] = (source, path)
 
 
+# Function `long_keys()`:
+def long_keys(item: dict[str, object]) -> dict[str, object]:
+    """Return a file's table with each key written as a letter of its
+    kind's outline drawing (`D`) given as its long key (`diameter`),
+    as `read()` keeps it (`T.tfo~6.5` #435, #452).
+
+    Arguments:
+    * `item` (`dict[str, object]`): A file's table, as in the file.
+
+    Returns:
+    * (`dict[str, object]`): The same, by long keys; unchanged when its
+      `kind` is not known or has no letters.
+    """
+    kind: object = item.get("kind")
+    if not isinstance(kind, str) or kind not in KINDS:
+        return item
+    longs: dict[str, str] = {
+        each.short: each.key for each in KINDS[kind].fields if each.short
+    }
+    return {longs.get(key, key): value for key, value in item.items()}
+
+
 # Function `tool_label()`:
 def tool_label(item: dict[str, object]) -> str:
     """Return how a tool is listed: its function, then its key sizes.
@@ -2994,6 +3030,7 @@ def tool_label(item: dict[str, object]) -> str:
     Returns:
     * (`str`): Its label, or `""` if it is not a tool.
     """
+    item = long_keys(item)
     kind: object = item.get("kind")
     if not isinstance(kind, str) or kind not in TOOL_KINDS:
         return ""
@@ -3041,6 +3078,7 @@ def tool_order(item: dict[str, object]) -> tuple[str, float]:
       that does not read.
     """
     function: str = tool_label(item).split(" (", maxsplit=1)[0].lower()
+    item = long_keys(item)
     key: str
     for key in ("diameter", "radius"):
         if key in item:

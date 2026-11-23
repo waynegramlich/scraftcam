@@ -393,8 +393,8 @@ def placement_problem(
     # A round tool is measured from its tip.
     if revolve and not tip_on_origin(dimensions):
         return (
-            "A revolved tool's tip goes on the origin: select its corner "
-            "and press [Horizontal] and [Vertical]."
+            "A revolved tool's tip goes on the origin: drag its corner "
+            "onto the origin."
         )
 
     # Then every corner must be reached from the origin.
@@ -410,13 +410,14 @@ def placement_problem(
         ORIGIN in (dimension.start, dimension.end) for dimension in dimensions
     ):
         return (
-            "Every corner floats: no mark or dimension ties the outline "
-            "to the origin."
+            "Every corner floats: nothing ties the outline to the origin "
+            "(drag a corner onto it, or dimension one from it)."
         )
     named: str = ", ".join(str(corner) for corner in floating)
     return (
-        f"Corners {named} float: no marks or dimensions tie them to the "
-        "origin (a corner's tooltip says which way)."
+        f"Corners {named} float: no dimensions, or edges drawn level or "
+        "upright, tie them to the origin (a corner's tooltip says which "
+        "way)."
     )
 
 
@@ -500,6 +501,181 @@ def mark_broken(
         for end in (dimension.start, dimension.end)
     ]
     return abs(ends[0] - ends[1]) > BROKEN
+
+
+# Function `snapped()`:
+def snapped(
+    points: list[tuple[float, float]],
+    dimensions: list[Dimension],
+    corner: int,
+    tolerance: float,
+) -> tuple[tuple[float, float], list[Dimension]]:
+    """Return where a dragged corner snaps to, and the dimensions with
+    its marks remade (`T.tfo~6.5` #451).
+
+    Along each axis, the corner snaps to its neighbors' coordinate or
+    the axis, when within `tolerance` (the closest wins).  Then the
+    marks on its two edges and from the origin to it are taken off,
+    and made again where the snapped drawing has them: an edge level
+    or upright, the corner on an axis.  Only this corner's marks
+    change, from where it is drawn (never from solved values: no grid
+    lock, #233).  An edge with a lettered angle gets none, and a mark
+    one too many for the other dimensions (`solve().extra`) is left
+    off.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn,
+      the dragged one where the drag put it.
+    * `dimensions` (`list[Dimension]`): The dimensions.
+    * `corner` (`int`): The dragged corner.
+    * `tolerance` (`float`): How near snaps, in drawing units (a few
+      pixels at the current zoom).
+
+    Returns:
+    * (`tuple[tuple[float, float], list[Dimension]]`): The corner's
+      snapped place, and the new dimensions (the old ones kept, in
+      order, the remade marks after them).
+    """
+    # Snap the corner, then take off its marks.
+    count: int = len(points)
+    here: tuple[float, float] = _snap_place(points, corner, tolerance)
+    moved: list[tuple[float, float]] = list(points)
+    moved[corner] = here
+    kept: list[Dimension] = without_marks(dimensions, corner, count)
+
+    # Add the marks it shows one at a time, leaving off any one too
+    # many.
+    mark: Dimension
+    for mark in _shown_marks(moved, kept, corner):
+        trial: list[Dimension] = [*kept, mark]
+        if len(trial) - 1 not in solve(moved, trial).extra:
+            kept = trial
+    return here, kept
+
+
+# Function `without_marks()`:
+def without_marks(
+    dimensions: list[Dimension], corner: int, count: int
+) -> list[Dimension]:
+    """Return the dimensions without a corner's marks: those on its
+    two edges and from the origin to it (#451).
+
+    Arguments:
+    * `dimensions` (`list[Dimension]`): The dimensions.
+    * `corner` (`int`): The corner.
+    * `count` (`int`): How many corners there are.
+
+    Returns:
+    * (`list[Dimension]`): The others, in order.
+    """
+    mine: list[set[int]] = [
+        {(corner - 1) % count, corner},
+        {corner, (corner + 1) % count},
+        {ORIGIN, corner},
+    ]
+    return [
+        dimension
+        for dimension in dimensions
+        if not (
+            is_mark(dimension)
+            and dimension.kind in AXIS
+            and {dimension.start, dimension.end} in mine
+        )
+    ]
+
+
+# Function `_snap_place()`:
+def _snap_place(
+    points: list[tuple[float, float]], corner: int, tolerance: float
+) -> tuple[float, float]:
+    """Return where a dragged corner snaps to: along each axis, the
+    closest of the axis and its neighbors' coordinates, when within
+    `tolerance` (#451).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `corner` (`int`): The dragged corner.
+    * `tolerance` (`float`): How near snaps, in drawing units.
+
+    Returns:
+    * (`tuple[float, float]`): Its snapped place.
+    """
+    count: int = len(points)
+    raw: tuple[float, float] = points[corner]
+    place: list[float] = list(raw)
+    gaps: list[float] = [0.0, 0.0]
+    axis: int
+    for axis in (0, 1):
+        best: float = place[axis]
+        gap: float = math.inf
+        target: float
+        for target in (
+            0.0,
+            points[(corner - 1) % count][axis],
+            points[(corner + 1) % count][axis],
+        ):
+            if abs(target - place[axis]) < gap:
+                best = target
+                gap = abs(target - place[axis])
+        if gap <= tolerance:
+            place[axis] = best
+            gaps[axis] = gap
+
+    # Never onto a neighbor (an edge of no length): the axis snapped
+    # further stays where it was dragged.
+    neighbors: set[tuple[float, float]] = {
+        points[(corner - 1) % count],
+        points[(corner + 1) % count],
+    }
+    if (place[0], place[1]) in neighbors:
+        axis = 0 if gaps[0] >= gaps[1] else 1
+        place[axis] = raw[axis]
+    return place[0], place[1]
+
+
+# Function `_shown_marks()`:
+def _shown_marks(
+    points: list[tuple[float, float]],
+    dimensions: list[Dimension],
+    corner: int,
+) -> list[Dimension]:
+    """Return the marks a drawing shows at one corner (#451): on its
+    edges drawn exactly level or upright (not one with a lettered
+    angle), and from the origin when it is on an axis.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `dimensions` (`list[Dimension]`): The dimensions, for angles.
+    * `corner` (`int`): The corner.
+
+    Returns:
+    * (`list[Dimension]`): The marks, on axes first.
+    """
+    count: int = len(points)
+    here: tuple[float, float] = points[corner]
+    shown: list[Dimension] = []
+    if here[1] == 0.0:
+        shown.append(Dimension("", VERTICAL, ORIGIN, corner))
+    if here[0] == 0.0:
+        shown.append(Dimension("", HORIZONTAL, ORIGIN, corner))
+    angled: set[int] = {
+        end
+        for dimension in dimensions
+        if dimension.kind == ANGLE and dimension.letter
+        for end in (dimension.start, dimension.end)
+    }
+    edge: int
+    for edge in ((corner - 1) % count, corner):
+        after: int = (edge + 1) % count
+        if edge in angled or after == edge:
+            continue
+        start: tuple[float, float] = points[edge]
+        end: tuple[float, float] = points[after]
+        if start[1] == end[1] and start[0] != end[0]:
+            shown.append(Dimension("", VERTICAL, edge, after))
+        elif start[0] == end[0] and start[1] != end[1]:
+            shown.append(Dimension("", HORIZONTAL, edge, after))
+    return shown
 
 
 # Function `drawn_marks()`:

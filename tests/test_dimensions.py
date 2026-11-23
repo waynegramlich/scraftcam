@@ -21,6 +21,7 @@ from scraftcam.gui.dimensions import (
     mark_edge,
     placement_problem,
     product,
+    snapped,
     solve,
     tip_on_origin,
     total,
@@ -363,6 +364,97 @@ class TestPlacement(unittest.TestCase):
         self.assertIn(
             "tip goes on the origin", placement_problem(points, sizes, True)
         )
+
+
+# Class `TestSnapped`:
+class TestSnapped(unittest.TestCase):
+    """`snapped()`: a dragged corner's snap and marks (#451)."""
+
+    def marks(self, dimensions: list[Dimension]) -> set[tuple[str, int, int]]:
+        """Return the marks, as (kind, start, end)."""
+        return {
+            (each.kind, each.start, each.end)
+            for each in dimensions
+            if is_mark(each)
+        }
+
+    def test_snaps_level_and_upright(self) -> None:
+        """Dragged near its neighbors, corner 2 snaps and is marked."""
+        points: list[tuple[float, float]] = list(L_BRACKET)
+        points[2] = (6.05, 0.97)
+        here: tuple[float, float]
+        found: list[Dimension]
+        here, found = snapped(points, [], 2, 0.1)
+        self.assertEqual(here, (6.0, 1.0))
+        self.assertEqual(
+            self.marks(found), {(HORIZONTAL, 1, 2), (VERTICAL, 2, 3)}
+        )
+
+    def test_dragged_off(self) -> None:
+        """Dragged away, the corner's marks go; others stay."""
+        points: list[tuple[float, float]] = list(L_BRACKET)
+        points[2] = (6.5, 1.5)
+        old: list[Dimension] = [
+            Dimension("", HORIZONTAL, 1, 2),
+            Dimension("", VERTICAL, 2, 3),
+            Dimension("", VERTICAL, 4, 5),
+        ]
+        here: tuple[float, float]
+        found: list[Dimension]
+        here, found = snapped(points, old, 2, 0.1)
+        self.assertEqual(here, (6.5, 1.5))
+        self.assertEqual(self.marks(found), {(VERTICAL, 4, 5)})
+
+    def test_axis(self) -> None:
+        """A corner dragged near the Y axis goes on it, marked."""
+        points: list[tuple[float, float]] = list(L_BRACKET)
+        points[3] = (0.03, 1.0)
+        here: tuple[float, float]
+        found: list[Dimension]
+        here, found = snapped(points, [], 3, 0.1)
+        self.assertEqual(here, (0.0, 1.0))
+        self.assertIn((HORIZONTAL, ORIGIN, 3), self.marks(found))
+
+    def test_not_onto_neighbor(self) -> None:
+        """Snapping never puts a corner on a neighbor."""
+        points: list[tuple[float, float]] = list(L_BRACKET)
+        points[4] = (0.03, 4.0)
+        here: tuple[float, float]
+        here, _ = snapped(points, [], 4, 0.1)
+        self.assertEqual(here, (0.03, 4.0))
+
+    def test_lettered_angle(self) -> None:
+        """An edge with a lettered angle is never marked."""
+        points: list[tuple[float, float]] = list(L_BRACKET)
+        angle: Dimension = Dimension("A", ANGLE, 1, Y_AXIS)
+        found: list[Dimension]
+        _, found = snapped(points, [angle], 2, 0.1)
+        self.assertNotIn((HORIZONTAL, 1, 2), self.marks(found))
+        self.assertIn((VERTICAL, 2, 3), self.marks(found))
+
+    def test_one_too_many(self) -> None:
+        """A mark the dimensions already give is left off."""
+        points: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 1.0),
+        ]
+        given: list[Dimension] = [
+            Dimension("", VERTICAL, ORIGIN, 0),
+            Dimension("", HORIZONTAL, ORIGIN, 0),
+            Dimension("", VERTICAL, ORIGIN, 1),
+            Dimension("", VERTICAL, 0, 1),
+        ]
+        found: list[Dimension]
+        _, found = snapped(points, given, 1, 0.1)
+        level: int = sum(
+            1
+            for each in found
+            if is_mark(each)
+            and each.kind == VERTICAL
+            and 1 in (each.start, each.end)
+        )
+        self.assertEqual(level, 1)
 
 
 if __name__ == "__main__":

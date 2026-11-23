@@ -186,7 +186,8 @@ Attributes:
 ## End Mill
 
 An end mill: square, ball or bull nose (a square end with rounded
-corners), and perhaps a rougher.
+corners), and perhaps a rougher, its sizes the letters of
+`end_mill.outline.toml`.
 
 ![End Mill sketch](docs/tool_models/end_mill.svg)
 
@@ -213,10 +214,10 @@ python3 -m scraftcam.tooling.cutter_models 8080 '{
   "kind": "end_mill",
   "material": "carbide",
   "finish": "uncoated",
-  "diameter": "1/2 in",
-  "shank": "3/8 in",
-  "length_of_cut": "1 in",
-  "overall_length": "3 in",
+  "D": "1/2 in",
+  "SD": "3/8 in",
+  "LOC": "1 in",
+  "OAL": "3 in",
   "flutes": 4,
   "end": "bull_nose",
   "corner_radius": "1/8 in"
@@ -236,10 +237,10 @@ with connect("8080") as transport:
             "kind": "end_mill",
             "material": "carbide",
             "finish": "uncoated",
-            "diameter": "1/2 in",
-            "shank": "3/8 in",
-            "length_of_cut": "1 in",
-            "overall_length": "3 in",
+            "D": "1/2 in",
+            "SD": "3/8 in",
+            "LOC": "1 in",
+            "OAL": "3 in",
             "flutes": 4,
             "end": "bull_nose",
             "corner_radius": "1/8 in",
@@ -254,15 +255,15 @@ name = "Sample end mill"
 kind = "end_mill"
 language = "English"
 version = "0.0.1"
+D = "1/2 in"
+LOC = "1 in"
+OAL = "3 in"
+SD = "3/8 in"
 corner_radius = "1/8 in"
-diameter = "1/2 in"
 end = "bull_nose"
 finish = "uncoated"
 flutes = 4
-length_of_cut = "1 in"
 material = "carbide"
-overall_length = "3 in"
-shank = "3/8 in"
 unique_id = 1
 ```
 

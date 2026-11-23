@@ -127,8 +127,9 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
     for hole in outline.holes:
         strokes.extend(hole_strokes(outline, hole, scale, text_height))
 
-    # Then each dimension and mark, its letter grown or shrunk by its
-    # font steps, and the fillets' note.
+    # Then each dimension, its letter grown or shrunk by its font
+    # steps, and the fillets' note; marks are read from the drawing,
+    # as on any technical drawing, so not drawn (`T.tfo~6.5` #451).
     # Each letter's text carries its name, value and help as a title
     # (#267).
     titles: dict[str, str] = {
@@ -136,6 +137,8 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
     }
     dimension: Dimension
     for dimension in outline.dimensions:
+        if is_mark(dimension):
+            continue
         height: float = text_height * FONT_STEP**dimension.font_step
         found: list[Stroke] = dimension_strokes(
             outline, dimension, fillets, height

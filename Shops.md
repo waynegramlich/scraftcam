@@ -554,9 +554,9 @@ version = "0.0.1"
 [[end_mills]]
 name = "1/4 in 2 flute carbide end mill"
 unique_id = 1
-diameter = "1/4 in"
-length_of_cut = "3/4 in"
-overall_length = "2-1/2 in"
+D = "1/4 in"
+LOC = "3/4 in"
+OAL = "2-1/2 in"
 flutes = 2
 end = "square"
 material = "carbide"
@@ -575,8 +575,9 @@ material = "HSS"
 ## `end_mill`
 
 An end mill: square, ball or bull nose (a square end with rounded
-corners), and perhaps a rougher.  It has a `name` even when it is not a
-file of its own.
+corners), and perhaps a rougher, its sizes the letters of
+`end_mill.outline.toml`.  It has a `name` even when it is not a file of
+its own.
 
 | Key               | Value                | Required | Meaning               |
 | ----------------- | -------------------- | -------- | --------------------- |
@@ -587,8 +588,8 @@ file of its own.
 |                   |                      |          | not a T number).      |
 | `description`     | string               | no       | What it is, in a few  |
 |                   |                      |          | words.                |
-| `diameter`        | length               | yes      | The cutting diameter. |
-| `length_of_cut`   | length               | yes      | How deep it can cut   |
+| `D`               | length               | yes      | The cutting diameter. |
+| `LOC`             | length               | yes      | How deep it can cut   |
 |                   |                      |          | (LOC).                |
 | `flutes`          | integer              | yes      | How many flutes.      |
 | `end`             | one of `square`,     | yes      | The shape of its end. |
@@ -607,9 +608,9 @@ file of its own.
 |                   |                      |          | needed for a tool     |
 |                   |                      |          | that is not HSS,      |
 |                   |                      |          | cobalt or carbide).   |
-| `shank`           | length               | no       | The shank diameter,   |
+| `SD`              | length               | no       | The shank diameter,   |
 |                   |                      |          | if not `diameter`.    |
-| `overall_length`  | length               | yes      | Its whole length      |
+| `OAL`             | length               | yes      | Its whole length      |
 |                   |                      |          | (OAL).                |
 | `holder`          | holder list          | no       | What holds it, from   |
 |                   |                      |          | the spindle to its    |
@@ -644,9 +645,9 @@ file of its own.
 ```toml
 name = "1/2 in 2 flute carbide end mill"
 unique_id = 2
-diameter = "1/2 in"
-length_of_cut = "1 in"
-overall_length = "3 in"
+D = "1/2 in"
+LOC = "1 in"
+OAL = "3 in"
 flutes = 2
 end = "square"
 center_cutting = true

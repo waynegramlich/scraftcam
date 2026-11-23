@@ -1,0 +1,137 @@
+kind = "outline"
+version = 4
+revolve = true
+
+[letters.D]
+name = "Diameter"
+default = "1/4 in"
+help = "The cutting diameter, across the flutes."
+
+[letters.LOC]
+name = "Length of cut"
+default = "3/4 in"
+help = "From the end to where the flutes stop."
+
+[letters.SD]
+name = "Shank diameter"
+default = "3/8 in"
+help = "The shank's diameter (often the same as D)."
+
+[letters.OAL]
+name = "Overall length"
+default = "2-1/2 in"
+help = "From the end to the top of the shank."
+
+[[points]]
+at = [0.0, 0.0]
+
+[[points]]
+at = [3.175, 0.0]
+
+[[points]]
+at = [3.175, 19.05]
+
+[[points]]
+at = [4.7625, 19.05]
+
+[[points]]
+at = [4.7625, 63.5]
+
+[[points]]
+at = [0.0, 63.5]
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "origin"
+to = 0
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = 0
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = 5
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = 0
+to = 1
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = 1
+to = 2
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = 2
+to = 3
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = 3
+to = 4
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = 4
+to = 5
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "D"
+kind = "diameter"
+from = "origin"
+to = 1
+offset = -8.0
+along = 0.5
+
+[[dimensions]]
+letter = "LOC"
+kind = "vertical"
+from = "origin"
+to = 2
+offset = 10.0
+along = 0.5
+
+[[dimensions]]
+letter = "SD"
+kind = "diameter"
+from = "origin"
+to = 3
+offset = 8.0
+along = 0.5
+
+[[dimensions]]
+letter = "OAL"
+kind = "vertical"
+from = "origin"
+to = 4
+offset = 16.0
+along = 0.5

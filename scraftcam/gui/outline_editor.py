@@ -17,10 +17,12 @@ which works whichever tab is showing; no menus (#11).  [Most Common]:
 [Undo (Ctrl+Z)], [Redo (Ctrl+Shift+Z)] (#18, a whole drag being one
 change), [Delete (Del)], [Dimension (N)], [Fit (Home)], [Rotate
 Diagram (T)].  [Draw]: [Delete], [Dimension], [Dim. Kind \u21bb
-(K)], [New Letter (L)], [Revolve (R)].  [Marks]: [Horizontal (-)],
-[Vertical (|)], [Right Angle (Shift+L)].  [View]: [Grid (G)], [Snap
+(K)], [New Letter (L)], [Revolve (R)].  [View]: [Grid (G)], [Snap
 (S)], [Fit], [Overview (O)], [Hide (H)], [Rotate Diagram], [Font +
-(])], [Font - ([)] (#273).  The refusals and hints show under the
+(])], [Font - ([)] (#273), [Show Marks (M)].  Marks (an edge level
+or upright, a corner on an axis) are made by dragging, a corner
+snapping onto them (`T.tfo~6.5` #451), and drawn only while [Show
+Marks] is on.  The refusals and hints show under the
 tabs.  Below the drawing, past a bar dragged up and down, the
 letters' table (#27): letter, long name, default value with its
 unit, help, each kept and checked at every keystroke.
@@ -105,7 +107,6 @@ from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
     AXES,
-    AXIS,
     DIAMETER,
     HORIZONTAL,
     LENGTH,
@@ -123,8 +124,10 @@ from .dimensions import (  # noqa: E402
     mark_edge,
     next_kind,
     placement_problem,
+    snapped,
     solve,
     tip_on_origin,
+    without_marks,
 )
 from .hides import (  # noqa: E402
     HIDE_X,
@@ -175,6 +178,10 @@ from .window import make_application  # noqa: E402
 # the outline's and the thin lines' widths (#26), and the least gap
 # between minor grid lines.
 SQUARE_PIXELS: float = 9.0
+
+# How near a dragged corner snaps level, upright or onto an axis, on
+# screen (`T.tfo~6.5` #451).
+SNAP_PIXELS: float = 6.0
 
 # A lit corner's square (#199) is this much bigger.
 LIT_SCALE: float = 1.8
@@ -241,9 +248,6 @@ BUTTON_KEYS: tuple[tuple[str, str], ...] = (
     ("Delete", "Del"),
     ("Dimension", "N"),
     ("Dim. Kind", "K"),
-    ("Horizontal", "-"),
-    ("Vertical", "|"),
-    ("Right Angle", "Shift+L"),
     ("Revolve", "R"),
     ("Rotate Diagram", "T"),
     ("Font +", "]"),
@@ -254,6 +258,7 @@ BUTTON_KEYS: tuple[tuple[str, str], ...] = (
     ("Undo", "Ctrl+Z"),
     ("Redo", "Ctrl+Shift+Z"),
     ("New Letter", "L"),
+    ("Show Marks", "M"),
 )
 
 # The buttons in tabs of related ones (#319), the most used first; a
@@ -264,7 +269,6 @@ BUTTON_TABS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("Undo", "Redo", "Delete", "Dimension", "Fit", "Rotate Diagram"),
     ),
     ("Draw", ("Delete", "Dimension", "Dim. Kind", "New Letter", "Revolve")),
-    ("Marks", ("Horizontal", "Vertical", "Right Angle")),
     (
         "View",
         (
@@ -276,6 +280,7 @@ BUTTON_TABS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "Rotate Diagram",
             "Font +",
             "Font -",
+            "Show Marks",
         ),
     ),
 )
@@ -668,6 +673,7 @@ class CornerCircle(QGraphicsEllipseItem):
         """Select its corner, then start a drag."""
         self.editor.select_point(self.index)
         self.before = self.editor.drawing.snapshot()
+        self.editor.dragged = self.index
         super().mousePressEvent(event)
 
     # Method `CornerCircle.mouseReleaseEvent()`:
@@ -681,9 +687,18 @@ class CornerCircle(QGraphicsEllipseItem):
         )
         if moved and self.before is not None:
             self.editor.history.remember(self.before)
+            QTimer.singleShot(0, self.remark)
+        else:
+            self.editor.dragged = -1
         self.before = None
         if not moved and self.editor.armed is not None:
             QTimer.singleShot(0, self.paint_fillet)
+
+    # Method `CornerCircle.remark()`:
+    def remark(self) -> None:
+        """Remake its corner's marks where it was dropped (#451),
+        after the release, as it remakes the squares."""
+        self.editor.remark(self.index)
 
     # Method `CornerCircle.paint_fillet()`:
     def paint_fillet(self) -> None:
@@ -714,9 +729,9 @@ class CornerCircle(QGraphicsEllipseItem):
             moved: QPointF = value if free else snap(value, self.editor.step())
             if self.editor.drawing.revolve and moved.x() < 0.0:
                 moved.setX(0.0)  # A revolved outline keeps to X >= 0.
-            # Only dimensions and marks pin a coordinate (#176); the
-            # corners its marks chain it to move with it (#243).
-            self.editor.drag_marked(self.index, moved)
+            # Only dimensions pin a coordinate (#176); it snaps level,
+            # upright or onto an axis (#451).
+            self.editor.drag_corner(self.index, moved)
             self.editor.outline.refresh()
             self.editor.follow()
             return moved
@@ -1180,7 +1195,9 @@ class EdgeHandle(QGraphicsEllipseItem):
         if self.added < 0:
             self.added = self.index + 1
             self.editor.drawing.insert(self.added, (where.x(), where.y()))
-        self.editor.drawing.points[self.added] = (where.x(), where.y())
+        # It snaps as a dragged corner does (#451).
+        self.editor.dragged = self.added
+        self.editor.drag_corner(self.added, where)
         self.setPos(where)
         self.editor.outline.refresh()
         measure: DimensionItem
@@ -1195,7 +1212,7 @@ class EdgeHandle(QGraphicsEllipseItem):
         if self.before is not None and self.added >= 0:
             self.editor.history.remember(self.before)
             self.before = None
-            self.editor.make_squares()
+            self.editor.remark(self.added)  # Its marks, and its square.
         elif self.before is not None:
             self.editor.select_edge(self.index)
         self.before = None
@@ -1425,6 +1442,8 @@ class DimensionHandle(QGraphicsEllipseItem):
             if is_mark(dimension)
             else dimension.kind != RADIUS
         )
+        # Marks show only under [Show Marks] (#451).
+        lined = lined and (not is_mark(dimension) or self.editor.marks_shown)
         self.setVisible(lined)
         if lined:
             self.setPos(self.editor.measures[self.index].handle_spot())
@@ -1471,7 +1490,9 @@ class DimensionHandle(QGraphicsEllipseItem):
             self.place()
             return
         _, _, start, end = measure.ends()
-        if dimension.kind == HORIZONTAL:
+        # A diameter runs across, as a horizontal one (`T.tfo~6.5`
+        # #456: it was moved as a vertical one).
+        if dimension.kind in (HORIZONTAL, DIAMETER):
             dimension.offset = where.y()
             span: float = end.x() - start.x()
             if span != 0.0:
@@ -1571,7 +1592,11 @@ class DimensionItem(QGraphicsItem):
             # Parallel to the line between the points, `offset` aside.
             aside: QPointF = left_of(second - first) * dimension.offset
             return first, second, first + aside, second + aside
-        if dimension.kind == HORIZONTAL:
+        if dimension.kind == DIAMETER:
+            # From the corner's mirror image across the axis (#437),
+            # across at `offset`, as `outline_diagram` draws it (#456).
+            first = QPointF(-second.x(), second.y())
+        if dimension.kind in (HORIZONTAL, DIAMETER):
             return (
                 first,
                 second,
@@ -1884,6 +1909,8 @@ class OutlineView(QGraphicsView):
     """
 
     # Method `OutlineView.__init__()`:
+    # Every attribute of the view is set up here, in one place.
+    # pylint: disable-next=too-many-statements
     def __init__(self, drawing: Drawing) -> None:
         """Make the view of a drawing, fitted to it.
 
@@ -1893,6 +1920,10 @@ class OutlineView(QGraphicsView):
         super().__init__()
         self.drawing: Drawing = drawing
         self.grid_shown: bool = True
+        self.marks_shown: bool = False
+        # The corner being dragged, whose own marks are left out until
+        # it is dropped (#451), or -1.
+        self.dragged: int = -1
         self.history: History = History()
         self.message: str = ""
         self.chosen_points: list[int] = []
@@ -1992,6 +2023,10 @@ class OutlineView(QGraphicsView):
         ]
         for measure in self.measures:
             self.scene().addItem(measure)
+            measure.setVisible(
+                self.marks_shown
+                or not is_mark(self.drawing.dimensions[measure.index])
+            )
         circle: DimensionHandle
         for circle in self.circles:
             self.scene().removeItem(circle)
@@ -2286,7 +2321,7 @@ class OutlineView(QGraphicsView):
         then draw the dimensions and squares to match."""
         self.apply_values()
         self.outline.refresh()
-        self.solution = solve(self.drawing.points, self.drawing.dimensions)
+        self.solution = solve(self.drawing.points, self.working())
         self.pinned = self.solution
         measure: DimensionItem
         for measure in self.measures:
@@ -2297,6 +2332,21 @@ class OutlineView(QGraphicsView):
         self.place_handles()
         self.restyle()
 
+    # Method `OutlineView.working()`:
+    def working(self) -> list[Dimension]:
+        """Return the dimensions to place corners by: all of them, but
+        a dragged corner's own marks, which it may be dragged off
+        (#451).
+
+        Returns:
+        * (`list[Dimension]`): The dimensions.
+        """
+        if self.dragged < 0:
+            return self.drawing.dimensions
+        return without_marks(
+            self.drawing.dimensions, self.dragged, len(self.drawing.points)
+        )
+
     # Method `OutlineView.apply_values()`:
     def apply_values(self) -> None:
         """Put each coordinate the dimensions fix where the letters'
@@ -2305,7 +2355,7 @@ class OutlineView(QGraphicsView):
         placed, self.drawing.scale = placed_corners(
             self.drawing.points,
             self.drawing.letters,
-            self.drawing.dimensions,
+            self.working(),
             self.drawing.scale,
         )
         if placed == self.drawing.points:
@@ -2664,12 +2714,11 @@ class OutlineView(QGraphicsView):
         self.letters_changed()
         self.restyle()
 
-    # Method `OutlineView.drag_marked()`:
-    def drag_marked(self, corner: int, moved: QPointF) -> None:
-        """Move a dragged corner, obeying the marks (#243): along each
-        axis, the corners its marks chain it to move with it, unless
-        the chain reaches an axis (the origin) or a corner the
-        dimensions pin, which holds the whole chain there.
+    # Method `OutlineView.drag_corner()`:
+    def drag_corner(self, corner: int, moved: QPointF) -> None:
+        """Move a dragged corner (#451): it snaps to its neighbors'
+        X or Y, or onto an axis, within `SNAP_PIXELS`; a coordinate
+        the other dimensions fix (its own marks aside) holds.
 
         Arguments:
         * `corner` (`int`): The corner dragged.
@@ -2677,194 +2726,44 @@ class OutlineView(QGraphicsView):
           it may go.
         """
         points: list[tuple[float, float]] = self.drawing.points
-        pinned: tuple[dict[int, Formula], dict[int, Formula]] = (
-            self.pinned.x,
-            self.pinned.y,
+        trial: list[tuple[float, float]] = list(points)
+        trial[corner] = (moved.x(), moved.y())
+        here: tuple[float, float]
+        here, _ = snapped(
+            trial,
+            self.drawing.dimensions,
+            corner,
+            SNAP_PIXELS / max(self.zoom(), 1e-9),
         )
-        place: list[float] = [moved.x(), moved.y()]
-        chains: list[set[int]] = []
-        axis: int
-        for axis in (0, 1):
-            chain: set[int] = self.mark_chain(corner, axis)
-            if ORIGIN in chain:
-                place[axis] = 0.0
-            elif any(each in pinned[axis] for each in chain):
-                place[axis] = points[corner][axis]
-            chains.append(chain - {ORIGIN})
+        held: Solution = solve(
+            points, without_marks(self.drawing.dimensions, corner, len(points))
+        )
+        place: list[float] = list(here)
+        if corner in held.x:
+            place[0] = points[corner][0]
+        if corner in held.y:
+            place[1] = points[corner][1]
         moved.setX(place[0])
         moved.setY(place[1])
-        for axis in (0, 1):
-            each: int
-            for each in chains[axis]:
-                spot: list[float] = list(points[each])
-                spot[axis] = place[axis]
-                points[each] = (spot[0], spot[1])
-        others: set[int] = (chains[0] | chains[1]) - {corner}
-        self.placing = True
-        for each in others:
-            self.squares[each].setPos(*points[each])
-        self.placing = False
+        points[corner] = (place[0], place[1])
 
-    # Method `OutlineView.toggle_right()`:
-    def toggle_right(self) -> None:
-        """[Right Angle] (#236): make each selected corner a right
-        angle (a letterless angle between its edges), or, when all of
-        them are, take those off.  One change.
-        """
-        count: int = len(self.drawing.points)
-        corners: list[int] = [
-            corner for corner in self.chosen_points if corner != ORIGIN
-        ]
-        if not corners:
-            self.message = "Select corners to make right angles."
-            self.scene().update()
-            return
-
-        # Function `right_at()`:
-        def right_at(dimension: Dimension, corner: int) -> bool:
-            return (
-                is_mark(dimension)
-                and dimension.kind == ANGLE
-                and {dimension.start, dimension.end}
-                == {(corner - 1) % count, corner}
-            )
-
-        self.history.remember(self.drawing.snapshot())
-        if all(
-            any(right_at(each, corner) for each in self.drawing.dimensions)
-            for corner in corners
-        ):
-            self.drawing.dimensions[:] = [
-                each
-                for each in self.drawing.dimensions
-                if not any(right_at(each, corner) for corner in corners)
-            ]
-        else:
-            corner: int
-            for corner in corners:
-                if any(
-                    right_at(each, corner) for each in self.drawing.dimensions
-                ):
-                    continue
-                first: int = (corner - 1) % count
-                rays: tuple[int, int] = middle_rays(
-                    self.drawing.points, first, corner
-                ) or (1, 1)
-                self.drawing.dimensions.append(
-                    Dimension("", ANGLE, first, corner, rays=rays)
-                )
-            self.drawing.follow_angles()  # The side under 180 degrees.
-        points: list[int] = list(self.chosen_points)
-        self.message = ""
-        self.make_squares()
-        self.chosen_points = points
-        self.letters_changed()
-        self.restyle()
-
-    # Method `OutlineView.mark_chain()`:
-    def mark_chain(self, corner: int, axis: int) -> set[int]:
-        """Return the corners (and `ORIGIN`) the marks tie to a corner
-        along one axis: the same X (axis 0) or Y (axis 1) (#243).
+    # Method `OutlineView.remark()`:
+    def remark(self, corner: int) -> None:
+        """Remake a dropped corner's marks from where it is drawn
+        (#451): its edges level or upright, it on an axis.
 
         Arguments:
         * `corner` (`int`): The corner.
-        * `axis` (`int`): 0 for X, 1 for Y.
-
-        Returns:
-        * (`set[int]`): The chain, the corner in it.
         """
-        ties: list[tuple[int, int]] = [
-            (dimension.start, dimension.end)
-            for dimension in self.drawing.dimensions
-            if is_mark(dimension)
-            and dimension.kind in AXIS
-            and AXIS[dimension.kind] == axis
-        ]
-        chain: set[int] = {corner}
-        grown: bool = True
-        while grown:
-            grown = False
-            start: int
-            end: int
-            for start, end in ties:
-                if (start in chain) != (end in chain):
-                    chain |= {start, end}
-                    grown = True
-        return chain
-
-    # Method `OutlineView.toggle_mark()`:
-    def toggle_mark(self, kind: str) -> None:
-        """[Horizontal] or [Vertical] (#233): mark the selected edges
-        level or upright, or put the selected corners on the X or Y
-        axis (#239), drawing them so at once; when all of them are
-        marked so already, take the marks off.  One change.
-
-        The buttons mean what is seen: on a drawing turned an odd
-        number of quarter turns (#300), the file's Y runs across the
-        screen, so the two swap (`T.tfo~6.5` #444).
-
-        Arguments:
-        * `kind` (`str`): `VERTICAL` for [Horizontal] (the same Y),
-          `HORIZONTAL` for [Vertical] (the same X), as on screen.
-        """
-        if self.drawing.turns % 2:
-            kind = HORIZONTAL if kind == VERTICAL else VERTICAL
-        count: int = len(self.drawing.points)
-        wanted: list[Dimension] = [
-            Dimension("", kind, edge, (edge + 1) % count)
-            for edge in self.chosen_edges
-            if edge not in AXES
-        ] + [
-            Dimension("", kind, ORIGIN, corner)
-            for corner in self.chosen_points
-            if corner != ORIGIN
-        ]
-        if not wanted:
-            self.message = "Select edges or corners to mark."
-            self.scene().update()
+        self.dragged = -1
+        if not 0 <= corner < len(self.drawing.points):
             return
-
-        # Function `same()`:
-        def same(mark: Dimension, other: Dimension) -> bool:
-            return (
-                is_mark(mark)
-                and mark.kind == other.kind
-                and {mark.start, mark.end} == {other.start, other.end}
-            )
-
-        self.history.remember(self.drawing.snapshot())
-        if all(
-            any(same(each, mark) for each in self.drawing.dimensions)
-            for mark in wanted
-        ):
-            self.drawing.dimensions[:] = [
-                each
-                for each in self.drawing.dimensions
-                if not any(same(each, mark) for mark in wanted)
-            ]
-        else:
-            axis: int = AXIS[kind]
-            mark: Dimension
-            for mark in wanted:
-                if any(same(each, mark) for each in self.drawing.dimensions):
-                    continue
-                self.drawing.dimensions.append(mark)
-                # Drawn so at once: the far corner takes the near
-                # one's Y (X), or the axis's.
-                level: float = (
-                    0.0
-                    if mark.start == ORIGIN
-                    else self.drawing.points[mark.start][axis]
-                )
-                moved: list[float] = list(self.drawing.points[mark.end])
-                moved[axis] = level
-                self.drawing.points[mark.end] = (moved[0], moved[1])
+        self.drawing.dimensions[:] = snapped(
+            self.drawing.points, self.drawing.dimensions, corner, 0.0
+        )[1]
         points: list[int] = list(self.chosen_points)
-        edges: list[int] = list(self.chosen_edges)
-        self.message = ""
         self.make_squares()
         self.chosen_points = points
-        self.chosen_edges = edges
         self.letters_changed()
         self.restyle()
 
@@ -3330,6 +3229,21 @@ class OutlineView(QGraphicsView):
         self.place_handles()
         event.accept()
 
+    # Method `OutlineView.toggle_marks()`:
+    def toggle_marks(self) -> None:
+        """[Show Marks] (#451): draw the marks, or hide them."""
+        self.marks_shown = not self.marks_shown
+        index: int
+        measure: DimensionItem
+        for index, measure in enumerate(self.measures):
+            measure.setVisible(
+                self.marks_shown or not is_mark(self.drawing.dimensions[index])
+            )
+        circle: DimensionHandle
+        for circle in self.circles:
+            circle.place()
+        self.viewport().update()
+
     # Method `OutlineView.toggle_grid()`:
     def toggle_grid(self) -> None:
         """Show the grid, or hide it."""
@@ -3631,9 +3545,10 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.covering()`:
     def covering(self) -> set[int]:
-        """Return the hide strips that cover a dimension's letter or a
-        mark's glyph (#182): the working view would leave it out.  The
-        user moves the strip; letters are never moved for it.
+        """Return the hide strips that cover a dimension's letter (#182):
+        the working view would leave it out.  The user moves the strip;
+        letters are never moved for it.  Marks are not in the diagram
+        (#451), so a strip may cover them.
 
         Returns:
         * (`set[int]`): The strips, by index.
@@ -3642,6 +3557,7 @@ class OutlineView(QGraphicsView):
             box
             for measure in self.measures
             if measure.index < len(self.drawing.dimensions)
+            and not is_mark(self.drawing.dimensions[measure.index])
             and (box := measure.letter_box()) is not None
         ]
         found: set[int] = set()
@@ -3973,7 +3889,7 @@ class OutlineEditor(QWidget):
             shortcut.activated.connect(action.trigger)
             self.keys[word] = shortcut
             self.button_actions[word] = action
-        for word in ("Grid", "Snap", "Revolve", "Overview"):
+        for word in ("Grid", "Snap", "Revolve", "Overview", "Show Marks"):
             self.button_actions[word].setCheckable(True)
         for word in ("Grid", "Snap"):
             self.button_actions[word].setChecked(True)
@@ -4002,10 +3918,7 @@ class OutlineEditor(QWidget):
             "Delete": self.delete,
             "Dimension": self.view.dimension_selected,
             "Dim. Kind": self.view.cycle_kind,
-            # Level (the same Y) and upright (the same X) marks (#233).
-            "Horizontal": partial(self.view.toggle_mark, VERTICAL),
-            "Vertical": partial(self.view.toggle_mark, HORIZONTAL),
-            "Right Angle": self.view.toggle_right,
+            "Show Marks": self.view.toggle_marks,
             "Revolve": self.toggle_revolve,
             "Rotate Diagram": self.view.rotate_diagram,
             "Font +": partial(self.view.step_font, 1),

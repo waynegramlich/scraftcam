@@ -905,7 +905,7 @@
       "additionalProperties": false
     },
     "end_mill": {
-      "description": "An end mill: square, ball or bull nose (a square end with rounded corners), and perhaps a rougher.",
+      "description": "An end mill: square, ball or bull nose (a square end with rounded corners), and perhaps a rougher, its sizes the letters of `end_mill.outline.toml`.",
       "type": "object",
       "properties": {
         "name": {
@@ -938,12 +938,12 @@
           "description": "What it is, in a few words.",
           "type": "string"
         },
-        "diameter": {
+        "D": {
           "description": "The cutting diameter.",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
         },
-        "length_of_cut": {
+        "LOC": {
           "description": "How deep it can cut (LOC).",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
@@ -988,12 +988,12 @@
             ]
           }
         },
-        "shank": {
+        "SD": {
           "description": "The shank diameter, if not `diameter`.",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
         },
-        "overall_length": {
+        "OAL": {
           "description": "Its whole length (OAL).",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
@@ -1070,11 +1070,11 @@
       },
       "required": [
         "unique_id",
-        "diameter",
-        "length_of_cut",
+        "D",
+        "LOC",
         "flutes",
         "end",
-        "overall_length",
+        "OAL",
         "material"
       ],
       "additionalProperties": false

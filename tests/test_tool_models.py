@@ -194,8 +194,8 @@ class TestCheckTool(unittest.TestCase):
                 {
                     "kind": "end_mill",
                     "material": "carbide",
-                    "diameter": "1/2",
-                    "overall_length": "3 in",
+                    "D": "1/2",
+                    "OAL": "3 in",
                     "flutes": 2,
                     "end": "square",
                 }

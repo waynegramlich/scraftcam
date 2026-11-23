@@ -27,6 +27,10 @@ from .values import letter_values, real_corners
 # is on a straight edge: dropped from the solid (#434).
 STRAIGHT: float = 1e-9
 
+# A corner closer than this (mm) to the one before it is in the same
+# place: dropped from the solid (`T.tfo~6.5` #450).
+SAME: float = 1e-9
+
 
 # Function `outline_unit()`:
 def outline_unit(outline: Outline) -> str:
@@ -128,11 +132,23 @@ def _polygon(outline: Outline, name: str) -> RoundedPolygon:
                 f"{label}: the fillet {dimension.letter!r} has no value"
             )
         radii[dimension.start] = values[dimension.letter]
+
+    # Drop a corner in the same place as the one before it (a step
+    # whose two sizes are equal, as an end mill's shank as big as its
+    # cutter, #450), then the corners on straight edges.
+    kept: list[int] = [
+        index
+        for index, here in enumerate(corners)
+        if index in radii or math.dist(here, corners[index - 1]) > SAME
+    ]
+    places: list[tuple[float, float]] = [corners[index] for index in kept]
     return RoundedPolygon(
         [
             Corner(x, y, radii.get(index, 0.0))
-            for index, (x, y) in enumerate(corners)
-            if index in radii or not _straight(corners, index)
+            for place, (index, (x, y)) in enumerate(
+                zip(kept, places, strict=True)
+            )
+            if index in radii or not _straight(places, place)
         ],
         name,
         outline_unit(outline),

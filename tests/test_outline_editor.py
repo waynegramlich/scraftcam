@@ -763,12 +763,14 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         from PySide6.QtWidgets import QToolButton  # pylint: disable=C0415
 
         tabs = self.editor.button_tabs
-        titles: list[str] = [tabs.tabText(index) for index in range(4)]
-        self.assertEqual(titles, ["Most Common", "Draw", "Marks", "View"])
+        titles: list[str] = [
+            tabs.tabText(index) for index in range(tabs.count())
+        ]
+        self.assertEqual(titles, ["Most Common", "Draw", "View"])
         self.assertEqual(tabs.currentIndex(), 0)
 
         # [Rotate Diagram] on [View] turns as the one on [Most Common].
-        view_page = tabs.widget(3)
+        view_page = tabs.widget(2)
         assert view_page is not None
         rotate: list[QToolButton] = [
             button
@@ -959,33 +961,140 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.undo()
         self.assertEqual(view.fillets(), {2: "R2"})
 
-    def test_drag_obeys_marks(self) -> None:
-        """A drag carries the corners a corner's marks chain it to, and
-        stops at an axis mark (#243)."""
+    def test_drag_marks(self) -> None:
+        """A corner dragged near its neighbors' X or Y snaps there,
+        and dropped, is marked; dragged off, its marks go, the others
+        stay; undo brings them back (#451)."""
         view = self.editor.view
         view.snap_on = False
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.5), (6.0, 4.0), (0, 4)]
+        view.drawing.dimensions.clear()
         view.make_squares()
-        view.select_edge(0)
-        view.toggle_mark(VERTICAL)  # Edge 0 level.
-        view.clear_selection()
-        view.select_edge(1)
-        view.toggle_mark(HORIZONTAL)  # Edge 1 upright.
-        self.assertEqual(view.mark_chain(1, 1), {0, 1})
-        self.assertEqual(view.mark_chain(1, 0), {1, 2})
+        view.fit()
+        view.squares[1].setPos(6.01, 0.01)
+        self.assertEqual(view.drawing.points[1], (6.0, 0.0))
+        view.remark(1)
+        marks: set[tuple[str, int, int]] = {
+            (each.kind, each.start, each.end)
+            for each in view.drawing.dimensions
+        }
+        self.assertEqual(
+            marks,
+            {(VERTICAL, ORIGIN, 1), (VERTICAL, 0, 1), (HORIZONTAL, 1, 2)},
+        )
+        view.squares[3].setPos(0.0, 4.0)
+        view.remark(3)
         view.squares[1].setPos(7.0, 1.0)
-        self.assertEqual(view.drawing.points[0], (0.0, 1.0))
         self.assertEqual(view.drawing.points[1], (7.0, 1.0))
-        self.assertEqual(view.drawing.points[2], (7.0, 4.0))
-        self.assertEqual(view.squares[0].pos().y(), 1.0)
+        view.remark(1)
+        self.assertNotIn(
+            1,
+            {each.end for each in view.drawing.dimensions}
+            | {each.start for each in view.drawing.dimensions},
+        )
+        self.assertTrue(view.drawing.dimensions)
 
-        # On the X axis, corner 0 holds the chain's Y at 0.
-        view.clear_selection()
-        view.select_point(0)
-        view.toggle_mark(VERTICAL)
-        view.squares[1].setPos(8.0, 3.0)
-        self.assertEqual(view.drawing.points[1], (8.0, 0.0))
-        self.assertEqual(view.drawing.points[0], (0.0, 0.0))
+    def test_end_mill_drags(self) -> None:
+        """On a copy of the example end mill, a corner nudged and
+        dropped keeps its marks, and the outline its sizes; dragged
+        off, the corner floats, and undo puts it back (#451)."""
+        import shutil  # pylint: disable=C0415
+        import tempfile  # pylint: disable=C0415
+        from pathlib import Path  # pylint: disable=C0415
+
+        from PySide6.QtWidgets import (  # pylint: disable=C0415
+            QGraphicsSceneMouseEvent,
+        )
+
+        from scraftcam.gui.dimensions import (  # pylint: disable=C0415
+            placement_problem,
+        )
+
+        source: Path = Path("examples/shop/tools/end_mill.outline.toml")
+        with tempfile.TemporaryDirectory() as folder:
+            path: Path = Path(folder) / source.name
+            shutil.copy(source, path)
+            editor: OutlineEditor = OutlineEditor(
+                outline_editor.drawing_from(path), path=path
+            )
+            view = editor.view
+            view.snap_on = False
+            view.fit()
+            drawing = view.drawing
+
+            # Corner 3, the shank's step, nudged: it snaps back.
+            was: tuple[float, float] = drawing.points[3]
+            view.squares[3].setPos(was[0] + 0.01, was[1] - 0.01)
+            view.remark(3)
+            self.assertEqual(drawing.points[3], was)
+            self.assertEqual(
+                placement_problem(
+                    drawing.points, drawing.dimensions, drawing.revolve
+                ),
+                "",
+            )
+
+            # Dragged well off, it floats; undo brings its marks back.
+            count: int = len(drawing.dimensions)
+            square = view.squares[3]
+            square.mousePressEvent(QGraphicsSceneMouseEvent())
+            square.setPos(was[0] + 3.0, was[1] + 3.0)
+            square.mouseReleaseEvent(QGraphicsSceneMouseEvent())
+            qt_app.process_events()
+            self.assertIn(
+                "3",
+                placement_problem(
+                    drawing.points, drawing.dimensions, drawing.revolve
+                ),
+            )
+            self.assertLess(len(drawing.dimensions), count)
+            view.undo()
+            self.assertEqual(len(drawing.dimensions), count)
+            self.assertEqual(drawing.points[3], was)
+            editor.close()
+
+    def test_drag_diameter(self) -> None:
+        """A diameter's circle dragged down moves its line down, and
+        sideways its letter along (#456)."""
+        from PySide6.QtCore import QPointF, Qt  # pylint: disable=C0415
+        from PySide6.QtTest import QTest  # pylint: disable=C0415
+
+        view = self.editor.view
+        view.snap_on = False
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 0.0), (2.0, 8.0), (0, 8)]
+        view.drawing.revolve = True
+        view.drawing.dimensions[:] = [
+            Dimension("D", DIAMETER, ORIGIN, 1, -2.0, 0.5)
+        ]
+        view.make_squares()
+        view.fit()
+        port = view.viewport()
+        start = view.mapFromScene(view.circles[0].pos())
+        target = view.mapFromScene(view.circles[0].pos() + QPointF(0.0, -1.0))
+        QTest.mousePress(port, Qt.MouseButton.LeftButton, pos=start)
+        QTest.mouseMove(port, target)
+        QTest.mouseRelease(port, Qt.MouseButton.LeftButton, pos=target)
+        dimension: Dimension = view.drawing.dimensions[0]
+        self.assertAlmostEqual(dimension.offset, -3.0, delta=0.2)
+        self.assertAlmostEqual(dimension.along, 0.5, delta=0.05)
+
+    def test_marks_hidden(self) -> None:
+        """Marks are drawn only under [Show Marks (M)], on [View]
+        (#451)."""
+        editor = self.editor
+        view = editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.dimensions[:] = [Dimension("", VERTICAL, 0, 1)]
+        view.make_squares()
+        self.assertEqual(editor.buttons["Show Marks"].text(), "Show Marks (M)")
+        self.assertFalse(view.measures[0].isVisible())
+        self.assertFalse(view.circles[0].isVisible())
+        editor.buttons["Show Marks"].click()
+        self.assertTrue(view.marks_shown)
+        self.assertTrue(view.measures[0].isVisible())
+        self.assertTrue(view.circles[0].isVisible())
+        editor.keys["Show Marks"].activated.emit()
+        self.assertFalse(view.measures[0].isVisible())
 
     def test_corners_keep_hides(self) -> None:
         """Inserting or deleting a corner renumbers the hide strips'
@@ -1024,56 +1133,11 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertTrue(view.drawing.revolve)
         self.assertIn("tip goes on the origin", self.editor.problems.text())
 
-    def test_marks_turned(self) -> None:
-        """On a drawing turned a quarter turn, [Horizontal] marks what
-        is level on screen: upright in the file (#444)."""
+    def test_right_angle(self) -> None:
+        """A right angle from an older file (a letterless angle) is
+        taken as 90 degrees by the solver (#236)."""
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
-        view.make_squares()
-        view.drawing.turns = 1
-        view.select_edge(1)  # Up the file, across the screen.
-        self.editor.buttons["Horizontal"].click()
-        mark: Dimension = view.drawing.dimensions[-1]
-        self.assertEqual((mark.letter, mark.kind), ("", HORIZONTAL))
-        self.assertEqual({mark.start, mark.end}, {1, 2})
-
-    def test_right_angle(self) -> None:
-        """[Right Angle (Shift+L)] makes the selected corners right
-        angles, a square glyph in each; again takes them off; one the
-        drawing breaks is red (#236, #241)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtGui import QColor
-
-        from scraftcam.gui import theme
-
-        editor = self.editor
-        view = editor.view
-        button = editor.buttons["Right Angle"]
-        self.assertEqual(button.text(), "Right Angle (Shift+L)")
-        button.click()
-        self.assertIn("Select corners", view.message)
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
-        view.make_squares()
-        view.select_point(1)
-        button.click()
-        right = view.drawing.dimensions[-1]
-        self.assertEqual((right.letter, right.kind), ("", ANGLE))
-        self.assertEqual({right.start, right.end}, {0, 1})
-        self.assertEqual(view.drawing.letters, [])
-        self.assertFalse(view.measures[0].shape().isEmpty())
-        self.assertFalse(view.circles[0].isVisible())
-        problem: str = QColor(theme.colors().problem).name()
-        self.assertNotEqual(view.measures[0].pen().color().name(), problem)
-        view.drawing.points[2] = (7.0, 4.0)
-        self.assertEqual(view.measures[0].pen().color().name(), problem)
-        view.drawing.points[2] = (6.0, 4.0)
-        self.assertFalse(view.grab().isNull())
-        button.click()
-        self.assertEqual(view.drawing.dimensions, [])
-
-        # The solver takes it as 90 degrees: the level bottom edge
-        # directs the right edge, which then gives corner 2's X.
         view.drawing.dimensions[:] = [
             Dimension("", VERTICAL, ORIGIN, 0),
             Dimension("", HORIZONTAL, ORIGIN, 0),
@@ -1081,11 +1145,12 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             Dimension("W", HORIZONTAL, 0, 1),
             Dimension("H", VERTICAL, ORIGIN, 2),
         ]
+        view.make_squares()
         view.follow()
         self.assertNotIn(2, view.solution.x)
-        view.clear_selection()
-        view.select_point(1)
-        button.click()
+        view.drawing.dimensions.append(Dimension("", ANGLE, 0, 1))
+        view.make_squares()
+        view.follow()
         self.assertIn("90 deg", str(view.solution.x[2]))
         self.assertEqual(view.solution.extra, [])
 
@@ -1202,6 +1267,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(len(drawing.dimensions), 1)
         self.assertEqual(drawing.dimensions[0].end, 4)
         editor = OutlineEditor(drawing)
+        editor.view.toggle_marks()
         self.assertTrue(editor.view.circles[0].isVisible())
         self.assertFalse(editor.view.measures[0].shape().isEmpty())
         self.assertFalse(editor.view.grab().isNull())
@@ -1214,6 +1280,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         from PySide6.QtTest import QTest  # pylint: disable=C0415
 
         view = self.editor.view
+        view.marks_shown = True
         view.drawing.dimensions[:] = [Dimension("", VERTICAL, 0, 1)]
         view.make_squares()
         view.fit()
@@ -1243,11 +1310,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.make_squares()
         self.assertFalse(view.circles[0].isVisible())
 
-    def test_toggle_marks(self) -> None:
-        """[Horizontal (-)] and [Vertical (|)] mark the selected edges
-        (drawn so at once) or put corners on an axis; again takes them
-        off; a glyph clicked selects its mark, [Delete] removes it; a
-        mark repeating another is red (#233, #239)."""
+    def test_mark_glyphs(self) -> None:
+        """Shown, a mark repeating another is red, and one a drag
+        breaks; a glyph clicked selects its mark, [Delete] removes it
+        (#233, #241)."""
         # (`PySide6` is on `sys.path` only once `tests` is imported.)
         # pylint: disable=import-outside-toplevel
         from PySide6.QtGui import QColor
@@ -1257,49 +1323,25 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         editor = self.editor
         view = editor.view
-        level = editor.buttons["Horizontal"]
-        upright = editor.buttons["Vertical"]
-        self.assertEqual(level.text(), "Horizontal (-)")
-        self.assertEqual(upright.text(), "Vertical (|)")
-        level.click()
-        self.assertIn("Select edges or corners", view.message)
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.5), (6.0, 4.0), (0, 4)]
+        view.marks_shown = True
+        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.dimensions[:] = [
+            Dimension("", VERTICAL, 0, 1),
+            Dimension("", HORIZONTAL, ORIGIN, 3),
+            Dimension("", HORIZONTAL, ORIGIN, 0),
+            Dimension("", VERTICAL, ORIGIN, 0),
+            Dimension("", VERTICAL, ORIGIN, 1),
+        ]
         view.make_squares()
-        view.select_edge(0)
-        level.click()
-        self.assertEqual(view.drawing.points[1], (6.0, 0.0))
-        mark = view.drawing.dimensions[-1]
-        self.assertEqual((mark.letter, mark.kind), ("", VERTICAL))
-        self.assertEqual(view.drawing.letters, [])
-        level.click()
-        self.assertEqual(view.drawing.dimensions, [])
-        view.undo()
-        self.assertEqual(len(view.drawing.dimensions), 1)
+        view.follow()
 
-        # Corners onto the axes.
-        view.clear_selection()
-        view.select_point(3)
-        upright.click()
-        self.assertEqual(view.drawing.dimensions[-1].start, ORIGIN)
-        self.assertEqual(view.drawing.dimensions[-1].kind, HORIZONTAL)
-        view.clear_selection()
-        view.select_point(0)
-        upright.click()
-        level.click()
-        self.assertEqual(len(view.drawing.dimensions), 4)
         # Corner 0 on the X axis and edge 0 level put corner 1 there
         # too; marking it on the X axis as well is one too many.
-        view.clear_selection()
-        view.select_point(1)
-        level.click()
+        problem: str = QColor(theme.colors().problem).name()
         self.assertEqual(view.solution.extra, [4])
-        self.assertEqual(
-            view.measures[4].pen().color().name(),
-            QColor(theme.colors().problem).name(),
-        )
+        self.assertEqual(view.measures[4].pen().color().name(), problem)
 
         # A drag nothing pins that breaks a mark turns it red (#241).
-        problem: str = QColor(theme.colors().problem).name()
         self.assertNotEqual(view.measures[0].pen().color().name(), problem)
         view.drawing.points[1] = (6.0, 0.25)
         self.assertEqual(view.measures[0].pen().color().name(), problem)
@@ -1473,9 +1515,13 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
         view.make_squares()
         view.fit()
-        view.select_edge(1)
-        view.toggle_mark(HORIZONTAL)  # The shank upright: glyph at Y 4.6.
+        # A mark under a strip is not covered (#451); a letter is.
+        view.drawing.dimensions[:] = [Dimension("", HORIZONTAL, 1, 2)]
+        view.make_squares()
         view.drawing.hides.append(Hide(HIDE_Y, 1, 2, 1.0, 1.0))
+        self.assertEqual(view.covering(), set())
+        view.drawing.dimensions.append(Dimension("L", LENGTH, 1, 2))
+        view.make_squares()
         self.assertEqual(view.covering(), {0})
         editor.show_message()
         self.assertIn("hide strip covers", editor.status.text())

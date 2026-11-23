@@ -266,7 +266,8 @@ def rows(item: dict[str, object], units: str) -> list[Row]:
             schema.key == "template" and item.get("kind") == "controller"
         ):
             continue
-        value: object = item.get(schema.key)
+        # A field with an outline letter is written by it (#435).
+        value: object = item.get(schema.short or schema.key)
         row: Row = Row(
             schema,
             (
@@ -292,7 +293,9 @@ def rest_text(item: dict[str, object]) -> str:
     * (`str`): Their TOML text, read only in the panel (`""` if none).
     """
     plain: set[str] = {
-        schema.key for schema in fields(item) if schema.form in PLAIN
+        schema.short or schema.key
+        for schema in fields(item)
+        if schema.form in PLAIN
     }
     rest: dict[str, object] = {
         key: value for key, value in item.items() if key not in plain
@@ -318,10 +321,11 @@ def with_value(item: dict[str, object], row: Row) -> dict[str, object] | None:
     if problem:
         return None
     changed: dict[str, object] = dict(item)
+    key: str = row.schema.short or row.schema.key
     if value is None:
-        changed.pop(row.schema.key, None)
+        changed.pop(key, None)
     else:
-        changed[row.schema.key] = value
+        changed[key] = value
     return changed
 
 

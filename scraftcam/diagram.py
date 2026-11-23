@@ -549,6 +549,8 @@ def edge_mark(
     if out[0] * (here[0] - inside[0]) + out[1] * (here[1] - inside[1]) < 0:
         out = (-out[0], -out[1])
     size: float = math.hypot(out[0], out[1])
+    if size == 0.0:
+        return []  # An edge of no length has no side to mark.
     middle: Point = _step(here, (out[0] / size, out[1] / size), height)
     return mark_box(middle, level=level, height=height)
 

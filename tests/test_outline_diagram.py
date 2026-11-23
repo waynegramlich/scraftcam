@@ -20,7 +20,7 @@ from scraftcam.gui.dimensions import (
     drawn_marks,
 )
 from scraftcam.gui.letters import Letter
-from scraftcam.gui.outline_diagram import outline_sheet
+from scraftcam.gui.outline_diagram import dimension_strokes, outline_sheet
 from scraftcam.gui.outline_file import (
     COUNTERBORED,
     PLAIN,
@@ -282,17 +282,27 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
         self.assertEqual(len(outline_sheet(outline, 0.1).strokes), 1)
 
     def test_marks(self) -> None:
-        """Edge marks, a corner on an axis, a right angle."""
-        level: list[Stroke] = drawn(
-            box(), Dimension("", VERTICAL, 0, 1, 0, 0.5)
+        """Marks are left out of the diagram (#451), but drawn for the
+        editor's [Show Marks]: edge marks, a corner on an axis, a
+        right angle."""
+        for mark in (
+            Dimension("", VERTICAL, 0, 1, 0, 0.5),
+            Dimension("", HORIZONTAL, ORIGIN, 3, 0, 0.5),
+            Dimension("", ANGLE, 0, 1, 0, 0.5),
+        ):
+            self.assertEqual(drawn(box(), mark), [])
+        level: list[Stroke] = dimension_strokes(
+            box(), Dimension("", VERTICAL, 0, 1, 0, 0.5), {}, 0.5
         )
         self.assertEqual(len(level), 2)
         self.assertLess(level[0].segments[0].start[1], 0.0)
-        corner: list[Stroke] = drawn(
-            box(), Dimension("", HORIZONTAL, ORIGIN, 3, 0, 0.5)
+        corner: list[Stroke] = dimension_strokes(
+            box(), Dimension("", HORIZONTAL, ORIGIN, 3, 0, 0.5), {}, 0.5
         )
         self.assertLess(corner[0].segments[0].start[0], 0.0)
-        right: list[Stroke] = drawn(box(), Dimension("", ANGLE, 0, 1, 0, 0.5))
+        right: list[Stroke] = dimension_strokes(
+            box(), Dimension("", ANGLE, 0, 1, 0, 0.5), {}, 0.5
+        )
         self.assertEqual(right[0].segments[0].start, (3.5, 0.0))
 
     def test_revolve(self) -> None:

@@ -80,9 +80,9 @@ class ShopTreeTest(unittest.TestCase):
             tools: Path = top / "tools"
             tools.mkdir()
             for name, text in (
-                ("a.toml", 'diameter = "1/2 in"\nend = "ball"\n'),
-                ("b.toml", 'diameter = "1/8 in"\nend = "ball"\n'),
-                ("c.toml", 'diameter = "1/4 in"\nend = "square"\n'),
+                ("a.toml", 'D = "1/2 in"\nend = "ball"\n'),
+                ("b.toml", 'D = "1/8 in"\nend = "ball"\n'),
+                ("c.toml", 'D = "1/4 in"\nend = "square"\n'),
             ):
                 (tools / name).write_text(
                     f'kind = "end_mill"\n{text}flutes = 2\nmaterial = "HSS"\n'
