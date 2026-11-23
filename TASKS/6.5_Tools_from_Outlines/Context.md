@@ -2,7 +2,7 @@
 
 Squeezed 2026-11-22 (fifth time, before a commit); the history is
 in `hg` and `git`.  Issue numbers are shared with `T.oe~6.2` and
-`T.sdl~6.8`; the next new one is #485.  Every discussion point takes
+`T.sdl~6.8`; the next new one is #506.  Every discussion point takes
 the next sticky number, never a fresh 1, 2, 3.
 
 ## Ready

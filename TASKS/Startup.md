@@ -14,6 +14,8 @@
 @6.7_Tool_Kinds_in_the_Shop/Details.md
 @6.8_Shop_Directory_Layout/Details.md
 @6.8_Shop_Directory_Layout/Context.md
+@7_MCP_Interface/Details.md
+@7_MCP_Interface/Context.md
 @2_Document_a_Shop/Summary.md
 @../ISSUES/2_Archive_Merged_GitHub_Repositories/Summary.md
 @../ISSUES/3_Main_Part_Goes_Translucent_in_show_demo/Summary.md
