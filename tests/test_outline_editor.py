@@ -25,7 +25,7 @@ from scraftcam.gui.hides import HIDE_Y, Hide
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_diagram import fillet_arcs, outline_strokes
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
-from scraftcam.gui.outline_file import outline_text
+from scraftcam.gui.outline_file import PLAIN, Hole, outline_text
 from scraftcam.gui.values import crossings
 from tests import qt_app
 
@@ -324,11 +324,16 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(box, letter)
         self.assertTrue(measure.shape().contains(box.center()))
 
-        # Its circle sits just off the letter, up and right (#315).
+        # Its middle circle sits on its line, clear of the letter
+        # (#469).
         circle = measure.handle_spot()
         self.assertFalse(letter.contains(circle))
-        self.assertGreater(circle.x(), letter.right())
-        self.assertGreater(circle.y(), letter.bottom())
+        _, _, start, end = measure.ends()
+        way = end - start
+        self.assertAlmostEqual(
+            (circle - start).x() * way.y() - (circle - start).y() * way.x(),
+            0.0,
+        )
         self.assertEqual(view.circles[-1].pos(), circle)
         before: float = letter.height() * view.zoom()
         view.scale(2.0, 2.0)
@@ -1451,8 +1456,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(lettered, ["W", "B"])
 
     def test_follows_values(self) -> None:
-        """The drawing follows the table's values, to a scale chosen
-        once; a bad value keeps the last good shape (#148, #154)."""
+        """The table's values set the scale, chosen once, but never
+        move a template's corners (#457); a bad value is named
+        (#148, #154)."""
         from PySide6.QtCore import QPointF  # pylint: disable=C0415
 
         editor = self.editor
@@ -1464,22 +1470,21 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.dimension_between(-1, 2, VERTICAL)
         editor.keep(outline_editor.LETTER_ROW, 2, "1 in")
         editor.keep(outline_editor.LETTER_ROW + 1, 2, "1/2 in")
-        self.assertAlmostEqual(view.drawing.points[2][0] / 2.0, 3.0)
-        self.assertAlmostEqual(view.drawing.points[2][1], 3.0)
+        drawn: list[tuple[float, float]] = list(view.drawing.points)
+        self.assertEqual(drawn[2], (6.0, 4.0))
         scale: float = view.drawing.scale
+        self.assertGreater(scale, 0.0)
         editor.keep(outline_editor.LETTER_ROW, 2, "2 in")
-        self.assertAlmostEqual(view.drawing.points[1][0], 12.0)
-        self.assertAlmostEqual(view.drawing.points[3][1], 3.0)
+        self.assertEqual(view.drawing.points, drawn)
         self.assertEqual(view.drawing.scale, scale)
-        self.assertEqual(view.squares[1].pos().x(), view.drawing.points[1][0])
         for bad in ("-2 in", "0 in", "2 i"):
             editor.keep(outline_editor.LETTER_ROW, 2, bad)
-            self.assertAlmostEqual(view.drawing.points[1][0], 12.0)
+            self.assertEqual(view.drawing.points, drawn)
         self.assertIn("A: '2 i' is not a value", editor.problems.text())
 
-        # A fixed coordinate does not move when dragged (#152 to come).
+        # Nothing holds a dimensioned corner when dragged (#457).
         view.squares[1].setPos(view.squares[1].pos() + QPointF(5.0, 0.0))
-        self.assertAlmostEqual(view.drawing.points[1][0], 12.0)
+        self.assertAlmostEqual(view.drawing.points[1][0], 11.0)
 
     def test_formula_letter(self) -> None:
         """A value typed as `= A / 2` makes a formula letter, worked
@@ -1495,10 +1500,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         editor.keep(outline_editor.LETTER_ROW + 1, 2, "= A / 2")
         height: Letter = view.drawing.letters[1]
         self.assertEqual((height.formula, height.default), ("A / 2", "0.5 in"))
-        self.assertAlmostEqual(view.drawing.points[2][1], 3.0)
         editor.keep(outline_editor.LETTER_ROW, 2, "2 in")
         self.assertEqual(height.default, "1 in")
-        self.assertAlmostEqual(view.drawing.points[2][1], 6.0)
+        self.assertAlmostEqual(view.drawing.points[2][1], 4.0)
         editor.fill_table()
         self.assertEqual(cell(editor, 1, 2).text(), "= A / 2")
         self.assertEqual(cell(editor, 1, 2).toolTip(), "= 1 in")
@@ -1645,8 +1649,8 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         )
 
     def test_drag_across_axes(self) -> None:
-        """A corner drags onto an axis and on across it; one fixed by
-        a dimension stays (#176)."""
+        """A corner drags onto an axis and on across it; a dimension
+        no longer holds it (#457)."""
         from PySide6.QtCore import QPointF  # pylint: disable=C0415
 
         view = self.editor.view
@@ -1660,8 +1664,8 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertAlmostEqual(view.drawing.points[0][1], 2.0)
         view.dimension_between(-1, 0, HORIZONTAL)
         square.setPos(QPointF(-4.0, 2.0))
+        self.assertAlmostEqual(view.drawing.points[0][0], -4.0)
         self.assertAlmostEqual(view.drawing.points[0][1], 2.0)
-        self.assertNotAlmostEqual(view.drawing.points[0][0], -4.0)
 
     def test_working_view(self) -> None:
         """Out of the overview, a strip's stretch is cut out: the piece
@@ -1737,6 +1741,40 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.redo()
         self.assertEqual(len(view.drawing.points), 3)
         self.assertEqual(buttons["Redo"].text(), "Redo (Ctrl+Shift+Z)")
+
+    def test_undo_keeps_holes(self) -> None:
+        """An undo snapshot holds the holes too (#447)."""
+        drawing: Drawing = self.editor.view.drawing
+        drawing.holes[:] = [Hole(PLAIN, (0.5, 0.5), "D")]
+        before: outline_editor.Snapshot = drawing.snapshot()
+        drawing.holes[0].at = (1.0, 0.25)
+        drawing.holes.append(Hole(PLAIN, (0.25, 0.25), "E"))
+        drawing.restore(before)
+        self.assertEqual(drawing.holes, [Hole(PLAIN, (0.5, 0.5), "D")])
+        self.assertIsNot(drawing.holes[0], before.holes[0])
+
+    def test_crossing_defaults(self) -> None:
+        """Defaults that would make edges cross are named under the
+        letters table; the corners stay as drawn (#457)."""
+        editor = self.editor
+        drawing: Drawing = editor.view.drawing
+        drawing.points[:] = [(0, 0), (4, 0), (4, 4), (0, 4), (1, 2)]
+        drawing.dimensions[:] = drawn_marks(drawing.points) + [
+            Dimension("W", HORIZONTAL, ORIGIN, 1),
+            Dimension("H", VERTICAL, ORIGIN, 2),
+            Dimension("N", HORIZONTAL, ORIGIN, 4),
+        ]
+        drawing.letters[:] = [
+            Letter("W", "", "4 in", ""),
+            Letter("H", "", "4 in", ""),
+            Letter("N", "", "1 in", ""),
+        ]
+        editor.show_problems()
+        self.assertNotIn("cross", editor.problems.text())
+        drawing.letters[2].default = "5 in"
+        editor.show_problems()
+        self.assertIn("make edges cross", editor.problems.text())
+        self.assertEqual(drawing.points[4], (1, 2))
 
     def test_drag_is_one_change(self) -> None:
         """A whole drag is one change; a click moving nothing is none."""
@@ -1906,7 +1944,8 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("same place", view.message)
 
     def test_drag_dimension(self) -> None:
-        """The circle moves letter and line; a line click selects."""
+        """The middle circle moves the line across, its letter keeping
+        its place along it (#469)."""
         # (`PySide6` is on `sys.path` only once `tests` is imported.)
         # pylint: disable=import-outside-toplevel
         from PySide6.QtCore import QPoint, QPointF, Qt
@@ -1930,14 +1969,230 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         steps: float = dimension.offset / view.step()
         self.assertAlmostEqual(steps, round(steps))
         self.assertLess(dimension.offset, -6.0)
-        self.assertGreater(dimension.along, 1.0)  # Past the arrowhead.
+        self.assertEqual(dimension.along, 0.5)
         self.assertFalse(view.grab().isNull())
         self.assertEqual(len(view.history.done), 2)
         view.undo()
         self.assertEqual(view.drawing.dimensions[0].offset, -5.0)
         self.assertEqual(view.drawing.dimensions[0].along, 0.5)
+
+    def test_mirror_circles(self) -> None:
+        """A revolved outline's mirrored half has circles that act on
+        the real half (#474-#477)."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtTest import QTest
+
+        view = self.editor.view
+        view.snap_on = False
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
+        view.drawing.revolve = True
+        view.make_squares()
+        view.fit()
+        view.place_handles()
+        mirrors = view.mirror_squares
+        self.assertEqual(len(mirrors), 4)
+
+        # Off the axis a mirror circle shows, on the axis it does not
+        # (#477); so for the edges.
+        self.assertEqual(mirrors[1].pos(), QPointF(-2.0, 1.0))
+        self.assertTrue(mirrors[1].isVisible())
+        self.assertFalse(mirrors[0].isVisible())
+        self.assertFalse(mirrors[3].isVisible())
+        self.assertTrue(view.mirror_handles[1].isVisible())
+        self.assertEqual(view.mirror_handles[1].pos(), QPointF(-2.0, 4.5))
+        self.assertFalse(view.mirror_handles[3].isVisible())
+
+        # Dragging a mirror circle moves its corner as the mirror image,
+        # the real circle with it (#474).
+        mirrors[1].setPos(QPointF(-3.0, 2.0))
+        self.assertEqual(view.drawing.points[1], (3.0, 2.0))
+        self.assertEqual(view.squares[1].pos(), QPointF(3.0, 2.0))
+        self.assertEqual(mirrors[1].pos(), QPointF(-3.0, 2.0))
+        view.squares[1].setPos(QPointF(2.5, 1.0))
+        self.assertEqual(mirrors[1].pos(), QPointF(-2.5, 1.0))
+
+        # A click on a mirror circle selects only the mirror image
+        # (#478); [Delete] would take its corner.
+        port = view.viewport()
+        left = Qt.MouseButton.LeftButton
+        QTest.mouseClick(port, left, pos=view.mapFromScene(mirrors[2].pos()))
+        self.assertEqual(view.chosen_points, [outline_editor.mirror_code(2)])
+        none = mirrors[2].brush().style().__class__.NoBrush
+        self.assertNotEqual(mirrors[2].brush().style(), none)
+        self.assertEqual(view.squares[2].brush().style(), none)
+
+        # A mirrored edge's circle pulls the corner out of the real
+        # edge, as the mirror image (#475).
+        view.place_handles()
+        start: QPoint = view.mapFromScene(view.mirror_handles[1].pos())
+        end: QPoint = view.mapFromScene(QPointF(-4.0, 4.0))
+        QTest.mousePress(port, left, pos=start)
+        QTest.mouseMove(port, start + QPoint(-5, 0))
+        QTest.mouseMove(port, end)
+        QTest.mouseRelease(port, left, pos=end)
+        self.assertEqual(len(view.drawing.points), 5)
+        x: float
+        y: float
+        x, y = view.drawing.points[2]
+        self.assertAlmostEqual(x, 4.0, delta=0.1)
+        self.assertAlmostEqual(y, 4.0, delta=0.1)
+        self.assertEqual(len(view.mirror_squares), 5)
+
+        # Not revolved, no mirror circles show.
+        view.drawing.revolve = False
+        view.place_handles()
+        self.assertFalse(
+            any(square.isVisible() for square in view.mirror_squares)
+        )
+
+    def test_mirror_dimensions(self) -> None:
+        """Dimensions with a mirrored corner are the kinds the solver
+        knows (#478): a corner and its mirror image its diameter; two
+        mirror images their corners' dimension; a mirror image and
+        another corner vertical only."""
+        view = self.editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
+        view.drawing.revolve = True
+        view.make_squares()
+        mirror = outline_editor.mirror_code
+        view.dimension_codes(mirror(1), 1)
+        made: Dimension = view.drawing.dimensions[-1]
+        self.assertEqual((made.kind, made.start, made.end), (DIAMETER, -1, 1))
+        view.dimension_codes(mirror(1), mirror(2))
+        made = view.drawing.dimensions[-1]
+        self.assertEqual((made.kind, made.start, made.end), (VERTICAL, 1, 2))
+        view.dimension_codes(mirror(2), 1)
+        made = view.drawing.dimensions[-1]
+        self.assertEqual((made.kind, made.start, made.end), (VERTICAL, 2, 1))
+        view.dimension_codes(mirror(2), -1)
+        made = view.drawing.dimensions[-1]
+        self.assertEqual((made.start, made.end), (2, -1))
+        count: int = len(view.drawing.dimensions)
+        view.drawing.points[3] = (1.0, 8.0)
+        view.dimension_codes(mirror(2), 3)
+        self.assertIn("not supported yet", view.message)
+        self.assertEqual(len(view.drawing.dimensions), count)
+
+    def test_diameter_ends(self) -> None:
+        """A diameter has a circle on each end, the mirrored side too;
+        either dropped on a corner or its mirror image moves the
+        diameter to that corner (#479)."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtTest import QTest
+
+        view = self.editor.view
+        view.snap_on = False
+        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (3.0, 8.0), (0, 8)]
+        view.drawing.revolve = True
+        view.drawing.dimensions[:] = [
+            Dimension("D", DIAMETER, ORIGIN, 1, -2.0, 0.5)
+        ]
+        view.make_squares()
+        view.fit()
+        port = view.viewport()
+        left = Qt.MouseButton.LeftButton
+        tip = view.tips[0]
+        self.assertTrue(tip.isVisible())
+        self.assertEqual(tip.pos(), QPointF(-2.0, -2.0))
+        start: QPoint = view.mapFromScene(tip.pos())
+        end: QPoint = view.mapFromScene(QPointF(-3.0, 8.0))
+        QTest.mousePress(port, left, pos=start)
+        QTest.mouseMove(port, start + QPoint(-5, -5))
+        QTest.mouseMove(port, end)
+        QTest.mouseRelease(port, left, pos=end)
+        qt_app.process_events()
+        made: Dimension = view.drawing.dimensions[0]
+        self.assertEqual((made.kind, made.start, made.end), (DIAMETER, -1, 2))
+
+        # A length's end dropped on a mirror image goes back.
+        view.drawing.dimensions[:] = [Dimension("L", LENGTH, 1, 3, 1.0)]
+        view.make_squares()
+        tip = view.tips[1]
+        was: QPointF = tip.pos()
+        start = view.mapFromScene(tip.pos())
+        end = view.mapFromScene(QPointF(-3.0, 8.0))
+        QTest.mousePress(port, left, pos=start)
+        QTest.mouseMove(port, start + QPoint(-5, 5))
+        QTest.mouseMove(port, end)
+        QTest.mouseRelease(port, left, pos=end)
+        qt_app.process_events()
+        self.assertEqual(view.drawing.dimensions[0].end, 3)
+        self.assertEqual(view.tips[1].pos(), was)
+
+    def test_drag_letter(self) -> None:
+        """A dimension's letter, dragged, slides along its line, past
+        the arrowhead too; the line stays (#471)."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtTest import QTest
+
+        view = self.editor.view
+        view.add_dimension(Dimension("W", HORIZONTAL, 0, 1, -5.0))
+        port = view.viewport()
+        left = Qt.MouseButton.LeftButton
+
+        # The letter, dragged, slides along the line (past the
+        # arrowhead too); the line stays.
+        letter: QPoint = view.mapFromScene(view.measures[0].at())
+        past: QPoint = view.mapFromScene(QPointF(7.0, -8.0))
+        QTest.mousePress(port, left, pos=letter)
+        QTest.mouseMove(port, letter + QPoint(5, 0))
+        QTest.mouseMove(port, past)
+        QTest.mouseRelease(port, left, pos=past)
+        dimension = view.drawing.dimensions[0]
+        self.assertGreater(dimension.along, 1.0)
+        self.assertEqual(dimension.offset, -5.0)
+        self.assertEqual(len(view.history.done), 2)
+        view.undo()
+        self.assertEqual(view.drawing.dimensions[0].along, 0.5)
+
+    def test_drag_end(self) -> None:
+        """A dimension's end circle dropped on a corner moves that end
+        there, as one change; dropped on nothing, it goes back (#470);
+        a click on the line selects."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPoint, QPointF, Qt
+        from PySide6.QtTest import QTest
+
+        view = self.editor.view
+        view.add_dimension(Dimension("W", HORIZONTAL, 0, 1, -5.0))
+        port = view.viewport()
+        left = Qt.MouseButton.LeftButton
+
+        # The start's circle dropped on corner 2 moves the start there;
+        # dropped on nothing, it goes back.
+        tip = view.tips[0]
+        self.assertTrue(tip.isVisible())
+        self.assertEqual(tip.pos(), view.measures[0].ends()[2])
+        corner: QPoint = view.mapFromScene(view.point(2))
+        held: QPoint = view.mapFromScene(tip.pos())
+        QTest.mousePress(port, left, pos=held)
+        QTest.mouseMove(port, held + QPoint(5, 5))
+        QTest.mouseMove(port, corner)
+        QTest.mouseRelease(port, left, pos=corner)
+        qt_app.process_events()
+        self.assertEqual(view.drawing.dimensions[0].start, 2)
+        self.assertEqual(view.chosen_dimensions, [0])
+        view.undo()
+        self.assertEqual(view.drawing.dimensions[0].start, 0)
+        tip = view.tips[0]
+        held = view.mapFromScene(tip.pos())
+        nowhere: QPoint = held + QPoint(0, 60)
+        QTest.mousePress(port, left, pos=held)
+        QTest.mouseMove(port, held + QPoint(0, 30))
+        QTest.mouseMove(port, nowhere)
+        QTest.mouseRelease(port, left, pos=nowhere)
+        qt_app.process_events()
+        self.assertEqual(view.drawing.dimensions[0].start, 0)
+        self.assertEqual(tip.pos(), view.measures[0].ends()[2])
         line: QPoint = view.mapFromScene(QPointF(-2.0, -5.0))
-        QTest.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=line)
+        QTest.mouseClick(port, left, pos=line)
         self.assertEqual(view.chosen_dimensions, [0])
         self.assertEqual(view.drawing.dimensions[0].offset, -5.0)
         self.assertTrue(view.measures[0].shape().contains(QPointF(1.0, -5.0)))

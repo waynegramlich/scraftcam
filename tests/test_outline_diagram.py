@@ -332,8 +332,56 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
             bigger[2].segments[0].end[0], plain[2].segments[0].end[0]
         )
 
-    def test_stale_corners(self) -> None:
-        """Corners saved before the values changed follow them (#299)."""
+    def test_vertical_on_mirrored_side(self) -> None:
+        """On a revolved outline a vertical dimension put on the
+        mirrored side measures from the points' mirror images, so its
+        lines stay on that side (#481); on the real side, as before."""
+        outline: Outline = box()
+        outline.revolve = True
+        sizes: Dimension = Dimension("H", VERTICAL, ORIGIN, 2, -3.0, 0.5)
+        strokes: list[Stroke] = dimension_strokes(outline, sizes, {}, 0.5)
+        xs: list[float] = [
+            x
+            for stroke in strokes
+            if stroke.role != TEXT
+            for segment in stroke.segments
+            for x in (segment.start[0], segment.end[0])
+        ]
+        self.assertTrue(xs)
+        self.assertLessEqual(max(xs), 1e-9)
+        sizes.offset = 6.0
+        strokes = dimension_strokes(outline, sizes, {}, 0.5)
+        self.assertGreaterEqual(
+            min(
+                x
+                for stroke in strokes
+                if stroke.role != TEXT
+                for segment in stroke.segments
+                for x in (segment.start[0], segment.end[0])
+            ),
+            -1e-9,
+        )
+
+    def test_clear_foot(self) -> None:
+        """An extension line's gap is left where the outline leaves its
+        line, past the edges (mirrored ones too) lying on it (#482)."""
+        outline: Outline = Outline(
+            points=[(0, 0), (1, 0), (1, 2), (3, 2), (3, 5), (0, 5)],
+            revolve=True,
+        )
+        clear = outline_diagram.clear_foot
+        self.assertEqual(clear(outline, (0.0, 0.0), (6.0, 0.0)), (1.0, 0.0))
+        self.assertEqual(clear(outline, (1.0, 2.0), (6.0, 2.0)), (3.0, 2.0))
+        self.assertEqual(clear(outline, (0.0, 0.0), (-6.0, 0.0)), (-1.0, 0.0))
+        self.assertEqual(clear(outline, (3.0, 5.0), (6.0, 5.0)), (3.0, 5.0))
+        # An edge reaching past the dimension line leaves the foot.
+        self.assertEqual(clear(outline, (0.0, 0.0), (0.5, 0.0)), (0.0, 0.0))
+        outline.revolve = False
+        self.assertEqual(clear(outline, (0.0, 0.0), (-6.0, 0.0)), (0.0, 0.0))
+
+    def test_drawn_as_drawn(self) -> None:
+        """A template is drawn as drawn: the values never move its
+        corners (#457, #299 undone)."""
         outline: Outline = Outline(
             points=list(BOX),
             letters=[Letter("W", default="1 in"), Letter("H", default="1 in")],
@@ -344,7 +392,8 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
             ],
         )
         corner: Point = outline_sheet(outline, 0.5).strokes[0].segments[1].end
-        self.assertAlmostEqual(corner[0], corner[1])
+        self.assertAlmostEqual(corner[0], BOX[2][0])
+        self.assertAlmostEqual(corner[1], BOX[2][1])
         self.assertEqual(outline.points, BOX)
 
     def test_titles(self) -> None:

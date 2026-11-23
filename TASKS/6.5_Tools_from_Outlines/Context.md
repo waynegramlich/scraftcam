@@ -1,88 +1,89 @@
 # LLM Agent Context Log
 
-Squeezed 2026-11-22 (third time, before a `/clear`); the history is
-in `hg` and `git`.  Issue numbers are shared with `T.oe~6.2`; the
-next new one is #463.  Every discussion point takes the next sticky
-number, never a fresh 1, 2, 3.
+Squeezed 2026-11-22 (fourth time, before a commit); the history is
+in `hg` and `git`.  Issue numbers are shared with `T.oe~6.2` and
+`T.sdl~6.8`; the next new one is #484.  Every discussion point takes
+the next sticky number, never a fresh 1, 2, 3.
 
 ## Ready
 
 * `gui/outline_polygon.py`: `outline_revolved(outline, name)` ->
   `solid.SolidRevolved` (half profile about Z, tip at the origin);
-  corners on a straight edge (`_straight()`, #434) or repeating a
-  neighbor (#450) are left out of the solid.  Holes refused until
-  `T.oe~6.2` #290.
-* `scraftcam/solid.py` (`T.rps~6.6`): `RoundedPolygon`,
-  `SolidRoundedPolygon`, `SolidRevolved`, `SolidStep`,
-  `SolidAssembly` of `Placed`; used by `tooling/kurt_vise.py`,
-  `vise_setup.py`, `parallel.py`.
-* Outline letters may be formulas (#430, `HPA = PA / 2`); `DIAMETER`
-  dimensions on revolved outlines (#437; its circle placed and
-  dragged across, #456); `placement_problem()` under the letters
-  table (#445, #448).
-* Kinds keyed by outline letters in the shop files
-  (`TableField.short`; values kept by the long key, so G-code etc.
-  are unchanged): drills `shops.DRILL_LETTERS` D, FL, OAL, PA (#435);
-  end mills `END_MILL_LETTERS` D, LOC, OAL, SD (#452).  The tree's
-  labels (`shops.long_keys()`) and the panel's fields
-  (`gui/fields.py`, `short or key`) read them (#454).  `Shops.md`,
-  the schemas and `Tool_Models.md` regenerated.
-* Outline files `examples/shop/tools/drill.outline.toml` and
-  `end_mill.outline.toml`; `tests/test_drill_outline.py` and
-  `test_end_mill_outline.py` match the old `cutter_models` to 6
-  places (both drills; the 3 square end mills, the rougher included).
-* Marks (#451): never drawn in the SVG; in the editor only under
-  [Show Marks (M)] on [View].  Still saved as letterless dimensions,
-  but made by dragging: a corner snaps (6 px) to its neighbors' X or
-  Y or onto an axis, never onto a neighbor (#455), and on release
-  its marks are remade (`dimensions.snapped()`, editor `remark()`).
-  While dragged, its own marks are left out of solving (`working()`,
-  `dragged`).  The [Horizontal], [Vertical], [Right Angle] buttons
-  are gone.
+  corners on a straight edge (#434) or repeating a neighbor (#450)
+  are left out.  Holes refused until `T.oe~6.2` #290.
+* `scraftcam/solid.py`: `RoundedPolygon`, `SolidRoundedPolygon`,
+  `SolidRevolved`, `SolidStep`, `SolidAssembly` of `Placed`; used by
+  `tooling/kurt_vise.py`, `vise_setup.py`, `parallel.py`.
+* Letters may be formulas (#430); `placement_problem()` under the
+  letters table (#445, #448).
+* Shop files keyed by outline letters (`TableField.short`; the long
+  keys stay inside): drills D, FL, OAL, PA (#435); end mills D, LOC,
+  OAL, SD (#452); tree labels and panel fields read them (#454).
+* `drill.outline.toml`, `end_mill.outline.toml`; their tests match
+  the old `cutter_models` to 6 places.
+* Marks (#451): not in the SVG; in the editor under [Show Marks (M)];
+  made by dragging (a corner snaps to its neighbors' X or Y or an
+  axis, its marks remade on release, left out of solving while
+  dragged).
+* #457 (with #447): an outline file is a template.  Values set only
+  `drawing.scale` (`apply_values()`); nothing holds a dragged corner;
+  the SVG is drawn as drawn; `values.values_cross()` feeds the
+  editor's `crossing_problem()`; undo keeps holes.  Solids still come
+  from the values.
+* Yellow circles on every vertex and segment (#469-#482):
+  * A dimension: a middle circle on its line moves the line (#469);
+    an end circle dropped on a corner moves that end
+    (`OutlineView.tips`, `corner_near()`, #470); the letter drags by
+    itself (#471).  None on extension lines (#472); a diameter is made
+    with [Dimension] then [Dim. Kind] (#473).
+  * A revolved outline's mirrored half: corner and edge circles
+    (`mirror_squares`, `mirror_handles`, `mirrored=True`) act on the
+    real half (#474-#477); `placing`, `moving` stop a twin's drag.
+  * A mirrored corner is selected alone as `mirror_code(i)`
+    (`real_point()` maps back); `dimension_codes()` stores only kinds
+    the solver knows: corner + mirror is a diameter (#478).  A
+    diameter's mirrored end has a circle; ends may drop on mirrors
+    where the value is the same (#480).
+  * A vertical dimension at `offset < 0` measures from the mirror
+    images (#481); `outline_diagram.clear_foot()` leaves an extension
+    line's gap where the outline leaves it (#482).
 
 ## Decided
 
-* #449: roughing stays a flag on `end_mill`, same outline.
-* #453: ball end mills become `ball_end_mill` (own file format and
-  outline, drawn by the user); after #460, so files move once.
-* #T7: the Z setter is flat (with small revolved parts), not
-  revolved: with the flat tools.
-* #457 (next to build): an outline file is a template, not one tool.
-  (1) The editor never moves corners from values; nothing holds a
-  corner.  (2) The template SVG is drawn as drawn (undo #299).  (3)
-  The solver still finds floating corners; solids still come from
-  values.  (4) Problems say when the defaults make edges cross.
-  #461: per-tool SVGs to scale, later (true proportions, a standard
-  width, values on the dimensions, `D = 1/4 in`).
-* Shop layout (not built): a directory per object.  `shop/Shop.md`
-  (generated, indexes everything); `shop/tools/KIND/` holds
-  `KIND.outline.toml`, its `.svg` and `README.md` (the kind's page,
-  listing its tools), and a sub-directory per tool (`tool.toml`,
-  `drawing.svg`, `README.md`, catalog files from `T.c~6.3`).
-  Relative links (`../README.md`) work on GitHub.  Changing kind
-  moves the directory (`git mv`); `.step` tools under a generic kind.
-  Open: #458 generated files committed (recommended), #459 pages
-  named `README.md`, #460 the layout as an item of its own (under
-  `T.g~6`, with #458, #459, #461, #433).
-* #433: shops found from a list of directories in
-  `~/.scraftcam/settings.toml` (no environment variables); the
-  example shop moves into the package (`scraftcam/shops/example_shop/`,
-  found from `Path(__file__)`), `show_demo.py` fixed as we go; no
-  fallback across shops (#437.1).
+* #449: roughing stays a flag on `end_mill`.  #453: ball end mills
+  become `ball_end_mill` (the user draws it), after `T.sdl~6.8`.
+  #T7: the Z setter is flat, with the flat tools.
+* #387: delete `solidcraft_link.py` and `model.py`'s `SolidModel`
+  (only tests and `jaw_plate.py`, `parallel.py` use them); `Length`,
+  `Angle`, `Placement`, `Rotation` stay; `JawPlate`, `Parallel`
+  become plain dataclasses.
+* `T.oe~6.2` #314: `Tool_Models.md` from the outline files after the
+  round tools.  #47: the user measures the drill vise after the
+  current tools are modeled.
 
 ## Where It Stands
 
-* The plan (from the user): Claude translates each old model into an
-  outline file and its test; the user tidies it in the editor (to
-  find GUI bugs); the user draws the ball end mill from scratch.
-* `end_mill.outline.toml` is as Claude wrote it (restored from `hg`
-  after the user's try).
-  The user's tidying waits for #457: today every corner is held by
-  the values, so none can be moved.
+* `#S1` (#457, #469-#482) is done; the user is tidying
+  `end_mill.outline.toml` in the editor.  Next: `#S2` #387, `#S3`
+  #463 (the chamfer mill as an outline file and its test), `#S4`
+  #426 (`T.g~6`: two end-to-end tests expect a separate Start
+  button).
+* The plan: Claude translates each old model into an outline file
+  and its test; the user tidies it in the editor (finding GUI bugs).
 * `shank_drill.outline.toml`: the user's drawing in progress (#438).
-  `drill.outline.toml` has `turns = 0` and no hides (#440).
-* The editor saves every change to its file: test on a copy;
-  checkpoint only the files changed (no `hg commit -A`).
+* The editor saves every change: test on a copy, outside
+  `examples/shop/tools/` (the shop reader reads any `.toml` there
+  not named `*.outline.toml`); checkpoint only named files.
+
+## Open
+
+* #483: end circles cover the arrowhead tips in the editor; draw the
+  arrowheads over them (recommended).  #479: a horizontal across the
+  axis (a mirror to another corner) needs the solver to add two X's.
+* #379 the grid plate's holes.
+* Round tools next: chamfer, corner rounding, double angle,
+  countersinks; flat tools after `T.oe~6.2` #290 (holes); then the
+  new tools in `Details.md`.
 
 ## The Old Models (to be replaced one at a time)
 
@@ -91,13 +92,3 @@ number, never a fresh 1, 2, 3.
   `tooling/jaw_plate.py`, `tooling/setters.py`.
 * SolidCraft: send `"(3 + 7/8) in"`, never `"3-7/8 in"`; always a
   unit; a covered window is ~10x slower.
-
-## Open
-
-* #447: undo snapshots leave out holes.  #387 whether `model.py`'s
-  `SolidModel` and `SolidCraftLink` stay; #379 the grid plate's holes;
-  `Tool_Models.md` from the outline files (`T.oe~6.2` #314).
-* Round tools next: chamfer, corner rounding, double angle,
-  countersinks; flat tools when `T.oe~6.2` #290 (holes) is done; new
-  tools from `Details.md` after.  The drill vise waits for the
-  user's measurements (#47).

@@ -585,16 +585,69 @@ def placed_corners(
             return list(points), scale
 
     # Each fixed coordinate to scale, unless the edges would cross.
-    placed: list[tuple[float, float]] = [
+    placed: list[tuple[float, float]] = _to_scale(points, real, scale)
+    if crosses(placed):
+        return list(points), scale
+    return placed, scale
+
+
+# Function `values_cross()`:
+def values_cross(
+    points: list[tuple[float, float]],
+    letters: list[Letter],
+    dimensions: list[Dimension],
+) -> list[tuple[int, int]]:
+    """Return the edges that cross when the letters' values place the
+    corners (#457): a template is drawn as drawn, so its defaults are
+    checked here instead of by moving its corners.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `letters` (`list[Letter]`): The letters.
+    * `dimensions` (`list[Dimension]`): The dimensions.
+
+    Returns:
+    * (`list[tuple[int, int]]`): Each pair of edges that cross (none
+      when the values cannot place the corners at all).
+    """
+    # Nothing to check without good values and fixed coordinates.
+    if not dimensions or letters_bad(letters, dimensions):
+        return []
+    real: tuple[dict[int, float], dict[int, float]] | None = real_coordinates(
+        points, letters, dimensions
+    )
+    if real is None:
+        return []
+    scale: float = first_scale(points, real)
+    if scale <= 0.0:
+        return []
+    return crossings(_to_scale(points, real, scale))
+
+
+# Function `_to_scale()`:
+def _to_scale(
+    points: list[tuple[float, float]],
+    real: tuple[dict[int, float], dict[int, float]],
+    scale: float,
+) -> list[tuple[float, float]]:
+    """Return the corners with each fixed coordinate at its value.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `real` (`tuple[dict[int, float], dict[int, float]]`):
+      The fixed X and Y of each corner, in mm.
+    * `scale` (`float`): Drawing steps per mm.
+
+    Returns:
+    * (`list[tuple[float, float]]`): The corners (a new list).
+    """
+    return [
         (
             real[0][corner] * scale if corner in real[0] else x,
             real[1][corner] * scale if corner in real[1] else y,
         )
         for corner, (x, y) in enumerate(points)
     ]
-    if crosses(placed):
-        return list(points), scale
-    return placed, scale
 
 
 # Function `crosses()`:

@@ -3,9 +3,9 @@
 `outline_sheet()` turns what an outline file holds (`Outline`) into a
 `diagram.Sheet`: the outline, its dimensions with their letters and
 its marks, the same shapes the editor shows (#S2).  The sheet is in
-drawing steps, its corners placed by the letters' values as the
-editor places them (#148, #299), so each dimension's `offset` and
-`along` apply as they are (#292).
+drawing steps, its corners as drawn (an outline file is a template,
+#457), so each dimension's `offset` and `along` apply as they are
+(#292).
 """
 
 import itertools
@@ -56,7 +56,6 @@ from .outline_file import COUNTERBORED, Hole, Outline
 from .values import (
     first_scale,
     letter_values,
-    placed_corners,
     real_coordinates,
 )
 
@@ -103,17 +102,9 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
     Returns:
     * (`Sheet`): The diagram, its paper the drawing plus a margin.
     """
-    # The corners where the values put them, as the editor places
-    # them, so a file saved before its values changed draws right
-    # (#299).
-    outline = replace(
-        outline,
-        points=placed_corners(
-            outline.points, outline.letters, outline.dimensions
-        )[0],
-    )
-
-    # The outline itself, and a revolved outline's mirror half.
+    # The outline itself, drawn as drawn: an outline file is a template
+    # (#457), so the values never move its corners (#299 undone),
+    # and a revolved outline's mirror half.
     fillets: dict[int, Fillet] = fillet_arcs(outline)
     strokes: list[Stroke] = outline_strokes(outline, fillets)
     if text_height <= 0.0:
@@ -345,6 +336,10 @@ def letter_title(letter: Letter) -> str:
     elif letter.default:
         head += f" = {letter.default}"
     return f"{head}.  {letter.help}" if letter.help else head
+
+
+# A point this close to a line (drawing steps) is on it (#482).
+_ON_LINE: float = 1e-6
 
 
 # Function `dimension_strokes()`:
@@ -758,16 +753,102 @@ def _dimension(
     if dimension.kind in (HORIZONTAL, DIAMETER):
         ends = ((first[0], dimension.offset), (second[0], dimension.offset))
     elif dimension.kind == VERTICAL:
+        if outline.revolve and dimension.offset < 0.0:
+            # On the mirrored side, from the points' mirror images: Y is
+            # the same, and the lines stay on its side (#481).
+            first = (-first[0], first[1])
+            second = (-second[0], second[1])
         ends = ((dimension.offset, first[1]), (dimension.offset, second[1]))
     else:
         return []
     return dimension_line(
-        (first, second),
+        (
+            clear_foot(outline, first, ends[0]),
+            clear_foot(outline, second, ends[1]),
+        ),
         ends,
         letter=dimension.letter,
         height=height,
         along=dimension.along,
     )
+
+
+# Function `clear_foot()`:
+def clear_foot(outline: Outline, foot: Point, end: Point) -> Point:
+    """Return where an extension line starts from (#482): its foot,
+    slid out toward the dimension line along every outline edge (and
+    on a revolved outline every mirrored edge) lying on the extension
+    line, so its gap is left where the outline leaves it, not hidden
+    in an edge.
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `foot` (`Point`): The measured point.
+    * `end` (`Point`): Its end of the dimension line.
+
+    Returns:
+    * (`Point`): The point the extension line's gap is left from.
+    """
+    # The extension line's direction; nothing to slide along when
+    # the foot is on the dimension line.
+    reach: float = math.dist(foot, end)
+    if reach <= _ON_LINE:
+        return foot
+    way: Point = ((end[0] - foot[0]) / reach, (end[1] - foot[1]) / reach)
+
+    # The edges lying on it, as distances along it from the foot.
+    spans: list[tuple[float, float]] = _spans_on(outline, foot, way)
+
+    # Slide out while an edge carries on from where the foot is.
+    out: float = 0.0
+    moved: bool = True
+    while moved:
+        moved = False
+        low: float
+        high: float
+        for low, high in spans:
+            if low <= out + _ON_LINE < high < reach:
+                out = high
+                moved = True
+    return (foot[0] + way[0] * out, foot[1] + way[1] * out)
+
+
+# Function `_spans_on()`:
+def _spans_on(
+    outline: Outline, foot: Point, way: Point
+) -> list[tuple[float, float]]:
+    """Return the outline's edges (on a revolved outline its mirrored
+    ones too) lying on a line, as their ends' distances along it.
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `foot` (`Point`): A point of the line, where distances start.
+    * `way` (`Point`): The line's direction, a unit vector.
+
+    Returns:
+    * (`list[tuple[float, float]]`): Each such edge's nearer and
+      farther distance.
+    """
+    points: list[Point] = list(outline.points)
+    sides: list[list[Point]] = [points]
+    if outline.revolve:
+        sides.append([(-x, y) for x, y in points])
+    spans: list[tuple[float, float]] = []
+    side: list[Point]
+    for side in sides:
+        index: int
+        start: Point
+        for index, start in enumerate(side):
+            near: list[float] = []
+            point: Point
+            for point in (start, side[(index + 1) % len(side)]):
+                off: Point = (point[0] - foot[0], point[1] - foot[1])
+                if abs(off[0] * way[1] - off[1] * way[0]) > _ON_LINE:
+                    break
+                near.append(off[0] * way[0] + off[1] * way[1])
+            if len(near) == 2:
+                spans.append((min(near), max(near)))
+    return spans
 
 
 # Function `_angle()`:

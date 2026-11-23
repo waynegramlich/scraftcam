@@ -169,6 +169,7 @@ from .values import (  # noqa: E402
     formula_problem,
     placed_corners,
     refresh_formulas,
+    values_cross,
 )
 from .window import make_application  # noqa: E402
 
@@ -296,6 +297,47 @@ TEXT_PEN_PIXELS: float = 1.5
 # An edge handle's size, smaller than a corner's circle (#235), and
 # the least length on screen of an edge that shows one (pixels).
 HANDLE_PIXELS: float = 7.0
+
+# A selected mirrored corner (#478) is `MIRRORED - index` in
+# `OutlineView.chosen_points`, below `ORIGIN` and the axes.
+MIRRORED: int = -10
+
+
+# Function `mirror_code()`:
+def mirror_code(corner: int) -> int:
+    """Return the selection code of a corner's mirror image (#478).
+
+    Arguments:
+    * `corner` (`int`): The corner's index.
+
+    Returns:
+    * (`int`): Its code in `OutlineView.chosen_points`.
+    """
+    return MIRRORED - corner
+
+
+# Function `real_point()`:
+def real_point(code: int) -> int:
+    """Return the point a selection code stands for: a mirrored
+    corner's own corner, else the code itself (#478).
+
+    Arguments:
+    * `code` (`int`): A code in `OutlineView.chosen_points`.
+
+    Returns:
+    * (`int`): `ORIGIN` or a corner's index.
+    """
+    return MIRRORED - code if code <= MIRRORED else code
+
+
+# The parts of a dimension's line its circles sit on (#469, #470).
+LINE_MIDDLE: str = "middle"
+LINE_START: str = "start"
+LINE_END: str = "end"
+
+# A dimension's end dropped this close to a corner (pixels) moves
+# there (#470).
+DROP_PIXELS: float = 12.0
 GRIP_PIXELS: float = 11.0
 
 # The working view (#170, #172): the gap at a cut, and a long break
@@ -381,10 +423,11 @@ class Snapshot:  # pylint: disable=too-many-instance-attributes
     * `hides` (`tuple[Hide, ...]`): Copies of the hide strips.
     * `turns` (`int`): Quarter turns clockwise it is shown (#300).
     * `text_height` (`float`): The diagram's letter height (#273).
+    * `holes` (`tuple[Hole, ...]`): Copies of the holes (#447).
 
     Constructor:
     * `Snapshot(points, dimensions, letters, revolve, note_radius,
-      hides, turns, text_height)`
+      hides, turns, text_height, holes)`
     """
 
     # Constructor arguments:
@@ -396,6 +439,7 @@ class Snapshot:  # pylint: disable=too-many-instance-attributes
     hides: tuple[Hide, ...] = field(init=True, default=())
     turns: int = field(init=True, default=0)
     text_height: float = field(init=True, default=0.0)
+    holes: tuple[Hole, ...] = field(init=True, default=())
 
 
 # Class `Drawing`:
@@ -446,6 +490,7 @@ class Drawing(Outline):
             tuple(replace(hide) for hide in self.hides),
             self.turns,
             self.text_height,
+            tuple(replace(hole) for hole in self.holes),
         )
 
     # Method `Drawing.restore()`:
@@ -465,6 +510,7 @@ class Drawing(Outline):
         self.hides[:] = [replace(hide) for hide in snapshot.hides]
         self.turns = snapshot.turns
         self.text_height = snapshot.text_height
+        self.holes[:] = [replace(hole) for hole in snapshot.holes]
 
     # Method `Drawing.follow_angles()`:
     def follow_angles(self) -> None:
@@ -621,32 +667,44 @@ class CornerCircle(QGraphicsEllipseItem):
 
     Dragged, it moves its corner, snapped to the grid when [Snap] is
     on and Shift is not held; a click selects it, or while a fillet
-    letter is armed fillets its corner (#214).
+    letter is armed fillets its corner (#214).  A revolved outline's
+    mirrored half has circles too (#474): one moves its corner as the
+    mirror image of the drag, and acts on that corner (#476).
 
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
     * `index` (`int`): Its corner's index in the drawing.
+    * `mirrored` (`bool`): Whether it sits on the corner's mirror
+      image across the Y axis.
     * `before` (`Snapshot | None`):
       The drawing when a drag began (`None` between drags).
     """
 
     # Method `CornerCircle.__init__()`:
-    def __init__(self, editor: "OutlineView", index: int) -> None:
+    def __init__(
+        self, editor: "OutlineView", index: int, mirrored: bool = False
+    ) -> None:
         """Make the square of one corner.
 
         Arguments:
         * `editor` (`OutlineView`): The view it is drawn in.
         * `index` (`int`): Its corner's index in the drawing.
+        * `mirrored` (`bool`): Whether it sits on the corner's mirror
+          image (#474).
         """
         half: float = SQUARE_PIXELS / 2.0
         super().__init__(-half, -half, SQUARE_PIXELS, SQUARE_PIXELS)
         self.editor: OutlineView = editor
         self.index: int = index
+        self.mirrored: bool = mirrored
         self.before: Snapshot | None = None
 
         # Placed before it sends its moves, so placing it never snaps
         # its corner.
-        self.setPos(*editor.drawing.points[index])
+        x: float
+        y: float
+        x, y = editor.drawing.points[index]
+        self.setPos(-x if mirrored else x, y)
         flags: type[QGraphicsItem.GraphicsItemFlag] = (
             QGraphicsItem.GraphicsItemFlag
         )
@@ -655,6 +713,16 @@ class CornerCircle(QGraphicsEllipseItem):
         self.setFlag(flags.ItemSendsGeometryChanges)
         self.setZValue(2.0)
         self.setAcceptHoverEvents(True)
+
+    # Method `CornerCircle.code()`:
+    def code(self) -> int:
+        """Return what selecting it puts in the selection: its corner,
+        or a mirrored one's `mirror_code()` (#478).
+
+        Returns:
+        * (`int`): The code.
+        """
+        return mirror_code(self.index) if self.mirrored else self.index
 
     # Method `CornerCircle.hoverEnterEvent()`:
     def hoverEnterEvent(self, event: QGraphicsSceneHoverEvent) -> None:
@@ -670,8 +738,9 @@ class CornerCircle(QGraphicsEllipseItem):
 
     # Method `CornerCircle.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-        """Select its corner, then start a drag."""
-        self.editor.select_point(self.index)
+        """Select its corner (a mirrored one only its mirror image,
+        #478), then start a drag."""
+        self.editor.select_point(self.code())
         self.before = self.editor.drawing.snapshot()
         self.editor.dragged = self.index
         super().mousePressEvent(event)
@@ -710,32 +779,54 @@ class CornerCircle(QGraphicsEllipseItem):
     def itemChange(
         self, change: QGraphicsItem.GraphicsItemChange, value: object
     ) -> object:
-        """Snap a move, and move the corner with it; a coordinate the
-        dimensions fix does not move (#148)."""
+        """Snap a move, and move the corner with it (#451); a mirrored
+        circle moves it as the mirror image (#474)."""
         if (
             change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
             and isinstance(value, QPointF)
-            and self.editor.placing
-        ):
-            return value
-        if (
-            change == QGraphicsItem.GraphicsItemChange.ItemPositionChange
-            and isinstance(value, QPointF)
+            and not self.editor.placing
         ):
             free: bool = not self.editor.snap_on or bool(
                 QApplication.keyboardModifiers()
                 & Qt.KeyboardModifier.ShiftModifier
             )
             moved: QPointF = value if free else snap(value, self.editor.step())
+            if self.mirrored:
+                moved.setX(-moved.x())
             if self.editor.drawing.revolve and moved.x() < 0.0:
                 moved.setX(0.0)  # A revolved outline keeps to X >= 0.
-            # Only dimensions pin a coordinate (#176); it snaps level,
-            # upright or onto an axis (#451).
+            # Nothing pins it (#457); it snaps level, upright or onto
+            # an axis (#451).
             self.editor.drag_corner(self.index, moved)
             self.editor.outline.refresh()
+            self.editor.moving = self
             self.editor.follow()
+            self.editor.moving = None
+            if self.mirrored:
+                moved.setX(-moved.x())
             return moved
         return super().itemChange(change, value)
+
+    # Method `CornerCircle.place()`:
+    def place(self) -> None:
+        """Sit on its corner (or its mirror image), without moving the
+        corner; a mirrored one shows only on a revolved outline, and
+        not where it would cover its corner's own circle (#477)."""
+        if self.editor.moving is self:
+            return  # Qt puts it where its own move goes.
+        x: float
+        y: float
+        x, y = self.editor.drawing.points[self.index]
+        if self.mirrored:
+            self.setVisible(
+                self.editor.drawing.revolve
+                and 2.0 * abs(x) * self.editor.zoom() >= SQUARE_PIXELS
+            )
+            x = -x
+        if self.pos() != QPointF(x, y):
+            self.editor.placing = True
+            self.setPos(x, y)
+            self.editor.placing = False
 
 
 # Class `OutlineItem`:
@@ -1131,28 +1222,37 @@ class EdgeHandle(QGraphicsEllipseItem):
 
     Dragged, it pulls out a new corner there, snapped as corners are,
     the whole drag one change; a click that does not move selects
-    the edge (for [Dimension], #231, #234).
+    the edge (for [Dimension], #231, #234).  A revolved outline's
+    mirrored edges have them too (#475): the corner is pulled out of
+    the real edge as the mirror image of the drag.
 
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
     * `index` (`int`): The corner its edge leaves.
+    * `mirrored` (`bool`): Whether it sits on the edge's mirror image
+      across the Y axis.
     * `before` (`Snapshot | None`): The drawing when a drag began.
     * `added` (`int`): The new corner's index during a drag (`-1`
       before the pointer moves).
     """
 
     # Method `EdgeHandle.__init__()`:
-    def __init__(self, editor: "OutlineView", index: int) -> None:
+    def __init__(
+        self, editor: "OutlineView", index: int, mirrored: bool = False
+    ) -> None:
         """Make the handle of one edge.
 
         Arguments:
         * `editor` (`OutlineView`): The view it is drawn in.
         * `index` (`int`): The corner its edge leaves.
+        * `mirrored` (`bool`): Whether it sits on the edge's mirror
+          image (#475).
         """
         half: float = HANDLE_PIXELS / 2.0
         super().__init__(-half, -half, HANDLE_PIXELS, HANDLE_PIXELS)
         self.editor: OutlineView = editor
         self.index: int = index
+        self.mirrored: bool = mirrored
         self.before: Snapshot | None = None
         self.added: int = -1
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
@@ -1160,7 +1260,9 @@ class EdgeHandle(QGraphicsEllipseItem):
 
     # Method `EdgeHandle.place()`:
     def place(self) -> None:
-        """Sit in the middle of its edge; hidden if the edge is short."""
+        """Sit in the middle of its edge (or its mirror image); hidden
+        if the edge is short, and a mirrored one unless the outline is
+        revolved and the edge is off the axis (#477)."""
         points: list[tuple[float, float]] = self.editor.drawing.points
         x0: float
         y0: float
@@ -1168,11 +1270,19 @@ class EdgeHandle(QGraphicsEllipseItem):
         y1: float
         x0, y0 = points[self.index]
         x1, y1 = points[(self.index + 1) % len(points)]
-        self.setPos((x0 + x1) / 2.0, (y0 + y1) / 2.0)
+        middle: float = (x0 + x1) / 2.0
+        self.setPos(-middle if self.mirrored else middle, (y0 + y1) / 2.0)
         length: float = (
             (x1 - x0) ** 2 + (y1 - y0) ** 2
         ) ** 0.5 * self.editor.zoom()
-        self.setVisible(length >= HANDLE_EDGE_PIXELS)
+        shown: bool = length >= HANDLE_EDGE_PIXELS
+        if self.mirrored:
+            shown = (
+                shown
+                and self.editor.drawing.revolve
+                and 2.0 * abs(middle) * self.editor.zoom() >= SQUARE_PIXELS
+            )
+        self.setVisible(shown)
 
     # Method `EdgeHandle.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
@@ -1190,6 +1300,8 @@ class EdgeHandle(QGraphicsEllipseItem):
         )
         if not free:
             where = snap(where, self.editor.step())
+        if self.mirrored:
+            where.setX(-where.x())  # The real half's corner (#475).
         if self.editor.drawing.revolve and where.x() < 0.0:
             where.setX(0.0)  # A revolved outline keeps to X >= 0.
         if self.added < 0:
@@ -1198,7 +1310,7 @@ class EdgeHandle(QGraphicsEllipseItem):
         # It snaps as a dragged corner does (#451).
         self.editor.dragged = self.added
         self.editor.drag_corner(self.added, where)
-        self.setPos(where)
+        self.setPos(-where.x() if self.mirrored else where.x(), where.y())
         self.editor.outline.refresh()
         measure: DimensionItem
         for measure in self.editor.measures:
@@ -1394,48 +1506,68 @@ class StripHandle(QGraphicsEllipseItem):
 
 
 # Class `DimensionHandle`:
-class DimensionHandle(QGraphicsEllipseItem):
-    """A dimension's small hollow circle, beside its letter (#63).
+# A circle keeps its own drag state beside which part of which
+# dimension it moves, so it has more attributes than most.
+class DimensionHandle(  # pylint: disable=too-many-instance-attributes
+    QGraphicsEllipseItem
+):
+    """One of a dimension's small hollow circles, which sit on its
+    line as corners' and edges' circles sit on the outline (#63,
+    #469, #470): one in the middle (clear of its letter), and one on
+    each end.
 
-    Dragged along the line it moves the letter (past the arrowheads
-    too); across the line it moves the line; a `—` or `|` mark's moves
-    its box anywhere (#317); snapped as corners are, the whole drag
-    one change.
+    Dragged, the middle one moves the line across (an angle's arc in
+    and out); an end dropped on a corner, or the origin, moves that
+    end of the dimension there; a `—` or `|` mark's one circle moves
+    its box anywhere (#317).  Snapped as corners are, the whole drag
+    one change.  The letter moves by dragging the letter itself
+    (`DimensionItem`, #471).
 
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
     * `index` (`int`): Its dimension's index in the drawing.
+    * `part` (`str`): Where on the line it sits: `LINE_MIDDLE`,
+      `LINE_START` or `LINE_END`.
     * `before` (`Snapshot | None`): The drawing when a drag began.
-    * `grab` (`QPointF`): Where it sits from its letter's point (the
-      line's `at()`) when a drag began, so the letter does not jump.
+    * `grab` (`QPointF`): Where the pointer was from the circle's
+      middle when a drag began, so the circle does not jump.
     * `pressed` (`QPointF`): Where a mark's drag began (scene).
     * `was` (`tuple[float, float]`): The mark's `moved` then.
+    * `target` (`int`): The corner (or `ORIGIN`) an end was dropped
+      on, until the drop is applied.
     """
 
     # Method `DimensionHandle.__init__()`:
-    def __init__(self, editor: "OutlineView", index: int) -> None:
-        """Make the circle of one dimension.
+    def __init__(
+        self, editor: "OutlineView", index: int, part: str = LINE_MIDDLE
+    ) -> None:
+        """Make one circle of one dimension.
 
         Arguments:
         * `editor` (`OutlineView`): The view it is drawn in.
         * `index` (`int`): Its dimension's index in the drawing.
+        * `part` (`str`): Where on the line it sits (`LINE_MIDDLE`,
+          `LINE_START` or `LINE_END`).
         """
         half: float = HANDLE_PIXELS / 2.0
         super().__init__(-half, -half, HANDLE_PIXELS, HANDLE_PIXELS)
         self.editor: OutlineView = editor
         self.index: int = index
+        self.part: str = part
         self.before: Snapshot | None = None
         self.grab: QPointF = QPointF()
         self.pressed: QPointF = QPointF()
         self.was: tuple[float, float] = (0.0, 0.0)
+        self.target: int = ORIGIN
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
         self.setZValue(1.5)
 
     # Method `DimensionHandle.place()`:
     def place(self) -> None:
-        """Sit just off its letter's (or a `—` or `|` mark's box's)
-        upper right corner (#315, #317; hidden for a fillet and a right
-        angle, for now)."""
+        """Sit on its part of the line (the middle one clear of the
+        letter, a `—` or `|` mark's off its box, #315, #317); hidden
+        for a fillet and a right angle, for now.  An angle has no end
+        circles (#470)."""
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
         lined: bool = (
             dimension.kind != ANGLE
@@ -1444,23 +1576,36 @@ class DimensionHandle(QGraphicsEllipseItem):
         )
         # Marks show only under [Show Marks] (#451).
         lined = lined and (not is_mark(dimension) or self.editor.marks_shown)
+        if self.part != LINE_MIDDLE:
+            lined = (
+                lined
+                and not is_mark(dimension)
+                and dimension.kind in (HORIZONTAL, VERTICAL, LENGTH, DIAMETER)
+            )
         self.setVisible(lined)
-        if lined:
-            self.setPos(self.editor.measures[self.index].handle_spot())
+        if not lined:
+            return
+        measure: DimensionItem = self.editor.measures[self.index]
+        if self.part == LINE_MIDDLE:
+            self.setPos(measure.handle_spot())
+            return
+        ends: tuple[QPointF, QPointF, QPointF, QPointF] = measure.ends()
+        self.setPos(ends[2] if self.part == LINE_START else ends[3])
 
     # Method `DimensionHandle.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
         """Select the dimension; get ready to move it."""
         self.editor.select_dimension(self.index)
         self.before = self.editor.drawing.snapshot()
-        self.grab = self.pos() - self.editor.measures[self.index].at()
+        self.grab = event.scenePos() - self.pos()
         self.pressed = event.scenePos()
         self.was = self.editor.drawing.dimensions[self.index].moved
         event.accept()
 
     # Method `DimensionHandle.mouseMoveEvent()`:
     def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-        """Move the letter along the line, and the line across."""
+        """Move the line across (an angle's arc in and out), or an end
+        circle with the pointer."""
         dimension: Dimension = self.editor.drawing.dimensions[self.index]
         where: QPointF = event.scenePos() - self.grab
         free: bool = not self.editor.snap_on or bool(
@@ -1468,12 +1613,16 @@ class DimensionHandle(QGraphicsEllipseItem):
         )
         if not free:
             where = snap(where, self.editor.step())
+
+        # An end goes where it is dragged, until it is dropped.
+        if self.part != LINE_MIDDLE:
+            self.setPos(where)
+            return
+
+        # A mark's box goes where it is dragged (#317).
         measure: DimensionItem = self.editor.measures[self.index]
-        start: QPointF
-        end: QPointF
         measure.prepareGeometryChange()
         if is_mark(dimension):
-            # A mark's box goes where it is dragged (#317).
             shift: QPointF = event.scenePos() - self.pressed
             if not free:
                 shift = snap(shift, self.editor.step())
@@ -1484,36 +1633,24 @@ class DimensionHandle(QGraphicsEllipseItem):
             measure.update()
             self.place()
             return
+
+        # Otherwise only the line moves, across; its letter keeps its
+        # share of the line (#471).  A diameter runs across, as a
+        # horizontal one (`T.tfo~6.5` #456).
         if dimension.kind == ANGLE:
-            self.drag_angle(dimension, where)
-            measure.update()
-            self.place()
-            return
-        _, _, start, end = measure.ends()
-        # A diameter runs across, as a horizontal one (`T.tfo~6.5`
-        # #456: it was moved as a vertical one).
-        if dimension.kind in (HORIZONTAL, DIAMETER):
+            placed: tuple[float, float] | None = angle_place(
+                self.editor.drawing.points, dimension, where
+            )
+            if placed is not None:
+                dimension.offset = placed[0]
+        elif dimension.kind in (HORIZONTAL, DIAMETER):
             dimension.offset = where.y()
-            span: float = end.x() - start.x()
-            if span != 0.0:
-                dimension.along = (where.x() - start.x()) / span
         elif dimension.kind == LENGTH:
-            # Along the slant moves the letter; across it, the line.
             first: QPointF = self.editor.point(dimension.start)
             way: QPointF = self.editor.point(dimension.end) - first
-            square: float = QPointF.dotProduct(way, way)
-            if square != 0.0:
-                dimension.along = (
-                    QPointF.dotProduct(where - first, way) / square
-                )
-                dimension.offset = QPointF.dotProduct(
-                    where - first, left_of(way)
-                )
+            dimension.offset = QPointF.dotProduct(where - first, left_of(way))
         else:
             dimension.offset = where.x()
-            span = end.y() - start.y()
-            if span != 0.0:
-                dimension.along = (where.y() - start.y()) / span
         measure.update()
         self.place()
 
@@ -1526,35 +1663,101 @@ class DimensionHandle(QGraphicsEllipseItem):
         * `dimension` (`Dimension`): The angle.
         * `where` (`QPointF`): The pointer, in the scene.
         """
-        arc: tuple[QPointF, float, float] | None = angle_arc(
-            self.editor.drawing.points, dimension
+        placed: tuple[float, float] | None = angle_place(
+            self.editor.drawing.points, dimension, where
         )
-        if arc is None:
-            return
-        center: QPointF
-        start: float
-        turn: float
-        center, start, turn = arc
-        out: QPointF = where - center
-        radius: float = math.hypot(out.x(), out.y())
-        if radius == 0.0 or turn == 0.0:
-            return
-        dimension.offset = radius
-        past: float = math.degrees(math.atan2(out.y(), out.x())) - start
-        past = (past - turn / 2.0 + 180.0) % 360.0 - 180.0 + turn / 2.0
-        # The letter may go past either ray (#321; it was held between
-        # the arrowheads, #76); `past` already keeps it off the far
-        # side of the circle.
-        dimension.along = past / turn
+        if placed is not None:
+            dimension.offset, dimension.along = placed
 
     # Method `DimensionHandle.mouseReleaseEvent()`:
     def mouseReleaseEvent(self, _event: QGraphicsSceneMouseEvent) -> None:
-        """End a drag: remember it, if it moved the dimension."""
+        """End a drag: remember it, if it moved the dimension.  An end
+        dropped on another corner moves there (#470), after this event,
+        as that remakes the circles; dropped elsewhere it goes back.  A
+        mirrored corner (#479) takes a diameter (either end moves it to
+        that corner), a vertical dimension, or one from the origin:
+        those measure the same from its own corner."""
+        if self.part != LINE_MIDDLE:
+            dimension: Dimension = self.editor.drawing.dimensions[self.index]
+            code: int | None = self.editor.corner_near(self.pos())
+            target: int = ORIGIN if code is None else real_point(code)
+            fixed: tuple[int, int] = (dimension.start, dimension.end)
+            same: bool = (
+                (code is not None and code > MIRRORED)
+                or dimension.kind in (DIAMETER, VERTICAL)
+                or ORIGIN in fixed
+            )
+            if (
+                code is None
+                or not same
+                or target in fixed
+                or (dimension.kind == DIAMETER and target == ORIGIN)
+            ):
+                self.before = None
+                self.place()
+                return
+            self.target = target
+            QTimer.singleShot(0, self.reattach)
+            return
         if self.before is not None and self.before.dimensions != tuple(
             self.editor.drawing.dimensions
         ):
             self.editor.history.remember(self.before)
         self.before = None
+
+    # Method `DimensionHandle.reattach()`:
+    def reattach(self) -> None:
+        """Move the dropped end of the dimension to `target` (#470),
+        as one change, and draw everything again."""
+        editor: OutlineView = self.editor
+        if self.before is None or self.index >= len(editor.drawing.dimensions):
+            return
+        editor.history.remember(self.before)
+        self.before = None
+        dimension: Dimension = editor.drawing.dimensions[self.index]
+        if self.part == LINE_START and dimension.kind != DIAMETER:
+            dimension.start = self.target
+        else:
+            dimension.end = self.target
+        editor.make_squares()
+        editor.select_dimension(self.index)
+        editor.letters_changed()
+        editor.follow()
+
+
+# Function `angle_place()`:
+def angle_place(
+    points: list[tuple[float, float]], dimension: Dimension, where: QPointF
+) -> tuple[float, float] | None:
+    """Return an angle's arc radius and its letter's share of the arc
+    for the pointer at `where`.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `dimension` (`Dimension`): The angle.
+    * `where` (`QPointF`): The pointer, in the scene.
+
+    Returns:
+    * (`tuple[float, float] | None`): The radius and the share, or
+      `None` when no arc can be drawn there.
+    """
+    arc: tuple[QPointF, float, float] | None = angle_arc(points, dimension)
+    if arc is None:
+        return None
+    center: QPointF
+    start: float
+    turn: float
+    center, start, turn = arc
+    out: QPointF = where - center
+    radius: float = math.hypot(out.x(), out.y())
+    if radius == 0.0 or turn == 0.0:
+        return None
+    past: float = math.degrees(math.atan2(out.y(), out.x())) - start
+    past = (past - turn / 2.0 + 180.0) % 360.0 - 180.0 + turn / 2.0
+    # The letter may go past either ray (#321; it was held between
+    # the arrowheads, #76); `past` already keeps it off the far side
+    # of the circle.
+    return radius, past / turn
 
 
 # Class `DimensionItem`:
@@ -1565,8 +1768,13 @@ class DimensionItem(QGraphicsItem):
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
     * `index` (`int`): Its dimension's index in the drawing.
+    * `before` (`Snapshot | None`): The drawing when a drag of its
+      letter began (`None` when its letter is not being dragged).
+    * `grab` (`QPointF`): Where the pointer was from the letter's
+      point (`at()`) when that drag began.
 
-    A click on its line selects it; its `DimensionHandle` moves it.
+    A click on it selects it; dragging its letter moves the letter
+    along its line (#471); its `DimensionHandle`s move the rest.
     """
 
     # Method `DimensionItem.__init__()`:
@@ -1580,6 +1788,8 @@ class DimensionItem(QGraphicsItem):
         super().__init__()
         self.editor: OutlineView = editor
         self.index: int = index
+        self.before: Snapshot | None = None
+        self.grab: QPointF = QPointF()
         self.setZValue(0.5)
 
     # Method `DimensionItem.ends()`:
@@ -1603,6 +1813,11 @@ class DimensionItem(QGraphicsItem):
                 QPointF(first.x(), dimension.offset),
                 QPointF(second.x(), dimension.offset),
             )
+        if self.editor.drawing.revolve and dimension.offset < 0.0:
+            # On the mirrored side, from the points' mirror images, as
+            # `outline_diagram` draws it (#481).
+            first = QPointF(-first.x(), first.y())
+            second = QPointF(-second.x(), second.y())
         return (
             first,
             second,
@@ -1640,9 +1855,76 @@ class DimensionItem(QGraphicsItem):
 
     # Method `DimensionItem.mousePressEvent()`:
     def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:
-        """Select the dimension (its circle moves it, #64)."""
+        """Select the dimension; a press on its letter starts moving
+        the letter (#471; its circles move the rest, #64)."""
         self.editor.select_dimension(self.index)
+        self.before = None
+        box: QRectF | None = self.letter_box()
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        if (
+            box is not None
+            and not is_mark(dimension)
+            and box.contains(event.scenePos())
+        ):
+            self.before = self.editor.drawing.snapshot()
+            self.grab = event.scenePos() - self.at()
         event.accept()
+
+    # Method `DimensionItem.mouseMoveEvent()`:
+    def mouseMoveEvent(self, event: QGraphicsSceneMouseEvent) -> None:
+        """Move a grabbed letter along its line (an angle's arc)."""
+        if self.before is None:
+            return
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        where: QPointF = event.scenePos() - self.grab
+        self.prepareGeometryChange()
+        if dimension.kind == ANGLE:
+            placed: tuple[float, float] | None = angle_place(
+                self.editor.drawing.points, dimension, where
+            )
+            if placed is not None:
+                dimension.along = placed[1]
+        else:
+            start: QPointF
+            end: QPointF
+            _, _, start, end = self.ends()
+            way: QPointF = end - start
+            square: float = QPointF.dotProduct(way, way)
+            if square != 0.0:
+                dimension.along = (
+                    QPointF.dotProduct(where - start, way) / square
+                )
+        self.update()
+        if self.index < len(self.editor.circles):
+            self.editor.circles[self.index].place()
+
+    # Method `DimensionItem.mouseReleaseEvent()`:
+    def mouseReleaseEvent(self, _event: QGraphicsSceneMouseEvent) -> None:
+        """End a letter's drag: remember it, if it moved the letter."""
+        if self.before is not None and self.before.dimensions != tuple(
+            self.editor.drawing.dimensions
+        ):
+            self.editor.history.remember(self.before)
+        self.before = None
+
+    # Method `DimensionItem.line_point()`:
+    def line_point(self, share: float) -> QPointF:
+        """Return a point of its line (an angle's arc).
+
+        Arguments:
+        * `share` (`float`): How far along, 0 at its start, 1 at its
+          end.
+
+        Returns:
+        * (`QPointF`): The point.
+        """
+        dimension: Dimension = self.editor.drawing.dimensions[self.index]
+        if dimension.kind == ANGLE:
+            return self.arc_point(share)
+        start: QPointF
+        end: QPointF
+        _, _, start, end = self.ends()
+        return start + (end - start) * share
 
     # Method `DimensionItem.at()`:
     def at(self) -> QPointF:
@@ -1715,17 +1997,28 @@ class DimensionItem(QGraphicsItem):
 
     # Method `DimensionItem.handle_spot()`:
     def handle_spot(self) -> QPointF:
-        """Return where its circle sits (#315): just off its letter's
-        upper right corner (Y is up), clear of the letter.
+        """Return where its middle circle sits (#469): on its line (an
+        angle's arc), in the middle unless its letter is there, else
+        the first of a few spots along it clear of the letter.  A `—`
+        or `|` mark's sits just off its box's upper right corner (Y is
+        up, #315).
 
         Returns:
         * (`QPointF`): The circle's middle, in drawing steps.
         """
         found: QRectF | None = self.letter_box()
         letter: QRectF = QRectF() if found is None else found
+        off: float = HANDLE_PIXELS / max(self.editor.zoom(), 1e-12)
+        if not is_mark(self.editor.drawing.dimensions[self.index]):
+            clear: QRectF = letter.adjusted(-off, -off, off, off)
+            share: float
+            for share in (0.5, 0.25, 0.75, 0.125, 0.875):
+                spot: QPointF = self.line_point(share)
+                if letter.isNull() or not clear.contains(spot):
+                    return spot
+            return self.line_point(0.5)
         if letter.isNull():
             return self.at()
-        off: float = HANDLE_PIXELS / max(self.editor.zoom(), 1e-12)
 
         # The screen's upper right, in drawing steps: (1, 1) turned a
         # quarter turn counterclockwise per turn of the view (#300).
@@ -1874,8 +2167,6 @@ class OutlineView(QGraphicsView):
       ("" makes it sharp), armed in [Fillets] (#214); `None`: none.
     * `released` (`Callable[[], None]`):
       Called after a mouse button comes up (the window saves).
-    * `placing` (`bool`): Whether the squares are being put where the
-      values say (their moves are not drags).
     * `overview` (`bool`): Whether the whole drawing is shown, its
       hide strips shaded (#168), not cut out.
     * `hiding` (`bool`): Whether [Hide] waits for a drag (#164).
@@ -1900,12 +2191,21 @@ class OutlineView(QGraphicsView):
     * `squares` (`list[CornerCircle]`): The corners' squares.
     * `measures` (`list[DimensionItem]`): The dimensions' items.
     * `handles` (`list[EdgeHandle]`): The edges' handles.
-    * `circles` (`list[DimensionHandle]`): The dimensions' circles.
+    * `mirror_squares` (`list[CornerCircle]`): The corners' circles on
+      a revolved outline's mirrored half (#474).
+    * `mirror_handles` (`list[EdgeHandle]`): The mirrored edges'
+      handles (#475).
+    * `placing` (`bool`): Whether a circle is being put on its corner
+      (its move is not a drag).
+    * `moving` (`CornerCircle | None`): The circle whose own drag is
+      being followed, which Qt places itself.
+    * `circles` (`list[DimensionHandle]`): The dimensions' middle
+      circles, one per dimension, in order.
+    * `tips` (`list[DimensionHandle]`): The dimensions' end circles
+      (#470).
     * `grips` (`list[StripHandle]`): The hide strips' circles.
     * `solution` (`Solution`): The corners' formulas, and what is
       amiss.
-    * `pinned` (`Solution`): The coordinates the dimensions alone fix,
-      which a drag does not move (#176).
     """
 
     # Method `OutlineView.__init__()`:
@@ -1932,7 +2232,6 @@ class OutlineView(QGraphicsView):
         self.wanted: bool = False
         self.letters_changed: Callable[[], None] = self.update
         self.released: Callable[[], None] = self.update
-        self.placing: bool = False
         self.overview: bool = False
         self.hiding: bool = False
         self.hide_from: QPointF | None = None
@@ -1977,12 +2276,15 @@ class OutlineView(QGraphicsView):
         scene.addItem(self.band)
         self.squares: list[CornerCircle] = []
         self.handles: list[EdgeHandle] = []
+        self.mirror_squares: list[CornerCircle] = []
+        self.mirror_handles: list[EdgeHandle] = []
+        self.placing: bool = False
+        self.moving: CornerCircle | None = None
         self.circles: list[DimensionHandle] = []
+        self.tips: list[DimensionHandle] = []
         self.grips: list[StripHandle] = []
         self.measures: list[DimensionItem] = []
         self.solution: Solution = solve(drawing.points, drawing.dimensions)
-        # Only dimensions and marks pin a dragged corner (#176, #233).
-        self.pinned: Solution = self.solution
         self.make_squares()
         self.resize(800, 600)
         self.fit()
@@ -1997,22 +2299,24 @@ class OutlineView(QGraphicsView):
         self.chosen_dimensions = []
         self.chosen_edges = []
         square: CornerCircle
-        for square in self.squares:
+        for square in self.squares + self.mirror_squares:
             self.scene().removeItem(square)
-        self.squares = []
-        index: int
-        for index in range(len(self.drawing.points)):
-            square = CornerCircle(self, index)
-            self.scene().addItem(square)
-            self.squares.append(square)
-        handle: EdgeHandle
-        for handle in self.handles:
-            self.scene().removeItem(handle)
-        self.handles = [
-            EdgeHandle(self, index)
-            for index in range(len(self.drawing.points))
+        corners: range = range(len(self.drawing.points))
+        self.squares = [CornerCircle(self, index) for index in corners]
+        self.mirror_squares = [
+            CornerCircle(self, index, mirrored=True) for index in corners
         ]
-        for handle in self.handles:
+        for square in self.squares + self.mirror_squares:
+            self.scene().addItem(square)
+            square.place()
+        handle: EdgeHandle
+        for handle in self.handles + self.mirror_handles:
+            self.scene().removeItem(handle)
+        self.handles = [EdgeHandle(self, index) for index in corners]
+        self.mirror_handles = [
+            EdgeHandle(self, index, mirrored=True) for index in corners
+        ]
+        for handle in self.handles + self.mirror_handles:
             self.scene().addItem(handle)
         measure: DimensionItem
         for measure in self.measures:
@@ -2028,13 +2332,18 @@ class OutlineView(QGraphicsView):
                 or not is_mark(self.drawing.dimensions[measure.index])
             )
         circle: DimensionHandle
-        for circle in self.circles:
+        for circle in self.circles + self.tips:
             self.scene().removeItem(circle)
         self.circles = [
             DimensionHandle(self, index)
             for index in range(len(self.drawing.dimensions))
         ]
-        for circle in self.circles:
+        self.tips = [
+            DimensionHandle(self, index, part)
+            for index in range(len(self.drawing.dimensions))
+            for part in (LINE_START, LINE_END)
+        ]
+        for circle in self.circles + self.tips:
             self.scene().addItem(circle)
         grip: StripHandle
         for grip in self.grips:
@@ -2062,6 +2371,40 @@ class OutlineView(QGraphicsView):
         if which == ORIGIN:
             return QPointF(0.0, 0.0)
         return QPointF(*self.drawing.points[which])
+
+    # Method `OutlineView.corner_near()`:
+    def corner_near(self, where: QPointF) -> int | None:
+        """Return the corner (or `ORIGIN`, or on a revolved outline a
+        corner's mirror image, as its `mirror_code()`) nearest `where`,
+        within `DROP_PIXELS` on screen: where a dimension's end circle
+        dropped there lands (#470, #479).
+
+        Arguments:
+        * `where` (`QPointF`): The drop, in the scene.
+
+        Returns:
+        * (`int | None`): The point's code, or `None` when none is
+          that close.
+        """
+        reach: float = DROP_PIXELS / max(self.zoom(), 1e-12)
+        best: int | None = None
+        corners: list[int] = list(range(len(self.drawing.points)))
+        mirrors: list[int] = (
+            [mirror_code(corner) for corner in corners]
+            if self.drawing.revolve
+            else []
+        )
+        which: int
+        for which in [ORIGIN, *corners, *mirrors]:
+            spot: QPointF = self.point(real_point(which))
+            if which <= MIRRORED:
+                spot.setX(-spot.x())
+            gap: QPointF = spot - where
+            far: float = math.hypot(gap.x(), gap.y())
+            if far <= reach:
+                reach = far
+                best = which
+        return best
 
     # Method `OutlineView.select_point()`:
     def select_point(self, which: int) -> None:
@@ -2317,12 +2660,12 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.follow()`:
     def follow(self) -> None:
-        """Draw the dimensioned corners from the values, solve again,
-        then draw the dimensions and squares to match."""
+        """Take the scale from the values, solve again, then draw the
+        dimensions and squares to match.  The corners stay as drawn:
+        an outline file is a template (#457)."""
         self.apply_values()
         self.outline.refresh()
         self.solution = solve(self.drawing.points, self.working())
-        self.pinned = self.solution
         measure: DimensionItem
         for measure in self.measures:
             measure.prepareGeometryChange()
@@ -2349,33 +2692,28 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.apply_values()`:
     def apply_values(self) -> None:
-        """Put each coordinate the dimensions fix where the letters'
-        values put it, to scale (`values.placed_corners()`, #148)."""
-        placed: list[tuple[float, float]]
-        placed, self.drawing.scale = placed_corners(
+        """Take the drawing's scale (drawing steps per mm) from the
+        letters' values (`values.placed_corners()`, #148), leaving the
+        corners where they are drawn (#457)."""
+        self.drawing.scale = placed_corners(
             self.drawing.points,
             self.drawing.letters,
             self.working(),
             self.drawing.scale,
-        )
-        if placed == self.drawing.points:
-            return
-        self.drawing.points[:] = placed
-        self.placing = True
-        square: CornerCircle
-        for square in self.squares:
-            square.setPos(*placed[square.index])
-        self.placing = False
-        self.outline.refresh()
+        )[1]
 
     # Method `OutlineView.place_handles()`:
     def place_handles(self) -> None:
-        """Put each edge's handle in its middle (shown if long enough)."""
+        """Put each edge's handle in its middle (shown if long enough),
+        and each corner's circles on it and its mirror image (#474)."""
         handle: EdgeHandle
-        for handle in self.handles:
+        for handle in self.handles + self.mirror_handles:
             handle.place()
+        square: CornerCircle
+        for square in self.squares + self.mirror_squares:
+            square.place()
         circle: DimensionHandle
-        for circle in self.circles:
+        for circle in self.circles + self.tips:
             circle.place()
         grip: StripHandle
         for grip in self.grips:
@@ -2425,7 +2763,11 @@ class OutlineView(QGraphicsView):
         uses it.  An outline keeps at least `LEAST_CORNERS` corners.
         """
         corners: list[int] = sorted(
-            (point for point in self.chosen_points if point != ORIGIN),
+            {
+                real_point(point)
+                for point in self.chosen_points
+                if point != ORIGIN
+            },
             reverse=True,
         )
         if not corners and not self.chosen_dimensions:
@@ -2484,7 +2826,7 @@ class OutlineView(QGraphicsView):
             )
             return
         if not edges and len(points) == 1 and points[0] != ORIGIN:
-            corner: int = points[0]
+            corner: int = real_point(points[0])
             self.chosen_edges = [
                 (corner - 1) % len(self.drawing.points),
                 corner,
@@ -2503,7 +2845,9 @@ class OutlineView(QGraphicsView):
         """
         axes: list[int] = [edge for edge in self.chosen_edges if edge in AXES]
         corners: list[int] = [
-            point for point in self.chosen_points if point != ORIGIN
+            real_point(point)
+            for point in self.chosen_points
+            if point != ORIGIN
         ]
         if axes and corners and len(self.chosen_points) < 2:
             self.wanted = False
@@ -2526,11 +2870,42 @@ class OutlineView(QGraphicsView):
         first: int
         second: int
         first, second = self.chosen_points[-2:]
-        if self.point(first) == self.point(second):
+        self.dimension_codes(first, second)
+
+    # Method `OutlineView.dimension_codes()`:
+    def dimension_codes(self, first: int, second: int) -> None:
+        """Dimension two selected points, either of which may be a
+        mirrored corner (#478), as the kinds the solver knows: a
+        corner and its own mirror image give its diameter; two mirror
+        images, or one and the origin, what their corners give; one
+        and another corner only vertically (across the axis, its
+        horizontal is not supported yet).
+
+        Arguments:
+        * `first` (`int`): The first point's code.
+        * `second` (`int`): The second point's code.
+        """
+        mirrored: tuple[bool, bool] = (first <= MIRRORED, second <= MIRRORED)
+        start: int = real_point(first)
+        end: int = real_point(second)
+        kind: str = ""
+        if mirrored[0] != mirrored[1] and ORIGIN not in (start, end):
+            if start == end:
+                self.dimension_between(ORIGIN, start, DIAMETER)
+                return
+            kind = VERTICAL
+            if self.point(start).y() == self.point(end).y():
+                self.message = (
+                    "Those points are level: a dimension across the "
+                    "axis is not supported yet."
+                )
+                self.scene().update()
+                return
+        if self.point(start) == self.point(end):
             self.message = "Those two points are in the same place."
             self.scene().update()
             return
-        self.dimension_between(first, second)
+        self.dimension_between(start, end, kind)
 
     # Method `OutlineView.angle_selected()`:
     def angle_selected(self) -> None:
@@ -2717,8 +3092,8 @@ class OutlineView(QGraphicsView):
     # Method `OutlineView.drag_corner()`:
     def drag_corner(self, corner: int, moved: QPointF) -> None:
         """Move a dragged corner (#451): it snaps to its neighbors'
-        X or Y, or onto an axis, within `SNAP_PIXELS`; a coordinate
-        the other dimensions fix (its own marks aside) holds.
+        X or Y, or onto an axis, within `SNAP_PIXELS`.  Nothing holds
+        it (#457): the values never place a template's corners.
 
         Arguments:
         * `corner` (`int`): The corner dragged.
@@ -2735,17 +3110,9 @@ class OutlineView(QGraphicsView):
             corner,
             SNAP_PIXELS / max(self.zoom(), 1e-9),
         )
-        held: Solution = solve(
-            points, without_marks(self.drawing.dimensions, corner, len(points))
-        )
-        place: list[float] = list(here)
-        if corner in held.x:
-            place[0] = points[corner][0]
-        if corner in held.y:
-            place[1] = points[corner][1]
-        moved.setX(place[0])
-        moved.setY(place[1])
-        points[corner] = (place[0], place[1])
+        moved.setX(here[0])
+        moved.setY(here[1])
+        points[corner] = here
 
     # Method `OutlineView.remark()`:
     def remark(self, corner: int) -> None:
@@ -3095,7 +3462,7 @@ class OutlineView(QGraphicsView):
             for corner, _ in self.solution.missing(len(self.drawing.points))
         }
         square: CornerCircle
-        for square in self.squares:
+        for square in self.squares + self.mirror_squares:
             loose: bool = bool(self.drawing.dimensions) and (
                 square.index in missing
             )
@@ -3107,7 +3474,7 @@ class OutlineView(QGraphicsView):
                 else ring
             )
             square.setBrush(
-                chosen if square.index in self.chosen_points else hollow
+                chosen if square.code() in self.chosen_points else hollow
             )
             # Lit (#199, #224): bigger, its ring thick; not by color
             # alone.
@@ -3119,7 +3486,7 @@ class OutlineView(QGraphicsView):
             square.setToolTip(self.corner_tip(square.index))
         self.origin.setToolTip("The origin: (0, 0)")
         handle: EdgeHandle
-        for handle in self.handles:
+        for handle in self.handles + self.mirror_handles:
             handle.setPen(ring)
             handle.setBrush(
                 chosen if handle.index in self.chosen_edges else hollow
@@ -3131,7 +3498,7 @@ class OutlineView(QGraphicsView):
             grip.setPen(ring)
             grip.setBrush(QBrush(QColor(scheme.paper)))
         circle: DimensionHandle
-        for circle in self.circles:
+        for circle in self.circles + self.tips:
             circle.setPen(ring)
             circle.setBrush(
                 chosen if circle.index in self.chosen_dimensions else hollow
@@ -3240,7 +3607,7 @@ class OutlineView(QGraphicsView):
                 self.marks_shown or not is_mark(self.drawing.dimensions[index])
             )
         circle: DimensionHandle
-        for circle in self.circles:
+        for circle in self.circles + self.tips:
             circle.place()
         self.viewport().update()
 
@@ -4076,9 +4443,13 @@ class OutlineEditor(QWidget):
         """
         self.view.armed = letter
         if letter is not None:
-            corners: list[int] = [
-                point for point in self.view.chosen_points if point != ORIGIN
-            ]
+            corners: list[int] = list(
+                dict.fromkeys(
+                    real_point(point)
+                    for point in self.view.chosen_points
+                    if point != ORIGIN
+                )
+            )
             if corners:
                 self.view.set_fillets(corners, letter)
         self.light_armed()
@@ -4577,15 +4948,43 @@ class OutlineEditor(QWidget):
     # Method `OutlineEditor.show_problems()`:
     def show_problems(self) -> None:
         """Show the letters' problems under the table, then what keeps
-        the outline from its real sizes (#445, #448)."""
+        the outline from its real sizes (#445, #448), then any edges
+        that the default values make cross (#457)."""
+        drawing: Drawing = self.view.drawing
+        lines: list[str] = list(self.letter_lines)
         placed: str = placement_problem(
-            self.view.drawing.points,
-            self.view.drawing.dimensions,
-            self.view.drawing.revolve,
+            drawing.points, drawing.dimensions, drawing.revolve
         )
-        self.problems.setText(
-            "\n".join(self.letter_lines + ([placed] if placed else []))
+        if placed:
+            lines.append(placed)
+        crossed: list[tuple[int, int]] = values_cross(
+            drawing.points, drawing.letters, drawing.dimensions
         )
+        if crossed:
+            lines.append(crossing_problem(crossed))
+        self.problems.setText("\n".join(lines))
+
+
+# Function `crossing_problem()`:
+def crossing_problem(crossed: list[tuple[int, int]]) -> str:
+    """Return the problem shown when the default values make edges
+    cross (#457), each edge named by the corner it starts from.
+
+    Arguments:
+    * `crossed` (`list[tuple[int, int]]`): Each pair of edges that
+      cross.
+
+    Returns:
+    * (`str`): The problem.
+    """
+    pairs: str = "; ".join(
+        f"from corners {first} and {second}" for first, second in crossed
+    )
+    return (
+        f"The default values make edges cross (the edges {pairs}): "
+        "change a default, or drag a corner so the template looks "
+        "like them."
+    )
 
 
 # Function `file_text()`:

@@ -22,6 +22,7 @@ from scraftcam.gui.values import (
     placed_corners,
     real_corners,
     refresh_formulas,
+    values_cross,
 )
 
 # A plate W by H from the origin, its top corners rounded.
@@ -134,6 +135,39 @@ class ValuesTest(unittest.TestCase):
         bad[0] = Letter("W", "", "30 deg", "")
         self.assertTrue(letters_bad(bad, SIZES))
         self.assertEqual(placed_corners(PLATE, bad, SIZES), (PLATE, 0.0))
+
+    def test_values_cross(self) -> None:
+        """Defaults that would make a template's edges cross are found,
+        though its corners stay as drawn (#457)."""
+        # A box with a notch on its left, the notch's X a letter.
+        notched: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (1.0, 2.0),
+        ]
+        sizes: list[Dimension] = drawn_marks(notched) + [
+            Dimension("W", HORIZONTAL, ORIGIN, 1),
+            Dimension("H", VERTICAL, ORIGIN, 2),
+            Dimension("N", HORIZONTAL, ORIGIN, 4),
+        ]
+
+        def named(notch: str) -> list[Letter]:
+            """Return the letters, the notch `notch` deep."""
+            return [
+                Letter("W", "", "4 in", ""),
+                Letter("H", "", "4 in", ""),
+                Letter("N", "", notch, ""),
+            ]
+
+        self.assertEqual(values_cross(notched, named("1 in"), sizes), [])
+        crossed: set[tuple[int, int]] = {
+            (min(pair), max(pair))
+            for pair in values_cross(notched, named("5 in"), sizes)
+        }
+        self.assertLessEqual({(1, 3), (1, 4)}, crossed)
+        self.assertEqual(values_cross(notched, [], sizes), [])
 
 
 # A drill's letters: two given values, two worked out (#430).
