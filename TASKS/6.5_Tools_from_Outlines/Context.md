@@ -1,8 +1,8 @@
 # LLM Agent Context Log
 
-Squeezed 2026-11-22 (fourth time, before a commit); the history is
+Squeezed 2026-11-22 (fifth time, before a commit); the history is
 in `hg` and `git`.  Issue numbers are shared with `T.oe~6.2` and
-`T.sdl~6.8`; the next new one is #484.  Every discussion point takes
+`T.sdl~6.8`; the next new one is #485.  Every discussion point takes
 the next sticky number, never a fresh 1, 2, 3.
 
 ## Ready
@@ -19,8 +19,11 @@ the next sticky number, never a fresh 1, 2, 3.
 * Shop files keyed by outline letters (`TableField.short`; the long
   keys stay inside): drills D, FL, OAL, PA (#435); end mills D, LOC,
   OAL, SD (#452); tree labels and panel fields read them (#454).
-* `drill.outline.toml`, `end_mill.outline.toml`; their tests match
-  the old `cutter_models` to 6 places.
+* `drill.outline.toml`, `end_mill.outline.toml`,
+  `chamfer_mill.outline.toml` (#463: D, TD, A, HA = A / 2, SD, OAL;
+  drawn with SD < D so both corners show); their tests match the old
+  `cutter_models` to 6 places.  The chamfer test's shop-key map is
+  local: the shop's chamfer files are not keyed by letters yet.
 * Marks (#451): not in the SVG; in the editor under [Show Marks (M)];
   made by dragging (a corner snaps to its neighbors' X or Y or an
   axis, its marks remade on release, left out of solving while
@@ -47,6 +50,8 @@ the next sticky number, never a fresh 1, 2, 3.
   * A vertical dimension at `offset < 0` measures from the mirror
     images (#481); `outline_diagram.clear_foot()` leaves an extension
     line's gap where the outline leaves it (#482).
+  * End circles sit under their dimension (z 0.4), whose click band
+    has holes at its ends (`has_end_circles()`, #483).
 
 ## Decided
 
@@ -63,11 +68,30 @@ the next sticky number, never a fresh 1, 2, 3.
 
 ## Where It Stands
 
-* `#S1` (#457, #469-#482) is done; the user is tidying
-  `end_mill.outline.toml` in the editor.  Next: `#S2` #387, `#S3`
-  #463 (the chamfer mill as an outline file and its test), `#S4`
-  #426 (`T.g~6`: two end-to-end tests expect a separate Start
-  button).
+* Done this session: #483, #463 (for the user to tidy in the
+  editor), #479 (built, not yet tried by the user).
+* Next session, in order:
+  * #479: the user tries it (steps below); fix what they find.
+  * #484 (recommended): an angle dimension between an edge and its
+    own mirror image, as a diameter is a corner and its mirror: one
+    arc across the axis about the crossing; the solver treats it as
+    the edge-to-axis angle with `letter / 2`.  Then the chamfer mill
+    takes `A` and the drill `PA` directly, dropping `HA` and `HPA`.
+  * #387 (approved): delete them (see Decided).
+  * The chamfer mill's shop files keyed by its letters, as the
+    drills' and end mills' are (asked, not answered).
+* #479 as built: a horizontal across the axis is a `DIAMETER` whose
+  `start` is a corner (`is_across()`), from `start`'s mirror image to
+  `end`; `dimensions._across()` gives either X from the other (`W -
+  (D / 2)`).  Made from a mirror image and another corner when wider
+  than tall; [Dim. Kind] makes it vertical; its start circle drops
+  only on mirror images, its end only on corners.  No diagram test.
+  To try, on a copy of `end_mill.outline.toml`: delete `SD`, click
+  the shank corner's mirror then the cutter's outer corner,
+  [Dimension]: black, not red.
+* #426 is `T.g~6`'s: the end-to-end tests drive the HMI
+  (`lcnc_hmi.py`), not the GUI's machine panel; the cure is the
+  user's plan of one GUI.  Unrelated to tools; waits.
 * The plan: Claude translates each old model into an outline file
   and its test; the user tidies it in the editor (finding GUI bugs).
 * `shank_drill.outline.toml`: the user's drawing in progress (#438).
@@ -77,13 +101,10 @@ the next sticky number, never a fresh 1, 2, 3.
 
 ## Open
 
-* #483: end circles cover the arrowhead tips in the editor; draw the
-  arrowheads over them (recommended).  #479: a horizontal across the
-  axis (a mirror to another corner) needs the solver to add two X's.
 * #379 the grid plate's holes.
-* Round tools next: chamfer, corner rounding, double angle,
-  countersinks; flat tools after `T.oe~6.2` #290 (holes); then the
-  new tools in `Details.md`.
+* Round tools next: corner rounding, double angle, countersinks;
+  flat tools after `T.oe~6.2` #290 (holes); then the new tools in
+  `Details.md`.
 
 ## The Old Models (to be replaced one at a time)
 

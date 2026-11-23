@@ -74,6 +74,8 @@ def next_kind(dimension: "Dimension", revolve: bool) -> str:
     Returns:
     * (`str`): The next kind.
     """
+    if is_across(dimension):
+        return VERTICAL  # Its corners' rise (#479).
     if dimension.kind == DIAMETER:
         return LENGTH
     if revolve and dimension.start == ORIGIN and dimension.kind == HORIZONTAL:
@@ -421,6 +423,21 @@ def placement_problem(
     )
 
 
+# Function `is_across()`:
+def is_across(dimension: Dimension) -> bool:
+    """Return whether a dimension is a horizontal across a revolved
+    outline's axis (#479): a `DIAMETER` from `start`'s mirror image to
+    `end`, where `start` is a corner, not `ORIGIN`.
+
+    Arguments:
+    * `dimension` (`Dimension`): The dimension.
+
+    Returns:
+    * (`bool`): `True` when it is across the axis.
+    """
+    return dimension.kind == DIAMETER and dimension.start != ORIGIN
+
+
 # Function `is_mark()`:
 def is_mark(dimension: Dimension) -> bool:
     """Return whether a dimension is a mark (#233): letterless, a
@@ -762,6 +779,8 @@ def _apply(
         return _along_axis(points, dimension, known[axis], axis)
     if dimension.kind == LENGTH:
         return _along_length(points, dimension, known)
+    if dimension.kind == DIAMETER and dimension.start != ORIGIN:
+        return _across(points, dimension, known[0], extra, index)
     if dimension.kind == DIAMETER:
         if dimension.end in known[0]:
             extra.append(index)
@@ -787,6 +806,46 @@ def _drawn(points: list[tuple[float, float]], point: int, axis: int) -> float:
     * (`float`): The coordinate.
     """
     return 0.0 if point == ORIGIN else points[point][axis]
+
+
+# Function `_across()`:
+def _across(
+    points: list[tuple[float, float]],
+    dimension: Dimension,
+    known: dict[int, Formula],
+    extra: list[int],
+    index: int,
+) -> bool:
+    """A revolved outline's horizontal across the axis (#479), from
+    `start`'s mirror image to `end`: the letter is their X's added
+    (signs as drawn), so either X gives the other.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `dimension` (`Dimension`): The dimension (a `DIAMETER` whose
+      `start` is a corner).
+    * `known` (`dict[int, Formula]`): The X formulas, added to.
+    * `extra` (`list[int]`): Given the dimension if one too many.
+    * `index` (`int`): The dimension's index.
+
+    Returns:
+    * (`bool`): Whether it is done with (used or extra).
+    """
+    start: int = dimension.start
+    end: int = dimension.end
+    if start in known and end in known:
+        extra.append(index)
+        return True
+    if end in known:
+        start, end = end, start
+    if start not in known:
+        return False
+
+    # `x_end + x_start` is `+-letter`, the sign as drawn.
+    wide: float = _drawn(points, end, 0) + _drawn(points, start, 0)
+    letter: str = dimension.letter if wide >= 0.0 else f"-{dimension.letter}"
+    known[end] = Formula(text=total(letter, "-", str(known[start])))
+    return True
 
 
 # Function `_along_axis()`:

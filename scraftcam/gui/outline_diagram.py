@@ -748,8 +748,13 @@ def _dimension(
         return _angle(outline, dimension, height)
     ends: tuple[Point, Point]
     if dimension.kind == DIAMETER:
-        # From the corner's mirror image across the axis (#437).
-        first = (-second[0], second[1])
+        # From the corner's mirror image across the axis (#437), or
+        # from `start`'s, across to `end` (#479).
+        first = (
+            (-second[0], second[1])
+            if dimension.start == ORIGIN
+            else (-first[0], first[1])
+        )
     if dimension.kind in (HORIZONTAL, DIAMETER):
         ends = ((first[0], dimension.offset), (second[0], dimension.offset))
     elif dimension.kind == VERTICAL:

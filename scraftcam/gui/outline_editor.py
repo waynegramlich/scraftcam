@@ -119,6 +119,7 @@ from .dimensions import (  # noqa: E402
     Dimension,
     Formula,
     Solution,
+    is_across,
     is_mark,
     mark_broken,
     mark_edge,
@@ -1034,6 +1035,25 @@ def shift_at(pieces: list[tuple[float, float, float]], at: float) -> float:
     return 0.0
 
 
+# Function `has_end_circles()`:
+def has_end_circles(dimension: Dimension) -> bool:
+    """Return whether a dimension has circles at its line's ends
+    (#470): a length of any kind, not a mark.
+
+    Arguments:
+    * `dimension` (`Dimension`): The dimension.
+
+    Returns:
+    * (`bool`): `True` when it has end circles.
+    """
+    return not is_mark(dimension) and dimension.kind in (
+        HORIZONTAL,
+        VERTICAL,
+        LENGTH,
+        DIAMETER,
+    )
+
+
 # Function `arrowhead()`:
 def arrowhead(start: QPointF, end: QPointF, length: float) -> QPainterPath:
     """Return a closed arrowhead at `end` of the edge from `start`.
@@ -1560,7 +1580,11 @@ class DimensionHandle(  # pylint: disable=too-many-instance-attributes
         self.was: tuple[float, float] = (0.0, 0.0)
         self.target: int = ORIGIN
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
-        self.setZValue(1.5)
+
+        # An end circle sits just under its dimension, so the
+        # arrowhead's tip is drawn over it (#483); the dimension's
+        # band leaves a hole there, so a press still reaches it.
+        self.setZValue(1.5 if part == LINE_MIDDLE else 0.4)
 
     # Method `DimensionHandle.place()`:
     def place(self) -> None:
@@ -1577,11 +1601,7 @@ class DimensionHandle(  # pylint: disable=too-many-instance-attributes
         # Marks show only under [Show Marks] (#451).
         lined = lined and (not is_mark(dimension) or self.editor.marks_shown)
         if self.part != LINE_MIDDLE:
-            lined = (
-                lined
-                and not is_mark(dimension)
-                and dimension.kind in (HORIZONTAL, VERTICAL, LENGTH, DIAMETER)
-            )
+            lined = lined and has_end_circles(dimension)
         self.setVisible(lined)
         if not lined:
             return
@@ -1682,6 +1702,21 @@ class DimensionHandle(  # pylint: disable=too-many-instance-attributes
             code: int | None = self.editor.corner_near(self.pos())
             target: int = ORIGIN if code is None else real_point(code)
             fixed: tuple[int, int] = (dimension.start, dimension.end)
+            if is_across(dimension):
+                # Across the axis (#479): the start on a mirror image,
+                # the end on a corner.
+                mirror: bool = code is not None and code <= MIRRORED
+                if (
+                    code is not None
+                    and target not in fixed
+                    and (mirror == (self.part == LINE_START))
+                ):
+                    self.target = target
+                    QTimer.singleShot(0, self.reattach)
+                    return
+                self.before = None
+                self.place()
+                return
             same: bool = (
                 (code is not None and code > MIRRORED)
                 or dimension.kind in (DIAMETER, VERTICAL)
@@ -1715,7 +1750,9 @@ class DimensionHandle(  # pylint: disable=too-many-instance-attributes
         editor.history.remember(self.before)
         self.before = None
         dimension: Dimension = editor.drawing.dimensions[self.index]
-        if self.part == LINE_START and dimension.kind != DIAMETER:
+        if self.part == LINE_START and (
+            dimension.kind != DIAMETER or is_across(dimension)
+        ):
             dimension.start = self.target
         else:
             dimension.end = self.target
@@ -1804,8 +1841,13 @@ class DimensionItem(QGraphicsItem):
             return first, second, first + aside, second + aside
         if dimension.kind == DIAMETER:
             # From the corner's mirror image across the axis (#437),
-            # across at `offset`, as `outline_diagram` draws it (#456).
-            first = QPointF(-second.x(), second.y())
+            # across at `offset`, as `outline_diagram` draws it (#456);
+            # or from `start`'s mirror image, across to `end` (#479).
+            first = (
+                QPointF(-second.x(), second.y())
+                if dimension.start == ORIGIN
+                else QPointF(-first.x(), first.y())
+            )
         if dimension.kind in (HORIZONTAL, DIAMETER):
             return (
                 first,
@@ -1851,6 +1893,17 @@ class DimensionItem(QGraphicsItem):
         )
         if not letter.isNull():
             band.addRect(letter)
+
+        # Holes where the end circles sit, under the arrowheads, so a
+        # press there reaches them (#483).
+        if has_end_circles(self.editor.drawing.dimensions[self.index]):
+            ends: tuple[QPointF, QPointF, QPointF, QPointF] = self.ends()
+            half: float = HANDLE_PIXELS / 2.0 / max(self.editor.zoom(), 1e-12)
+            holes: QPainterPath = QPainterPath()
+            end: QPointF
+            for end in ends[2:]:
+                holes.addEllipse(end, half, half)
+            band = band.subtracted(holes)
         return band
 
     # Method `DimensionItem.mousePressEvent()`:
@@ -2878,8 +2931,8 @@ class OutlineView(QGraphicsView):
         mirrored corner (#478), as the kinds the solver knows: a
         corner and its own mirror image give its diameter; two mirror
         images, or one and the origin, what their corners give; one
-        and another corner only vertically (across the axis, its
-        horizontal is not supported yet).
+        and another corner a vertical, or a horizontal across the axis
+        when wider than tall (#479).
 
         Arguments:
         * `first` (`int`): The first point's code.
@@ -2893,14 +2946,17 @@ class OutlineView(QGraphicsView):
             if start == end:
                 self.dimension_between(ORIGIN, start, DIAMETER)
                 return
-            kind = VERTICAL
-            if self.point(start).y() == self.point(end).y():
-                self.message = (
-                    "Those points are level: a dimension across the "
-                    "axis is not supported yet."
-                )
-                self.scene().update()
+
+            # Across the axis (#479): horizontal from the mirrored
+            # one's image (stored as `start`) when wider than tall.
+            if mirrored[1]:
+                start, end = end, start
+            wide: float = abs(self.point(start).x() + self.point(end).x())
+            up: float = abs(self.point(start).y() - self.point(end).y())
+            if wide >= up:
+                self.dimension_between(start, end, DIAMETER)
                 return
+            kind = VERTICAL
         if self.point(start) == self.point(end):
             self.message = "Those two points are in the same place."
             self.scene().update()

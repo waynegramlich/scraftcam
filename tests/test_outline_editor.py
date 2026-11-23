@@ -2051,7 +2051,12 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """Dimensions with a mirrored corner are the kinds the solver
         knows (#478): a corner and its mirror image its diameter; two
         mirror images their corners' dimension; a mirror image and
-        another corner vertical only."""
+        another corner vertical, or horizontal across the axis when
+        wider than tall, from the mirrored one (#479)."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPointF
+
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
         view.drawing.revolve = True
@@ -2069,11 +2074,20 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.dimension_codes(mirror(2), -1)
         made = view.drawing.dimensions[-1]
         self.assertEqual((made.start, made.end), (2, -1))
-        count: int = len(view.drawing.dimensions)
         view.drawing.points[3] = (1.0, 8.0)
         view.dimension_codes(mirror(2), 3)
-        self.assertIn("not supported yet", view.message)
-        self.assertEqual(len(view.drawing.dimensions), count)
+        made = view.drawing.dimensions[-1]
+        self.assertEqual((made.kind, made.start, made.end), (DIAMETER, 2, 3))
+        view.dimension_codes(3, mirror(2))
+        made = view.drawing.dimensions[-1]
+        self.assertEqual((made.kind, made.start, made.end), (DIAMETER, 2, 3))
+        self.assertEqual(
+            view.measures[-1].ends()[2:],
+            (
+                QPointF(-2.0, made.offset),
+                QPointF(1.0, made.offset),
+            ),
+        )
 
     def test_diameter_ends(self) -> None:
         """A diameter has a circle on each end, the mirrored side too;
@@ -2122,6 +2136,27 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         qt_app.process_events()
         self.assertEqual(view.drawing.dimensions[0].end, 3)
         self.assertEqual(view.tips[1].pos(), was)
+
+    def test_tips_under_arrowheads(self) -> None:
+        """A dimension's end circles sit under it, so its arrowheads
+        are drawn over them, and its band leaves a hole there, so a
+        press reaches the circle (#483)."""
+        # (`PySide6` is on `sys.path` only once `tests` is imported.)
+        # pylint: disable=import-outside-toplevel
+        from PySide6.QtCore import QPoint
+
+        view = self.editor.view
+        view.drawing.points[:] = [(0.0, 0.0), (4.0, 0.0), (4.0, 3.0)]
+        view.drawing.dimensions[:] = [Dimension("L", LENGTH, 0, 1, 1.0)]
+        view.make_squares()
+        view.fit()
+        tip: outline_editor.DimensionHandle
+        for tip in view.tips:
+            self.assertTrue(tip.isVisible())
+            self.assertLess(tip.zValue(), view.measures[0].zValue())
+            self.assertFalse(view.measures[0].shape().contains(tip.pos()))
+            spot: QPoint = view.mapFromScene(tip.pos())
+            self.assertIn(tip, view.items(spot))
 
     def test_drag_letter(self) -> None:
         """A dimension's letter, dragged, slides along its line, past

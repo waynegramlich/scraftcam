@@ -1,0 +1,148 @@
+kind = "outline"
+version = 4
+revolve = true
+
+[letters.D]
+name = "Diameter"
+default = "1/4 in"
+help = "The chamfer's widest diameter, where the cone meets the body."
+
+[letters.TD]
+name = "Tip diameter"
+default = "0.020 in"
+help = "The flat across the tip (0 for a sharp point)."
+
+[letters.A]
+name = "Angle"
+default = "90 deg"
+help = "The angle across the cone (60 deg, 82 deg, 90 deg, 120 deg)."
+
+[letters.HA]
+name = "Half angle"
+formula = "A / 2"
+help = "Half of the cone's angle, from the axis, as drawn."
+
+[letters.SD]
+name = "Shank diameter"
+default = "1/4 in"
+help = "The shank's diameter (often the same as the diameter)."
+
+[letters.OAL]
+name = "Overall length"
+default = "2 in"
+help = "From the tip to the end of the shank."
+
+[[points]]
+at = [0.0, 0.0]
+
+[[points]]
+at = [1.0, 0.0]
+
+[[points]]
+at = [4.0, 3.0]
+
+[[points]]
+at = [3.0, 3.0]
+
+[[points]]
+at = [3.0, 40.0]
+
+[[points]]
+at = [0.0, 40.0]
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "origin"
+to = 0
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = 0
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = 0
+to = 1
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = 2
+to = 3
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = 3
+to = 4
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = 4
+to = 5
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = 5
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "TD"
+kind = "diameter"
+from = "origin"
+to = 1
+offset = -3.0
+along = 1.8107199999999999
+
+[[dimensions]]
+letter = "D"
+kind = "diameter"
+from = "origin"
+to = 2
+offset = -6.0
+along = 0.5
+
+[[dimensions]]
+letter = "HA"
+kind = "angle"
+from = 1
+to = "y_axis"
+offset = 5.0
+along = 0.5
+rays = [1, 1]
+
+[[dimensions]]
+letter = "SD"
+kind = "diameter"
+from = "origin"
+to = 3
+offset = 44.0
+along = 0.5
+
+[[dimensions]]
+letter = "OAL"
+kind = "vertical"
+from = "origin"
+to = 4
+offset = 8.0
+along = 0.5

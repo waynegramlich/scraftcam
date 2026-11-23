@@ -334,6 +334,34 @@ class TestDiameter(unittest.TestCase):
         )
         self.assertEqual(twice.extra, [len(sizes)])
 
+    def test_across(self) -> None:
+        """A horizontal across the axis, from one corner's mirror image
+        to another corner, gives either X from the other (#479)."""
+        points: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 3.0),
+            (1.0, 3.0),
+            (1.0, 8.0),
+            (0.0, 8.0),
+        ]
+        sizes: list[Dimension] = [
+            *drawn_marks(points),
+            Dimension("D", DIAMETER, ORIGIN, 1),
+            Dimension("W", DIAMETER, 3, 2),
+        ]
+        solution: Solution = solve(points, sizes)
+        self.assertEqual(str(solution.x[3]), "W - (D / 2)")
+        self.assertEqual(str(solution.x[4]), "W - (D / 2)")
+
+        # Known at its start instead; a second one is extra.
+        sizes[-1] = Dimension("W", DIAMETER, 2, 3)
+        self.assertEqual(str(solve(points, sizes).x[3]), "W - (D / 2)")
+        twice: Solution = solve(
+            points, [*sizes, Dimension("V", DIAMETER, 4, 1)]
+        )
+        self.assertEqual(twice.extra, [len(sizes)])
+
 
 class TestPlacement(unittest.TestCase):
     """What keeps an outline from its real sizes (#445, #448)."""
@@ -357,10 +385,10 @@ class TestPlacement(unittest.TestCase):
         self.assertIn(
             "Corners 0, 1, 2, 3 float", placement_problem(points, sizes, False)
         )
-        marked: list[Dimension] = [*drawn_marks(points), *sizes]
-        self.assertEqual(placement_problem(points, marked, False), "")
-        self.assertTrue(tip_on_origin(marked))
-        self.assertEqual(placement_problem(points, marked, True), "")
+        with_marks: list[Dimension] = [*drawn_marks(points), *sizes]
+        self.assertEqual(placement_problem(points, with_marks, False), "")
+        self.assertTrue(tip_on_origin(with_marks))
+        self.assertEqual(placement_problem(points, with_marks, True), "")
         self.assertIn(
             "tip goes on the origin", placement_problem(points, sizes, True)
         )
