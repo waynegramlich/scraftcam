@@ -1,0 +1,68 @@
+# A first tutorial: choose a corner, move one, and undo the move.
+format = 1
+scraftcam = "0.1.0"
+title = "Moving a corner"
+outline = ""
+
+[[steps]]
+call = "click"
+arguments = { x = -4, y = -3 }
+narration = "Click the lower left corner to choose it."
+state = '''
+file: (new)
+revolve: False
+corners:
+  0: (-4, -3)
+  1: (4, -3)
+  2: (0, 4)
+dimensions:
+letters:
+chosen corners: [0]
+chosen dimensions: []
+chosen edges: []
+problems:
+  Every corner floats: nothing ties the outline to the origin (drag a corner onto it, or dimension one from it).
+undo depth: 0
+'''
+
+[[steps]]
+call = "drag"
+arguments = { x = 0, y = 4, to_x = 1, to_y = 6 }
+narration = "Drag the top corner up and to the right."
+state = '''
+file: (new)
+revolve: False
+corners:
+  0: (-4, -3)
+  1: (4, -3)
+  2: (1, 6)
+dimensions:
+letters:
+chosen corners: [0, 2]
+chosen dimensions: []
+chosen edges: []
+problems:
+  Every corner floats: nothing ties the outline to the origin (drag a corner onto it, or dimension one from it).
+undo depth: 1
+'''
+
+[[steps]]
+call = "press"
+arguments = { keys = "Ctrl+Z" }
+narration = "Press Ctrl+Z to undo the move."
+state = '''
+file: (new)
+revolve: False
+corners:
+  0: (-4, -3)
+  1: (4, -3)
+  2: (0, 4)
+dimensions:
+letters:
+chosen corners: []
+chosen dimensions: []
+chosen edges: []
+problems:
+  Every corner floats: nothing ties the outline to the origin (drag a corner onto it, or dimension one from it).
+undo depth: 0
+'''

@@ -75,7 +75,10 @@ class TestExposed(unittest.TestCase):
     def test_call_refused(self) -> None:
         """Bad arguments are refused, saying which and why."""
         cases: tuple[tuple[dict[str, object], str], ...] = (
-            ({"index": "3", "x": 1, "y": 2}, "`index` = '3'"),
+            (
+                {"index": "3", "x": 1, "y": 2},
+                "`index` = '3' is not of type `int`$",
+            ),
             ({"index": True, "x": 1, "y": 2}, "`index` = True"),
             ({"index": 3, "x": 1}, "missing a required argument"),
             ({"index": 3, "x": 1, "y": 2, "z": 0}, "unexpected keyword"),

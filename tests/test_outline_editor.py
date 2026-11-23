@@ -1742,6 +1742,15 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(len(view.drawing.points), 3)
         self.assertEqual(buttons["Redo"].text(), "Redo (Ctrl+Shift+Z)")
 
+    def test_holes_read(self) -> None:
+        """An outline file's holes come back when it is read (#23)."""
+        drawing: Drawing = Drawing()
+        drawing.holes[:] = [Hole(PLAIN, (0.5, 0.5), "D")]
+        again: Drawing = outline_editor.drawing_from_text(
+            outline_text(drawing)
+        )
+        self.assertEqual(again.holes, [Hole(PLAIN, (0.5, 0.5), "D")])
+
     def test_undo_keeps_holes(self) -> None:
         """An undo snapshot holds the holes too (#447)."""
         drawing: Drawing = self.editor.view.drawing

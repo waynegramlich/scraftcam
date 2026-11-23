@@ -263,6 +263,27 @@ def _check_items(name: str, value: object, hint: object) -> None:
         _check(f"{name}[{index}]", item, item_hint)
 
 
+def _misfit(name: str, value: object, hint: object) -> ExposedError:
+    """Make the error for a `value` that does not fit its `hint`.
+
+    Arguments:
+    * `name` (`str`):
+        The argument's name, for the message.
+    * `value` (`object`):
+        The value as it came from JSON.
+    * `hint` (`object`):
+        The type hint, named as written (`float`, not `<class
+        'float'>`; #513).
+
+    Returns:
+    * (`ExposedError`): the error, for the caller to raise.
+    """
+    # `formatannotation()` gives a class's bare name, and drops
+    # `typing.` from the rest.
+    hint_text: str = inspect.formatannotation(hint)
+    return ExposedError(f"`{name}` = {value!r} is not of type `{hint_text}`")
+
+
 def _check(name: str, value: object, hint: object) -> None:
     """Check that the JSON `value` fits the type `hint`.
 
@@ -291,13 +312,13 @@ def _check(name: str, value: object, hint: object) -> None:
             except ExposedError:
                 continue
             return
-        raise ExposedError(f"`{name}` = {value!r} is not a {hint}")
+        raise _misfit(name, value, hint)
 
     # Lists and tuples item by item; the rest by their plain kind.
     if origin in (list, tuple):
         _check_items(name, value, hint)
     elif hint is not inspect.Parameter.empty and not _fits(value, hint):
-        raise ExposedError(f"`{name}` = {value!r} is not a {hint}")
+        raise _misfit(name, value, hint)
 
 
 def call(name: str, arguments: dict[str, object]) -> object:

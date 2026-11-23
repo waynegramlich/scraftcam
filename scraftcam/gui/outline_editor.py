@@ -31,9 +31,11 @@ The scene is in unitless drawing steps (letters give the real sizes,
 #15), Y up.  Run alone: `python3 -m scraftcam.gui.outline_editor`.
 """
 
+import argparse
 import math
 import re
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -102,8 +104,11 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from ..diagram import FONT_STEP, TEXT, Stroke, svg  # noqa: E402
+from ..exposed import steps as recordings  # noqa: E402
+from ..exposed.exposed import ExposedError  # noqa: E402
+from ..exposed.steps import Recording  # noqa: E402
 from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
-from . import theme  # noqa: E402
+from . import theme, tutorial  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
     AXES,
@@ -164,6 +169,7 @@ from .outline_file import (  # noqa: E402
     outline_from_text,
     outline_text,
 )
+from .recorder import Recorder  # noqa: E402
 from .values import (  # noqa: E402
     crossings,
     fillet_problems,
@@ -467,7 +473,7 @@ class Drawing(Outline):
 
     Constructor:
     * `Drawing(points, letters, dimensions, revolve, note_radius,
-      hides, text_height, turns)`
+      hides, text_height, turns, holes)`
     """
 
     # Remaining attributes (alphabetized):
@@ -5058,6 +5064,31 @@ def file_text(path: Path | None) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# Where `--record` writes when no file is named (#503).
+RECORDINGS: Path = Path.home() / ".scraftcam" / "recordings"
+
+
+# Function `record_path()`:
+def record_path(record: Path, path: Path | None) -> Path:
+    """Give the file `--record` writes.
+
+    Arguments:
+    * `record` (`Path`): What `--record` named: a file, or a
+      directory (`RECORDINGS` when nothing was named).
+    * `path` (`Path | None`): The outline file edited, if any.
+
+    Returns:
+    * (`Path`): A named file as is; in a directory, a new file
+      named after the outline and the time (`end_mill_2026-11-23_
+      14-37-31.steps.toml`).
+    """
+    if not record.is_dir() and record != RECORDINGS:
+        return record
+    stem: str = path.name.split(".")[0] if path is not None else "new"
+    stamp: str = time.strftime("%Y-%m-%d_%H-%M-%S")
+    return record / f"{stem}_{stamp}.steps.toml"
+
+
 # Function `drawing_from()`:
 def drawing_from(path: Path) -> Drawing:
     """Read a drawing from an outline file.
@@ -5072,9 +5103,24 @@ def drawing_from(path: Path) -> Drawing:
     * `OutlineError`: When the file cannot be read as an outline.
     * `OSError`: When the file cannot be read at all.
     """
-    outline: Outline = outline_from_text(
-        path.read_text(encoding="utf-8"), str(path)
-    )
+    return drawing_from_text(path.read_text(encoding="utf-8"), str(path))
+
+
+# Function `drawing_from_text()`:
+def drawing_from_text(text: str, source: str = "") -> Drawing:
+    """Read a drawing from an outline file's text.
+
+    Arguments:
+    * `text` (`str`): The file's text.
+    * `source` (`str`): Where it came from, for the messages.
+
+    Returns:
+    * (`Drawing`): Its drawing.
+
+    Raises:
+    * `OutlineError`: When the text cannot be read as an outline.
+    """
+    outline: Outline = outline_from_text(text, source)
     return Drawing(
         outline.points,
         outline.letters,
@@ -5084,6 +5130,7 @@ def drawing_from(path: Path) -> Drawing:
         outline.hides,
         outline.text_height,
         outline.turns,
+        outline.holes,
     )
 
 
@@ -5091,18 +5138,89 @@ def drawing_from(path: Path) -> Drawing:
 def main() -> None:
     """Show the editor until its window is closed: on the file named
     on the command line, if any (a new one starts as the triangle),
-    refusing one that cannot be read (#93)."""
-    path: Path | None = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    refusing one that cannot be read (#93).  With `--mcp PORT`, Claude
+    can drive it over MCP while it runs (#490); `--headless` draws
+    offscreen, for tests; `--tutorial FILE` plays a recording, or with
+    `--headless` checks it (#19)."""
+    # The file, and whether to serve MCP.
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
+        description="Edit a parametric 2D outline."
+    )
+    parser.add_argument("path", nargs="?", type=Path, default=None)
+    parser.add_argument(
+        "--mcp", type=int, metavar="PORT", help="serve MCP on PORT"
+    )
+    parser.add_argument(
+        "--tutorial",
+        type=Path,
+        metavar="FILE",
+        help="play the recording FILE (`.steps.toml`)",
+    )
+    parser.add_argument(
+        "--record",
+        nargs="?",
+        const=RECORDINGS,
+        type=Path,
+        metavar="FILE",
+        help="record what you do as steps, into FILE (by default, a "
+        "new file in ~/.scraftcam/recordings/)",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="draw offscreen at 1280 x 800 (for tests)",
+    )
+    options: argparse.Namespace = parser.parse_args()
+    if options.record is not None and options.tutorial is not None:
+        parser.error("--record and --tutorial cannot be used together")
+    path: Path | None = options.path
     drawing: Drawing = Drawing()
-    if path is not None and path.exists():
-        try:
+    recording: Recording | None = None
+    try:
+        if options.tutorial is not None:
+            # A tutorial's outline is its own, and never saved.
+            recording = recordings.load(options.tutorial)
+            path = None
+            if recording.outline:
+                drawing = drawing_from_text(
+                    recording.outline, str(options.tutorial)
+                )
+        elif path is not None and path.exists():
             drawing = drawing_from(path)
-        except (OSError, OutlineError) as error:
-            print(error, file=sys.stderr)
-            sys.exit(1)
-    application: QApplication = make_application(headless=False)
+    except (OSError, OutlineError, ExposedError) as error:
+        print(error, file=sys.stderr)
+        sys.exit(1)
+    application: QApplication = make_application(headless=options.headless)
     editor: OutlineEditor = OutlineEditor(drawing, path=path)
     theme.follow(application, editor.view.restyle)
+    if options.headless:
+        # One size, so that every replay sees the same window (#498).
+        editor.resize(1280, 800)
+
+    # The server runs each call on this (Qt's main) thread (#512).
+    if options.mcp is not None:
+        # pylint: disable=import-outside-toplevel
+        from ..exposed import qt_runner, server
+        from . import outline_exposed
+
+        outline_exposed.EDITORS.add(editor)
+        server.serve(options.mcp, server.Server(qt_runner.QtRunner()))
+        print(f"MCP on http://127.0.0.1:{options.mcp}{server.PATH}")
+
+    # A tutorial: checked offscreen, or shown with its panel (#19).
+    if recording is not None:
+        if options.headless:
+            found: list[str] = tutorial.mismatches(editor, recording)
+            print("\n\n".join(found) or f"{options.tutorial}: all match")
+            sys.exit(1 if found else 0)
+        tutorial.show_panel(editor, recording)
+
+    # Recording what the user does, step by step (#21).
+    if options.record is not None:
+        record: Path = record_path(options.record, path)
+        title: str = record.name.split(".")[0].rsplit("_", 2)[0]
+        Recorder(editor, record, title.replace("_", " ").capitalize())
+        print(f"Recording into {record}")
     editor.show()
     editor.view.fit()
     sys.exit(application.exec())
