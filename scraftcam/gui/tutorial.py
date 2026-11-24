@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import typing
 
-from scraftcam.exposed.steps import Player, Recording
+from scraftcam.exposed.steps import Player, Recording, View
 from scraftcam.gui import outline_exposed
 from scraftcam.gui.narration import NarrationPanel
 from scraftcam.packages import require
@@ -49,7 +49,13 @@ def start(editor: OutlineEditor, recording: Recording) -> Player:
         """Give the editor's undo depth."""
         return len(editor.view.history.done)
 
-    return Player(recording, {"editor": handle}, depth, editor.view.undo)
+    def place(shown: View) -> None:
+        """Show the editor at a step's recorded view (#566)."""
+        outline_exposed.place_view(editor.view, shown)
+
+    return Player(
+        recording, {"editor": handle}, depth, editor.view.undo, place
+    )
 
 
 def show_panel(editor: OutlineEditor, recording: Recording) -> None:

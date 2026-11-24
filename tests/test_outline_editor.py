@@ -2324,5 +2324,34 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.restyle()
 
 
+class FitTest(unittest.TestCase):
+    """[Fit] shows the dimensions too (#572)."""
+
+    def test_fit_shows_dimensions(self) -> None:
+        """Every dimension of the end mill is inside the view."""
+        # pylint: disable=import-outside-toplevel
+        from pathlib import Path
+
+        from PySide6.QtCore import QRectF
+
+        source: Path = Path("examples/shop/tools/end_mill.outline.toml")
+        editor: OutlineEditor = OutlineEditor(
+            outline_editor.drawing_from(source)
+        )
+        editor.resize(1280, 800)
+        editor.show()
+        qt_app.process_events()
+        editor.view.fit()
+        port = editor.view.viewport()
+        seen: QRectF = editor.view.mapToScene(port.rect()).boundingRect()
+        for measure in editor.view.measures:
+            if measure.isVisible():
+                self.assertTrue(
+                    seen.contains(measure.boundingRect()), measure.index
+                )
+        editor.deleteLater()
+        qt_app.process_events()
+
+
 if __name__ == "__main__":
     unittest.main()

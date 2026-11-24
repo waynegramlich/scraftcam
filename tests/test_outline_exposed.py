@@ -1,7 +1,9 @@
 """Tests for `scraftcam.gui.outline_exposed`: the outline editor's
 functions reached over MCP (#S3), called in process."""
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from scraftcam.exposed import exposed
 from scraftcam.exposed.exposed import ExposedError
@@ -66,17 +68,47 @@ class TestOutlineExposed(unittest.TestCase):
         self.editor.view.fit()
         qt_app.process_events()
         handle: dict[str, object] = {"editor": "OutlineEditor 1"}
-        text: object = exposed.call("click", {**handle, "x": -4, "y": -3})
+        text: object = exposed.call("click", {**handle, "target": "Vertex 0"})
         self.assertIn("chosen corners: [0]", str(text))
         text = exposed.call(
-            "drag", {**handle, "x": 0, "y": 4, "to_x": 1, "to_y": 6}
+            "drag", {**handle, "target": "Vertex 2", "to": "(1, 6)"}
         )
         self.assertIn("  2: (1, 6)", str(text))
         self.assertIn("undo depth: 1", str(text))
         text = exposed.call("press", {**handle, "keys": "Ctrl+Z"})
         self.assertIn("  2: (0, 4)", str(text))
+        # A target must be what is there now (#550).
+        with self.assertRaisesRegex(ExposedError, "there are 3 vertices"):
+            exposed.call("click", {**handle, "target": "Vertex 5"})
+        with self.assertRaisesRegex(ExposedError, "is not what is there"):
+            exposed.call("click", {**handle, "target": "background (0, 4)"})
+        with self.assertRaisesRegex(ExposedError, "not revolved"):
+            exposed.call("click", {**handle, "target": "Mirror 1"})
+        with self.assertRaisesRegex(ExposedError, "is not `Vertex N`"):
+            exposed.call("click", {**handle, "target": "Corner 1"})
         with self.assertRaisesRegex(ExposedError, "names no keys"):
             exposed.call("press", {**handle, "keys": ""})
+
+    def test_screenshot(self) -> None:
+        """A picture of the window is written where it says (#567)."""
+        exposed.call("editors", {})
+        self.editor.resize(1280, 800)
+        self.editor.show()
+        qt_app.process_events()
+        handle: dict[str, object] = {"editor": "OutlineEditor 1"}
+        kept: Path = outline_exposed.SHOTS
+        with tempfile.TemporaryDirectory() as directory:
+            outline_exposed.SHOTS = Path(directory)
+            try:
+                made: Path = Path(
+                    str(exposed.call("screenshot", {**handle, "name": "a"}))
+                )
+                self.assertEqual(made, Path(directory) / "a.png")
+                self.assertTrue(made.read_bytes().startswith(b"\x89PNG"))
+                with self.assertRaisesRegex(ExposedError, "plain file"):
+                    exposed.call("screenshot", {**handle, "name": "../b"})
+            finally:
+                outline_exposed.SHOTS = kept
 
 
 if __name__ == "__main__":

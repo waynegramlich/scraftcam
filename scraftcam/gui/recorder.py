@@ -21,7 +21,12 @@ from functools import partial
 from pathlib import Path
 
 from scraftcam.exposed import exposed
-from scraftcam.exposed.steps import Recording, Step, recording_markdown
+from scraftcam.exposed.steps import (
+    Recording,
+    Step,
+    View,
+    recording_markdown,
+)
 from scraftcam.gui import outline_exposed
 from scraftcam.gui.outline_file import outline_text
 from scraftcam.packages import require
@@ -82,9 +87,9 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         The drawing's viewport, whose mouse is recorded.
     * `pressed` (`QPoint | None`):
         Where the left button went down in the viewport, while held.
-    * `waiting` (`tuple[str, dict[str, object], float] | None`):
-        The step whose gesture is being handled (its call, arguments
-        and time), filed with its state when the next gesture starts
+    * `waiting` (`tuple[str, dict[str, object], float, View] | None`):
+        The step whose gesture is being handled (its call, arguments,
+        time and view), filed with its state when the next gesture starts
         or Qt is idle.
     * `microphone` (`Microphone | None`):
         The microphone being recorded, if any.
@@ -93,6 +98,14 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
     * `began` (`float`):
         When the latest gesture began, in seconds from `started`
         (#522): a step's time, to match it with what was said.
+    * `target` (`str`):
+        What the held press is on (#550): `Vertex 2`, or
+        `background (x, y)`.
+    * `code` (`int | None`):
+        That point's code, or `None` for the background.
+    * `seen` (`View`):
+        The view when the latest gesture began (#566), restored
+        before its step is replayed.
     """
 
     def __init__(
@@ -129,7 +142,10 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         self.outline: str = outline_text(editor.view.drawing)
         self.steps: list[Step] = []
         self.pressed: QPoint | None = None
-        self.waiting: tuple[str, dict[str, object], float] | None = None
+        self.waiting: tuple[str, dict[str, object], float, View] | None = None
+        self.seen: View = ()
+        self.target: str = ""
+        self.code: int | None = None
         # The microphone and the steps share time 0 (#532).
         self.microphone: Microphone | None = (
             Microphone(path.with_suffix(".wav")) if speech else None
@@ -189,6 +205,7 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         if event.type() in STARTS:
             self.file()
             self.began = time.monotonic() - self.started
+            self.seen = outline_exposed.view_of(self.editor.view)
 
         # A press is held until its release says click or drag.
         if (
@@ -198,25 +215,38 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         ):
             at: QPoint = event.position().toPoint()
             if event.type() == QEvent.Type.MouseButtonPress:
+                # Named before the press can move or renumber it.
                 self.pressed = at
+                x: float
+                y: float
+                x, y = self.scene(at)
+                self.target, self.code = outline_exposed.target_at(
+                    self.editor.view, x, y
+                )
             elif (
                 event.type() == QEvent.Type.MouseButtonRelease
                 and self.pressed is not None
             ):
                 start: QPoint = self.pressed
                 self.pressed = None
-                x: float
-                y: float
-                x, y = self.scene(start)
                 moved: int = (at - start).manhattanLength()
                 if moved <= QApplication.startDragDistance():
-                    self.later("click", {"x": x, "y": y})
+                    self.later("click", {"target": self.target})
                 else:
+                    # The drop names another point, never the one
+                    # dragged there.
                     to_x: float
                     to_y: float
                     to_x, to_y = self.scene(at)
+                    to: str = outline_exposed.target_at(
+                        self.editor.view, to_x, to_y, skip=self.code
+                    )[0]
                     self.later(
-                        "drag", {"x": x, "y": y, "to_x": to_x, "to_y": to_y}
+                        "drag",
+                        {
+                            "target": self.target,
+                            "to": to.removeprefix("background "),
+                        },
                     )
         return super().eventFilter(watched, event)
 
@@ -245,7 +275,7 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
             Its arguments, but for the editor.
         """
         self.file()
-        self.waiting = (call, dict(arguments), self.began)
+        self.waiting = (call, dict(arguments), self.began, self.seen)
         QTimer.singleShot(0, self.file)
 
     def file(self) -> None:
@@ -255,17 +285,55 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
             call: str
             arguments: dict[str, object]
             began: float
-            call, arguments, began = self.waiting
+            seen: View
+            call, arguments, began, seen = self.waiting
             self.waiting = None
+            arguments = self.snapped(call, arguments)
             state: str = outline_exposed.state(self.handle)
             # A placeholder for the person to rewrite (#520).
             placeholder: str = exposed.narration(
                 call, {**arguments, "editor": "the editor"}
             )
             self.steps.append(
-                Step(call, arguments, placeholder, state, "", began)
+                Step(call, arguments, placeholder, state, "", began, seen)
             )
             self.write()
+
+    def snapped(
+        self, call: str, arguments: dict[str, object]
+    ) -> dict[str, object]:
+        """Give a vertex dropped on nothing the point it snapped to
+        (#550), once Qt has handled the drop.
+
+        Arguments:
+        * `call` (`str`):
+            The step's exposed function.
+        * `arguments` (`dict[str, object]`):
+            Its arguments.
+
+        Returns:
+        * (`dict[str, object]`): them, a drop's `to` the vertex's
+          place now.
+        """
+        # Only a drag of a vertex (code >= 0) to a bare spot.
+        to: object = arguments.get("to")
+        code: int | None = self.code
+        points: list[tuple[float, float]] = self.editor.view.drawing.points
+        if (
+            call != "drag"
+            or not isinstance(to, str)
+            or not to.startswith("(")
+            or code is None
+            or not 0 <= code < len(points)
+        ):
+            return arguments
+        x: float
+        y: float
+        x, y = points[code]
+        spot: str = outline_exposed.target_at(
+            self.editor.view, round(x, PLACES), round(y, PLACES), skip=code
+        )[0]
+        return {**arguments, "to": spot.removeprefix("background ")}
 
     def finish(self) -> str:
         """Stop the microphone, if any, and give each step the words

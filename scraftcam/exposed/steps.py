@@ -10,9 +10,9 @@ A new outline starts as a triangle.
 ## Corners
 
 * Click the lower left corner.  It turns yellow.
-  <!-- do: click -4, -3 -->
+  <!-- do: click Vertex 0 -->
 * Drag the top corner up and to the right.
-  <!-- do: drag 0, 4 -> 1, 6 -->
+  <!-- do: drag Vertex 2 -> (1, 6) -->
 * A step with no `do:` is there to be read.
 
 <!-- recording
@@ -21,7 +21,7 @@ scraftcam = "0.1.0"
 outline = ''
 [[states]]
 step = 1
-call = "click -4, -3"
+call = "click Vertex 0"
 state = '''
 ...
 '''
@@ -37,15 +37,20 @@ left out: the player fills it in.  The final `<!-- recording ... -->`
 is TOML: the format, the version, the starting outline file ('' is
 a new one) and each step's expected state, matched to its step by
 number and call, so an inserted step has no state until `--update`.
-A `Player` runs the steps forward and back, without Qt.
+A state may hold the view its gesture was made in (`view = [zoom, x,
+y]`: pixels per drawing step and the centre), restored before the
+step is replayed so that what snaps is the same (#566).  A `Player`
+runs the steps forward and back, without Qt.
 """
 
 from __future__ import annotations
 
+import difflib
 import inspect
 import json
 import re
 import tomllib
+import typing
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,8 +65,12 @@ FORMAT: int = 2
 # The arguments naming what a step acts on, filled in by the player.
 TARGETS: frozenset[str] = frozenset(("editor",))
 
-# Each step's recorded state and time, by (step number, call).
-Recorded = dict[tuple[int, str], tuple[str, float]]
+# A view: the zoom (pixels per drawing step) and the centre's X, Y;
+# `()` when not known (#566).
+View = tuple[float, ...]
+
+# Each step's recorded state, time and view, by (step number, call).
+Recorded = dict[tuple[int, str], tuple[str, float, View]]
 
 # A step's call, and the recording's closing comment.
 DO: re.Pattern[str] = re.compile(r"^\s*<!--\s*do:\s*(.*?)\s*-->\s*$")
@@ -75,7 +84,7 @@ class Step:
     """One step of a recording.
 
     Constructor:
-    * `Step(call, arguments, narration, state, section, time)`
+    * `Step(call, arguments, narration, state, section, time, view)`
 
     Attributes:
     * `call` (`str`):
@@ -92,6 +101,9 @@ class Step:
         When its gesture began, in seconds from the start of
         recording (#522), to match it with what was said; -1 when
         not known.
+    * `view` (`View`):
+        The view its gesture was made in, (zoom, x, y), restored
+        before it is replayed (#566); `()` when not known.
     """
 
     # Constructor arguments:
@@ -101,6 +113,7 @@ class Step:
     state: str = field(init=True, default="")
     section: str = field(init=True, default="")
     time: float = field(init=True, default=-1.0)
+    view: View = field(init=True, default=())
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,8 +211,10 @@ def _value_text(value: object) -> str:
     if isinstance(value, (int, float)):
         return repr(value)
     text: str = str(value)
+    # A comma may be bare inside one `(x, y)` (#550).
+    outside: str = re.sub(r"\([^()]*\)", "", text)
     bare: bool = bool(text) and not any(
-        mark in text for mark in (",", '"', "->", "--")
+        mark in outside for mark in (",", '"', "->", "--", "(", ")")
     )
     if bare and text.strip() == text and _value(text) == text:
         return text
@@ -212,7 +227,8 @@ def parse_call(text: str) -> tuple[str, dict[str, object]]:
     Arguments:
     * `text` (`str`):
         The call: its name, then its values in signature order,
-        separated by commas (`->` reads as one).
+        separated by commas (`->` reads as one; a comma inside
+        `(x, y)` is part of its value).
 
     Returns:
     * (`tuple[str, dict[str, object]]`): the name and the arguments.
@@ -229,7 +245,8 @@ def parse_call(text: str) -> tuple[str, dict[str, object]]:
     pieces: list[str] = [
         piece.strip()
         for piece in re.findall(
-            r'"(?:[^"\\]|\\.)*"|[^,"]+', rest.replace("->", ",")
+            r'"(?:[^"\\]|\\.)*"|[^,"(]*\([^)]*\)[^,"]*|[^,"]+',
+            rest.replace("->", ","),
         )
         if piece.strip()
     ]
@@ -260,7 +277,7 @@ def call_text(step: Step) -> str:
     for key in _parameters(step.call):
         if key in step.arguments:
             mark: str = " " if first else ", "
-            if key.startswith("to_") and not arrow:
+            if (key == "to" or key.startswith("to_")) and not arrow:
                 mark, arrow = " -> ", True
             text += mark + _value_text(step.arguments[key])
             first = False
@@ -285,6 +302,48 @@ def _comment_safe(text: str, what: str) -> str:
     if "-->" in text:
         raise ExposedError(f"{what} holds `-->`, which ends a comment")
     return text
+
+
+def _state_item(
+    item: object, source: str
+) -> tuple[tuple[int, str], tuple[str, float, View]]:
+    """Read one `[[states]]` table of the closing comment.
+
+    Arguments:
+    * `item` (`object`):
+        The table, as TOML gave it.
+    * `source` (`str`):
+        The file, for the messages.
+
+    Returns:
+    * (`tuple[tuple[int, str], tuple[str, float, View]]`): its step
+      number and call, then its state, time and view.
+
+    Raises:
+    * `ExposedError`: when it is not a good state table.
+    """
+    if not isinstance(item, dict):
+        raise ExposedError(f"{source}: a state is not a table")
+    number: object = item.get("step")
+    call: object = item.get("call")
+    state: object = item.get("state", "")
+    when: object = item.get("time", -1.0)
+    view: object = item.get("view", [])
+    if not (
+        isinstance(number, int)
+        and isinstance(call, str)
+        and isinstance(state, str)
+        and _is_number(when)
+        and isinstance(view, list)
+        and len(view) in (0, 3)
+        and all(_is_number(value) for value in view)
+    ):
+        raise ExposedError(f"{source}: state {item!r} is bad")
+    return (number, call), (
+        state,
+        float(typing.cast("float", when)),
+        tuple(float(value) for value in view),
+    )
 
 
 def _trailer(text: str, source: str) -> tuple[int, str, str, Recorded]:
@@ -330,22 +389,24 @@ def _trailer(text: str, source: str) -> tuple[int, str, str, Recorded]:
     states: Recorded = {}
     item: object
     for item in found:
-        if not isinstance(item, dict):
-            raise ExposedError(f"{source}: a state is not a table")
-        number: object = item.get("step")
-        call: object = item.get("call")
-        state: object = item.get("state", "")
-        when: object = item.get("time", -1.0)
-        if not (
-            isinstance(number, int)
-            and isinstance(call, str)
-            and isinstance(state, str)
-            and isinstance(when, (int, float))
-            and not isinstance(when, bool)
-        ):
-            raise ExposedError(f"{source}: state {item!r} is bad")
-        states[(number, call)] = (state, float(when))
+        key: tuple[int, str]
+        value: tuple[str, float, View]
+        key, value = _state_item(item, source)
+        states[key] = value
     return match.start(), version, outline, states
+
+
+def _is_number(value: object) -> bool:
+    """Tell whether `value` is a TOML number (not a Boolean).
+
+    Arguments:
+    * `value` (`object`):
+        The value read.
+
+    Returns:
+    * (`bool`): True for an `int` or `float`.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _make_step(
@@ -392,14 +453,20 @@ def _make_step(
                 call, arguments = parse_call(do.group(1))
             except ExposedError as error:
                 raise ExposedError(f"{source}:{number}: {error}") from error
-    narration: str = "\n".join(prose).strip()
-    state: str = ""
-    when: float = -1.0
+    # Its state, time and view, when recorded.
+    found: tuple[str, float, View] = ("", -1.0, ())
     if call:
-        state, when = states.get(
-            (index, call_text(Step(call, arguments))), ("", -1.0)
-        )
-    return Step(call, arguments, narration, state, section, when)
+        found = states.get((index, call_text(Step(call, arguments))), found)
+    narration: str = "\n".join(prose).strip()
+    return Step(
+        call,
+        arguments,
+        narration,
+        state=found[0],
+        section=section,
+        time=found[1],
+        view=found[2],
+    )
 
 
 def recording_from_markdown(text: str, source: str = "") -> Recording:
@@ -508,7 +575,7 @@ def recording_markdown(recording: Recording) -> str:
         if step.call:
             call: str = _comment_safe(call_text(step), f"step {index}")
             lines.append(f"  <!-- do: {call} -->")
-            if step.state or step.time >= 0:
+            if step.state or step.time >= 0 or step.view:
                 table.extend(
                     (
                         "",
@@ -519,6 +586,11 @@ def recording_markdown(recording: Recording) -> str:
                 )
             if step.time >= 0:
                 table.append(f"time = {round(step.time, 3)!r}")
+            if step.view:
+                values: str = ", ".join(
+                    repr(round(value, 6)) for value in step.view
+                )
+                table.append(f"view = [{values}]")
             if step.state:
                 table.append(
                     "state = " + _toml_text(_comment_safe(step.state, call))
@@ -560,12 +632,21 @@ def load(path: Path) -> Recording:
     return recording_from_markdown(path.read_text(encoding="utf-8"), str(path))
 
 
+def _unplaced(_view: View) -> None:
+    """Leave the view as it is: a `Player` with no view to set.
+
+    Arguments:
+    * `_view` (`View`):
+        The step's view, not used.
+    """
+
+
 @dataclass(slots=True)
 class Player:
     """Runs a recording's steps forward and back, on one object.
 
     Constructor:
-    * `Player(recording, target, depth, undo)`
+    * `Player(recording, target, depth, undo, place)`
 
     Attributes:
     * `recording` (`Recording`):
@@ -577,6 +658,9 @@ class Player:
         Gives the undo depth now.
     * `undo` (`Callable[[], None]`):
         Undoes one change.
+    * `place` (`Callable[[View], None]`):
+        Shows a step's recorded view before it runs (#566); by
+        default nothing is done.
     * `done` (`int`):
         How many steps have run.
     * `depths` (`list[int]`):
@@ -588,6 +672,7 @@ class Player:
     target: dict[str, object] = field(init=True)
     depth: Callable[[], int] = field(init=True)
     undo: Callable[[], None] = field(init=True)
+    place: Callable[[View], None] = field(init=True, default=_unplaced)
 
     # Remaining attributes (alphabetized):
     depths: list[int] = field(init=False, default_factory=list)
@@ -627,6 +712,8 @@ class Player:
             self.done += 1
             return ""
         try:
+            if step.view:
+                self.place(step.view)
             result: object = exposed.call(
                 step.call, {**step.arguments, **self.target}
             )
@@ -651,26 +738,53 @@ class Player:
             self.undo()
         self.done -= 1
 
+    def heading(self, index: int) -> str:
+        """Give a step's number, call and bullet, to name it in a
+        failure (#552).
+
+        Arguments:
+        * `index` (`int`):
+            The step, from 0.
+
+        Returns:
+        * (`str`): `step 2: drag Vertex 2 -> (1, 6)` and its bullet's
+          first line.
+        """
+        step: Step = self.recording.steps[index]
+        lines: list[str] = self.narration(index).splitlines() or [""]
+        return f"step {index + 1}: {call_text(step)}\n  * {lines[0]}"
+
     def mismatches(self) -> list[str]:
         """Run every step left, checking each step's state.
 
         Returns:
         * (`list[str]`): one message per step whose state differs
-          from the recording's (empty when all match).
+          from the recording's, giving only the lines that changed
+          (`-` expected, `+` got, #552); a step that fails ends the
+          run with its error.  Empty when all match.
         """
         # Each step's expected state against what it gave.
         found: list[str] = []
         while self.done < len(self.recording.steps):
-            step: Step = self.recording.steps[self.done]
-            number: int = self.done + 1
-            given: str = self.forward()
-            if (
-                step.call
-                and step.state
-                and given.strip() != step.state.strip()
-            ):
-                found.append(
-                    f"step {number} ({step.call}): expected\n"
-                    f"{step.state.strip()}\ngot\n{given.strip()}"
+            index: int = self.done
+            step: Step = self.recording.steps[index]
+            try:
+                given: str = self.forward()
+            except ExposedError as error:
+                found.append(f"{self.heading(index)}\n  failed: {error}")
+                break
+            if not (step.call and step.state):
+                continue
+            changes: list[str] = [
+                f"  {line}"
+                for line in difflib.unified_diff(
+                    step.state.strip().splitlines(),
+                    given.strip().splitlines(),
+                    n=0,
+                    lineterm="",
                 )
+                if not line.startswith(("---", "+++", "@@"))
+            ]
+            if changes:
+                found.append("\n".join([self.heading(index), *changes]))
         return found

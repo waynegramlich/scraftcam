@@ -5,9 +5,9 @@ move one, and take the move back.
 
 * Click the lower left corner to choose it: the buttons that act
   on corners now act on it.
-  <!-- do: click -4, -3 -->
+  <!-- do: click Vertex 0 -->
 * Drag the top corner up and to the right.  The edges follow it.
-  <!-- do: drag 0, 4 -> 1, 6 -->
+  <!-- do: drag Vertex 2 -> (1, 6) -->
 * Press Ctrl+Z to undo the move: the corner goes back.
   <!-- do: press Ctrl+Z -->
 
@@ -18,7 +18,7 @@ outline = ""
 
 [[states]]
 step = 1
-call = "click -4, -3"
+call = "click Vertex 0"
 state = '''
 file: (new)
 revolve: False
@@ -38,7 +38,7 @@ undo depth: 0
 
 [[states]]
 step = 2
-call = "drag 0, 4 -> 1, 6"
+call = "drag Vertex 2 -> (1, 6)"
 state = '''
 file: (new)
 revolve: False

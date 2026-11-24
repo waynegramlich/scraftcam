@@ -3622,11 +3622,19 @@ class OutlineView(QGraphicsView):
 
     # Method `OutlineView.fit()`:
     def fit(self) -> None:
-        """Fit the outline (and the origin) in the window."""
-        box: QRectF = self.outline.boundingRect().united(
-            QRectF(-1.0, -1.0, 2.0, 2.0)
-        )
-        self.fitInView(box, Qt.AspectRatioMode.KeepAspectRatio)
+        """Fit the outline, the origin and the dimensions shown, with
+        their letters, in the window (#572)."""
+        # Twice: a letter's room is in pixels, so it is known only
+        # once the zoom is near its last.
+        for _ in range(2):
+            box: QRectF = self.outline.boundingRect().united(
+                QRectF(-1.0, -1.0, 2.0, 2.0)
+            )
+            measure: DimensionItem
+            for measure in self.measures:
+                if measure.isVisible():
+                    box = box.united(measure.boundingRect())
+            self.fitInView(box, Qt.AspectRatioMode.KeepAspectRatio)
         self.place_handles()
 
     # Method `OutlineView.wheelEvent()`:

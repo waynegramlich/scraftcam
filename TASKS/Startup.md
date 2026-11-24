@@ -1,7 +1,6 @@
 <!-- Written by ai_contexts; do not edit. -->
 @4_Keep_out_Zones/Details.md
 @5_Planning_and_Running_Jobs/Details.md
-@5_Planning_and_Running_Jobs/Context.md
 @5.5_Stock_and_Materials/Details.md
 @5.6_Moving_a_Design_to_Another_Shop/Details.md
 @5.7_Jobs_with_One_Program_per_Tool_Change/Details.md
@@ -10,10 +9,10 @@
 @6.2_Outline_Editor/Details.md
 @6.3_Catalogs/Details.md
 @6.5_Tools_from_Outlines/Details.md
-@6.5_Tools_from_Outlines/Context.md
 @6.7_Tool_Kinds_in_the_Shop/Details.md
 @6.8_Shop_Directory_Layout/Details.md
-@6.8_Shop_Directory_Layout/Context.md
+@6.9_One_GUI/Details.md
+@6.9_One_GUI/Context.md
 @7_MCP_Interface/Details.md
 @7_MCP_Interface/Context.md
 @2_Document_a_Shop/Summary.md

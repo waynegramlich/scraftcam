@@ -9,19 +9,23 @@ drawing's own steps.
 
 from __future__ import annotations
 
+import re
+import time
 import typing
 import weakref
+from pathlib import Path
 
 from scraftcam.exposed import exposed
 from scraftcam.exposed.exposed import ExposedError
 from scraftcam.exposed.handles import Handles
+from scraftcam.gui.dimensions import ORIGIN
 from scraftcam.packages import require
 
 # `PySide6` is put on `sys.path` before it is imported.
 require("PySide6")
 # pylint: disable=wrong-import-position,wrong-import-order
 from PySide6.QtCore import QKeyCombination, QPoint, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QKeySequence  # noqa: E402
+from PySide6.QtGui import QKeySequence, QPixmap  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QToolButton, QWidget  # noqa: E402
 
@@ -38,6 +42,9 @@ if typing.TYPE_CHECKING:
 
 # The session's handles (reset when a replay starts).
 HANDLES: Handles = Handles()
+
+# Where `screenshot()` writes its pictures (#567).
+SHOTS: Path = Path.home() / ".scraftcam" / "screenshots"
 
 # The open editors, added by whoever makes one (`outline_editor.main()`
 # runs as `__main__`, so its class cannot be imported here to look
@@ -151,26 +158,216 @@ def _at(view: OutlineView, x: float, y: float) -> QPoint:
     return view.mapFromScene(QPointF(x, y))
 
 
+def view_of(view: OutlineView) -> tuple[float, float, float]:
+    """Give the view a gesture is made in (#566).
+
+    Arguments:
+    * `view` (`OutlineView`):
+        The editor's view.
+
+    Returns:
+    * (`tuple[float, float, float]`): the zoom, in pixels per drawing
+      step, and the drawing point at the viewport's centre.
+    """
+    centre: QPointF = view.mapToScene(view.viewport().rect().center())
+    return view.zoom(), centre.x(), centre.y()
+
+
+def place_view(view: OutlineView, shown: tuple[float, ...]) -> None:
+    """Show `view` at a recorded zoom and centre (#566), so that a
+    replayed gesture snaps as the recorded one did.
+
+    Arguments:
+    * `view` (`OutlineView`):
+        The editor's view.
+    * `shown` (`tuple[float, ...]`):
+        The zoom and the centre's X and Y, as `view_of()` gives them.
+
+    Raises:
+    * `ExposedError`: when it is not three numbers, or the zoom is
+      not positive.
+    """
+    # The zoom first (any quarter turns are kept), then the centre.
+    if len(shown) != 3 or shown[0] <= 0.0:
+        raise ExposedError(f"a view is (zoom, x, y), not {shown!r}")
+    zoom: float
+    x: float
+    y: float
+    zoom, x, y = shown
+    factor: float = zoom / view.zoom()
+    view.scale(factor, factor)
+    view.centerOn(QPointF(x, y))
+    view.place_handles()
+
+
+# A target as a step names it (#550): a point by its code, or a spot.
+TARGET: re.Pattern[str] = re.compile(
+    r"^(?:(?P<kind>Vertex|Mirror) (?P<index>\d+)|(?P<origin>Origin)"
+    r"|(?:background )?\((?P<x>[^,()]+),(?P<y>[^,()]+)\))$"
+)
+
+
+def _spot(value: float) -> str:
+    """Give a coordinate as a step writes it (`3`, `-1.25`).
+
+    Arguments:
+    * `value` (`float`):
+        The coordinate, in drawing steps.
+
+    Returns:
+    * (`str`): it, whole numbers without `.0`.
+    """
+    return str(int(value)) if float(value).is_integer() else repr(value)
+
+
+def _code_name(code: int) -> str:
+    """Give a point's name: `Vertex 2`, `Mirror 2` or `Origin`.
+
+    Arguments:
+    * `code` (`int`):
+        Its code (`OutlineView.corner_near()`).
+
+    Returns:
+    * (`str`): its name, as of now (#558).
+    """
+    # `outline_editor` imports this module's importers: imported late.
+    # pylint: disable-next=import-outside-toplevel
+    from scraftcam.gui.outline_editor import MIRRORED
+
+    if code == ORIGIN:
+        return "Origin"
+    if code <= MIRRORED:
+        return f"Mirror {MIRRORED - code}"
+    return f"Vertex {code}"
+
+
+def target_at(
+    view: OutlineView, x: float, y: float, *, skip: int | None = None
+) -> tuple[str, int | None]:
+    """Name what a gesture at (`x`, `y`) acts on (#550).
+
+    Arguments:
+    * `view` (`OutlineView`):
+        The editor's view.
+    * `x` (`float`):
+        Across, in drawing steps.
+    * `y` (`float`):
+        Up, in drawing steps.
+    * `skip` (`int | None`):
+        A point not to name (the one being dragged), or `None`.
+
+    Returns:
+    * (`tuple[str, int | None]`): `Vertex 2` (or `Mirror 2`,
+      `Origin`) and its code, else `background (x, y)` and `None`.
+    """
+    code: int | None = view.corner_near(QPointF(x, y))
+    if code is None or code == skip:
+        return f"background ({_spot(x)}, {_spot(y)})", None
+    return _code_name(code), code
+
+
+def _place(view: OutlineView, target: str) -> tuple[QPointF, int | None]:
+    """Find where a named target is now.
+
+    Arguments:
+    * `view` (`OutlineView`):
+        The editor's view.
+    * `target` (`str`):
+        `Vertex 2`, `Mirror 2`, `Origin`, `background (x, y)` or
+        `(x, y)`.
+
+    Returns:
+    * (`tuple[QPointF, int | None]`): the drawing point, and the
+      point's code (`None` for a spot).
+
+    Raises:
+    * `ExposedError`: when it names nothing there is.
+    """
+    # `outline_editor` imports this module's importers: imported late.
+    # pylint: disable-next=import-outside-toplevel
+    from scraftcam.gui.outline_editor import mirror_code
+
+    match: re.Match[str] | None = TARGET.match(target.strip())
+    if match is None:
+        raise ExposedError(
+            f"`{target}` is not `Vertex N`, `Mirror N`, `Origin` or `(x, y)`"
+        )
+    if match.group("origin"):
+        return QPointF(0.0, 0.0), ORIGIN
+    if match.group("kind"):
+        index: int = int(match.group("index"))
+        count: int = len(view.drawing.points)
+        if index >= count:
+            raise ExposedError(f"no {target}: there are {count} vertices")
+        x: float
+        y: float
+        x, y = view.drawing.points[index]
+        if match.group("kind") == "Mirror":
+            if not view.drawing.revolve:
+                raise ExposedError(f"no {target}: the outline is not revolved")
+            return QPointF(-x, y), mirror_code(index)
+        return QPointF(x, y), index
+    try:
+        return (
+            QPointF(float(match.group("x")), float(match.group("y"))),
+            None,
+        )
+    except ValueError as error:
+        raise ExposedError(f"`{target}` has a bad number") from error
+
+
+def _hit(view: OutlineView, target: str) -> QPointF:
+    """Find a target, checking that it is what is there now, so a
+    replay acts on what the recording did (#550).
+
+    Arguments:
+    * `view` (`OutlineView`):
+        The editor's view.
+    * `target` (`str`):
+        The target, as `_place()` reads it.
+
+    Returns:
+    * (`QPointF`): its drawing point.
+
+    Raises:
+    * `ExposedError`: when it names nothing, or something else is hit.
+    """
+    point: QPointF
+    code: int | None
+    point, code = _place(view, target)
+    found: str
+    hit: int | None
+    found, hit = target_at(view, point.x(), point.y())
+    if hit != code:
+        raise ExposedError(f"`{target}` is not what is there: {found}")
+    return point
+
+
 @exposed.changes
-def click(editor: str, x: float, y: float) -> str:
-    """Click {editor} at ({x}, {y})."""
+def click(editor: str, target: str) -> str:
+    """Click {target} in {editor}."""
     # A press and release at one pixel; then the events it caused.
     view: OutlineView = _editor(editor).view
+    point: QPointF = _hit(view, target)
     QTest.mouseClick(
-        view.viewport(), Qt.MouseButton.LeftButton, pos=_at(view, x, y)
+        view.viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=_at(view, point.x(), point.y()),
     )
     QTest.qWait(1)
     return state(editor)
 
 
 @exposed.changes
-def drag(editor: str, x: float, y: float, *, to_x: float, to_y: float) -> str:
-    """Drag in {editor} from ({x}, {y}) to ({to_x}, {to_y})."""
+def drag(editor: str, target: str, *, to: str) -> str:
+    """Drag {target} in {editor} to {to}."""
     # Pressed, moved through the middle (a drag starts only once the
-    # pointer moves), then released.
+    # pointer moves), then released where the drop is now.
     view: OutlineView = _editor(editor).view
-    start: QPoint = _at(view, x, y)
-    end: QPoint = _at(view, to_x, to_y)
+    start_at: QPointF = _hit(view, target)
+    drop: QPointF = _place(view, to)[0]
+    start: QPoint = _at(view, start_at.x(), start_at.y())
+    end: QPoint = _at(view, drop.x(), drop.y())
     port: QWidget = view.viewport()
     QTest.mousePress(port, Qt.MouseButton.LeftButton, pos=start)
     QTest.mouseMove(port, (start + end) / 2)
@@ -214,3 +411,22 @@ def button(editor: str, word: str) -> str:
     found.click()
     QTest.qWait(1)
     return state(editor)
+
+
+@exposed.reads
+def screenshot(editor: str, name: str = "") -> str:
+    """Take a picture of {editor}."""
+    # The whole window as drawn now, into `SHOTS`; its path comes
+    # back, for Claude to look at (#567).
+    shown: OutlineEditor = _editor(editor)
+    QTest.qWait(1)
+    if not name:
+        name = time.strftime("%Y-%m-%d_%H-%M-%S")
+    if not re.fullmatch(r"[\w.-]+", name) or name.startswith("."):
+        raise ExposedError(f"`{name}` is not a plain file name")
+    SHOTS.mkdir(parents=True, exist_ok=True)
+    path: Path = SHOTS / f"{name.removesuffix('.png')}.png"
+    picture: QPixmap = shown.grab()
+    if picture.isNull() or not picture.save(str(path), "PNG"):
+        raise ExposedError(f"no picture could be written to {path}")
+    return str(path)
