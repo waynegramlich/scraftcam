@@ -238,6 +238,34 @@ class TestEndToEnd(unittest.TestCase):
         """Press a button, which must not be greyed out."""
         self.assertEqual(self.ask(f"press {label}"), "ok", label)
 
+    def start(self) -> None:
+        """Press Start once it is no longer greyed out (#580).
+
+        Start turns normal a little after the origin is set, so a
+        test that presses it straight after `open_program()` can
+        find it still greyed out.
+        """
+
+        # Wait for the one run button to read Start, not greyed out.
+        def start_ready() -> bool:
+            buttons: dict[str, str] = self.shown()["buttons"]
+            return buttons.get("Start") == "normal"
+
+        # Name what greys it out: the origin, a drawing, or a run the
+        # HMI still thinks is going (the run button's word).
+        shown: dict[str, Any] = self.shown()
+        run: dict[str, str] = {
+            word: state
+            for word, state in shown["buttons"].items()
+            if word in ("Start", "Pause", "Resume", "Restart")
+        }
+        self.wait_for(
+            f"Start to turn normal (origin_set {shown['origin_set']}, "
+            f"drawing {shown.get('drawing')}, run button {run})",
+            start_ready,
+        )
+        self.press("Start")
+
     def shown(self) -> dict[str, Any]:
         """Return what the window shows."""
         shown: dict[str, Any] = json.loads(self.ask("show"))
@@ -385,7 +413,7 @@ class TestEndToEnd(unittest.TestCase):
             "the second tool's line",
             lambda: self.shown()["coming"].startswith("T8 M6"),
         )
-        self.press("Start")
+        self.start()
         self.wait_for("T8", lambda: self.status()["tool"] == "8")
         time.sleep(0.3)
         self.wait_idle()
@@ -396,12 +424,16 @@ class TestEndToEnd(unittest.TestCase):
         """Pause holds the position, Resume goes on, and Reset stops."""
         self.ask("speed 1")
         self.open_program("slow.ngc", SLOW_MOVE)
-        self.press("Start")
+        self.start()
         self.wait_for("moving", lambda: self.position()[0] > 0.05)
-        self.wait_for(
-            "Start to grey out",
-            lambda: self.shown()["buttons"]["Start"] == "disabled",
-        )
+
+        # The one run button now reads Pause (#96), and jogs are
+        # greyed out.
+        def pause_shown() -> bool:
+            buttons: dict[str, str] = self.shown()["buttons"]
+            return buttons.get("Pause") == "normal" and "Start" not in buttons
+
+        self.wait_for("the run button to read Pause", pause_shown)
         self.assertIn("greyed out", self.ask("press +X"))
         self.press("Pause")
         self.wait_for("paused", lambda: self.status()["state"] == "paused")
@@ -421,7 +453,10 @@ class TestEndToEnd(unittest.TestCase):
         time.sleep(0.3)
         self.assertLess(stopped[0], 3.0)
         self.assertEqual(self.position(), stopped)
-        self.assertEqual(self.shown()["buttons"]["Start"], "normal")
+
+        # Stopped, the run button starts again (Start or Restart).
+        buttons: dict[str, str] = self.shown()["buttons"]
+        self.assertIn("normal", (buttons.get("Start"), buttons.get("Restart")))
 
     def test_hmi_closed_and_opened(self) -> None:
         """LinuxCNC outlives the HMI; a new one keeps what it had."""
@@ -451,7 +486,7 @@ class TestEndToEnd(unittest.TestCase):
         self.open_program("demo.ngc", done.stdout)
 
         # Run it, following the machine.
-        self.press("Start")
+        self.start()
         samples: list[tuple[int, int, tuple[float, float, float]]] = []
         started: bool = False
         end: float = time.monotonic() + DEMO_TIME

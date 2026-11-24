@@ -504,6 +504,9 @@ class HMI(QWidget):
       that need the operator: the carousel's swaps; `None` with no
       carousel, when every change does (#106).
     * `ended` (`bool`): True once a run has come to its end (Restart).
+    * `program_run` (`bool`): True from Start (or Resume) until that
+      run ends or is stopped, so that a Home, MDI or Set Origin
+      coming back to idle does not count as a run's end (#580).
     * `plan` (`QLabel`): The tool cutting now, the next few, and the
       end (`tool_plan()`).
     * `quit_button` (`QPushButton`): Quit, hidden when the HMI is a
@@ -576,6 +579,7 @@ class HMI(QWidget):
         # and Stop (`T.g~6` #85, #96, #97; no minimal form,
         # #168).
         self.ended: bool = False
+        self.program_run: bool = False
         self.at: int = 0
         self.manual: frozenset[int] | None = None
         self.run_toggle: QPushButton = QPushButton("Start")
@@ -1264,6 +1268,7 @@ class HMI(QWidget):
             self.machine.resume()
         else:
             self.machine.run(self.start)
+        self.program_run = True
         self.set_running(True, False)
 
     # Method `HMI.name_run_toggle()`:
@@ -1458,6 +1463,7 @@ class HMI(QWidget):
         self.machine.stop()
         self.start = 0
         self.ended = False
+        self.program_run = False
         self.set_running(False, False)
 
     # Method `HMI.on_jog()`:
@@ -1867,9 +1873,12 @@ class HMI(QWidget):
             (status.state != "idle", status.state == "paused")
             != (self.running, self.paused)
         ):
+            # Only the end of a program run is a run's end (#580).
             finished: bool = self.running and status.state == "idle"
-            if finished:
+            if finished and self.program_run:
                 self.ended = True
+            if finished:
+                self.program_run = False
             self.set_running(status.state != "idle", status.state == "paused")
 
         # A pause no one asked for is the program's (`M0`, at a tool

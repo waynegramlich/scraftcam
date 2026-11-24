@@ -116,10 +116,6 @@ Suspended while its children work; its own items resume after
   L10 P<n> Z<height>` (#80, #81, #83).
 * #165 the Job tab: a directory of `.nc` files, one tool each, in
   name order (#74, #77, #78); waits on `T.npfetc~5.4`.
-* #426 (2026-11-22): the LinuxCNC end-to-end suite, 8 of 10 pass.
-  `test_pause_resume_reset` (`KeyError: 'Start'`) and
-  `test_path_of_the_demonstration` ("Start is greyed out") expect a
-  [Start] button; likely out of date since the one run button
-  (Start/Pause/Resume/Restart, #96).  Not looked into.
+* #426 done 2026-11-23 in `T.og~6.9` #S1: all 10 pass.
 * `lcnc_hmi.py` goes once all of it is in the GUI (#57); later the
   GUI starts LinuxCNC itself (#64), one command port (#65).

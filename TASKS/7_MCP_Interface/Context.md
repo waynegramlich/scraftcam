@@ -82,7 +82,8 @@ the scratchpad (the editor saves every change).
 ## Open
 
 * The #565 plan is done (#566, #568, #550, #567, #552, and #572).
-  Next: the merge of the two GUIs (where: being decided).
+  The merge is `T.og~6.9`: the editor a panel of `scraftcam.run`,
+  one MCP port for everything (#577, #585).
 * #569 `find corner` finds nothing (narrations lack plain words).
 * #571 the user's two live recordings use the old (x, y) form and
   no longer load: record again.
