@@ -498,6 +498,34 @@ class TestConnect(unittest.TestCase):
         with self.assertRaises(ValueError):
             scraftpybind.connect("gui")
 
+    # Method `TestConnect.test_connect_cli()`:
+    def test_connect_cli(self) -> None:
+        """The extracted CLI when none is on the `PATH`, or `always`."""
+        with tempfile.TemporaryDirectory() as directory:
+            cli: Path = Path(directory) / "solidcraft-cli"
+            cli.touch()
+            with (
+                mock.patch.object(scraftpybind, "SOLIDCRAFT_CLI", cli),
+                mock.patch.object(shutil, "which", return_value=None),
+            ):
+                found: Transport = scraftpybind.connect_cli("headless")
+                assert isinstance(found, HeadlessTransport)
+                self.assertEqual(found.cli, str(cli))
+            with (
+                mock.patch.object(scraftpybind, "SOLIDCRAFT_CLI", cli),
+                mock.patch.object(shutil, "which", return_value="/x"),
+            ):
+                found = scraftpybind.connect_cli("headless")
+                assert isinstance(found, HeadlessTransport)
+                self.assertNotEqual(found.cli, str(cli))
+                found = scraftpybind.connect_cli("headless", always=True)
+                assert isinstance(found, HeadlessTransport)
+                self.assertEqual(found.cli, str(cli))
+            self.assertIsInstance(
+                scraftpybind.connect_cli("8080", always=True),
+                ControlTransport,
+            )
+
     # Method `TestConnect.test_control_dir()`:
     def test_control_dir(self) -> None:
         """`SOLIDCRAFT_CONTROL_DIR`, then `XDG_DATA_HOME`, then home."""

@@ -939,7 +939,10 @@ def model_tool(
     if color:
         solidcraft.appearance.assign(bodies=[body], color=color)
     sketch: str = f"{name} flutes"
-    send_batch(solidcraft, flute_steps(sketch, tool_flute_runs(*tool), at))
+    send_batch(
+        solidcraft.transport,
+        flute_steps(sketch, tool_flute_runs(*tool), at),
+    )
     return ModeledTool(body, sketch, as_component(solidcraft, body, sketch))
 
 
@@ -1087,7 +1090,7 @@ def _cached_tool(
         solidcraft.appearance.assign(bodies=[body], color=color)
     sketch: str = f"{name} flutes"
     send_batch(
-        solidcraft,
+        solidcraft.transport,
         flute_steps(sketch, tool_flute_runs(*tool), (0.0, 0.0, 0.0)),
     )
     solidcraft.component.move_sketches(

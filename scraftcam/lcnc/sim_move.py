@@ -21,24 +21,13 @@ a second however fast they are sent.
 """
 
 import argparse
-import shutil
 import sys
 import time
-from pathlib import Path
 
 from ..pybind.scraftpybind import (
-    HeadlessTransport,
     PyBind,
     Transport,
-    connect,
-)
-
-# A `solidcraft-cli` extracted from SolidCraft's AppImage, for
-# headless sessions when none is on the `PATH` (as in
-# `demo.py`).
-SOLIDCRAFT_CLI: Path = (
-    Path(__file__).resolve().parents[2]
-    / "solidcraft/squashfs-root/usr/bin/solidcraft-cli"
+    connect_cli,
 )
 
 # The cubes' size (mm); the moving one goes this far and back.
@@ -230,13 +219,7 @@ def main() -> int:
     # Connect, using the extracted `solidcraft-cli` when there is none
     # on the `PATH`.
     options: argparse.Namespace = arguments()
-    transport: Transport = connect(options.where)
-    if (
-        isinstance(transport, HeadlessTransport)
-        and shutil.which(transport.cli) is None
-        and SOLIDCRAFT_CLI.exists()
-    ):
-        transport = HeadlessTransport(cli=str(SOLIDCRAFT_CLI))
+    transport: Transport = connect_cli(options.where)
 
     # A SolidCraft that is not there is reported in one line.
     try:

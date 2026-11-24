@@ -13,8 +13,12 @@
 @6.8_Tools_Outlines_and_the_Shop_Layout/Context.md
 @6.10_GUI_Cleanup/Details.md
 @6.10_GUI_Cleanup/Context.md
+@6.11_Support_Assemblies/Details.md
+@6.11_Support_Assemblies/Context.md
 @7_MCP_Interface/Details.md
 @7_MCP_Interface/Context.md
+@8_Documentation/Details.md
+@8_Documentation/Context.md
 @2_Document_a_Shop/Summary.md
 @../ISSUES/2_Archive_Merged_GitHub_Repositories/Summary.md
 @../ISSUES/3_Main_Part_Goes_Translucent_in_show_demo/Summary.md

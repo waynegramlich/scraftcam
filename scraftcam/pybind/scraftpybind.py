@@ -73,6 +73,13 @@ REPLY_TIMEOUT: float = 3660.0
 # Where SolidCraft is downloaded, for the message when it is missing.
 RELEASES: str = "https://github.com/tangency-labs/solidcraft/releases"
 
+# A `solidcraft-cli` extracted from SolidCraft's AppImage, for
+# headless sessions (if it is there; it is not part of this project).
+SOLIDCRAFT_CLI: Path = (
+    Path(__file__).resolve().parents[2]
+    / "solidcraft/squashfs-root/usr/bin/solidcraft-cli"
+)
+
 # How long a headless session gets to exit, in seconds: after its
 # output ends, or after its input is closed (it is then killed).
 EXIT_TIMEOUT: float = 10.0
@@ -583,6 +590,37 @@ def connect(where: str) -> Transport:
     if not where.isdigit():
         raise ValueError(f"{where=} is not a port number or `headless`")
     return ControlTransport(int(where))
+
+
+# Function `connect_cli()`:
+def connect_cli(where: str, *, always: bool = False) -> Transport:
+    """Return a transport, headless ones using the extracted CLI.
+
+    A headless session uses the extracted `solidcraft-cli`
+    (`SOLIDCRAFT_CLI`) when it exists and none is on the `PATH`, or,
+    with `always`, even when one is: the one the AppImage puts there
+    (`~/.local/bin`) runs the AppImage, which needs FUSE, and the
+    `lcnc` box has no `fusermount`.
+
+    Arguments:
+    * `where` (`str`): A GUI's control port, or `headless`.
+    * `always` (`bool`): True to prefer the extracted CLI to the
+      `PATH`'s.
+
+    Returns:
+    * (`Transport`): The transport, which connects on first use.
+
+    Raises:
+    * `ValueError`: If `where` is neither.
+    """
+    found: Transport = connect(where)
+    if (
+        isinstance(found, HeadlessTransport)
+        and (always or shutil.which(found.cli) is None)
+        and SOLIDCRAFT_CLI.exists()
+    ):
+        found = HeadlessTransport(cli=str(SOLIDCRAFT_CLI))
+    return found
 
 
 # Class `CommandNamespace`:

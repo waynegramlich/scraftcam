@@ -20,9 +20,9 @@ type checking.
 """
 
 import math
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias, cast
 
 if TYPE_CHECKING:
     from .pybind.scraftpybind import JSON, PyBind
@@ -1074,30 +1074,50 @@ class RoundedPolygon:
             """
             return point[0] * mm_per_unit, point[1] * mm_per_unit
 
-        curves: list[str] = []
-        segment: XYSegment
-        for segment in self.segments:
-            # SolidCraft's arcs go counter-clockwise from `start` to
-            # `end`, so a clockwise arc is drawn from its end.
-            result: JSON
-            if isinstance(segment, LineSegment):
-                result = solidcraft.sketch.line(
-                    points=[mm(segment.start), mm(segment.end)]
-                )
-            else:
-                ends: tuple[Point, Point] = (segment.start, segment.end)
-                if segment.sweep < 0.0:
-                    ends = (segment.end, segment.start)
-                result = solidcraft.sketch.arc_center_point(
-                    center=mm(segment.center),
-                    start=mm(ends[0]),
-                    end=mm(ends[1]),
-                )
-            assert isinstance(result, dict)
-            ids: JSON = result["curves"]
-            assert isinstance(ids, list)
-            curves += [str(curve) for curve in ids]
-        return curves
+        return draw_segments(solidcraft, self.segments, mm)
+
+
+# Function `draw_segments()`:
+def draw_segments(
+    solidcraft: "PyBind",
+    segments: Sequence[XYSegment],
+    place: Callable[[Point], Point],
+) -> list[str]:
+    """Draw segments, each point placed, into the open sketch.
+
+    Arguments:
+    * `solidcraft` (`PyBind`): Where to draw them.
+    * `segments` (`Sequence[XYSegment]`): The lines and arcs.
+    * `place` (`Callable[[Point], Point]`): Where each of their points
+      goes in the sketch (millimeters).
+
+    Returns:
+    * (`list[str]`): The ids of the curves drawn, in order.
+    """
+    curves: list[str] = []
+    segment: XYSegment
+    for segment in segments:
+        # SolidCraft's arcs go counter-clockwise from `start` to
+        # `end`, so a clockwise arc is drawn from its end.
+        result: JSON
+        if isinstance(segment, LineSegment):
+            # Points as tuples, which the transport sends as lists.
+            line: list[Point] = [place(segment.start), place(segment.end)]
+            result = solidcraft.sketch.line(points=cast("JSON", line))
+        else:
+            ends: tuple[Point, Point] = (segment.start, segment.end)
+            if segment.sweep < 0.0:
+                ends = (segment.end, segment.start)
+            result = solidcraft.sketch.arc_center_point(
+                center=place(segment.center),
+                start=place(ends[0]),
+                end=place(ends[1]),
+            )
+        assert isinstance(result, dict)
+        ids: JSON = result["curves"]
+        assert isinstance(ids, list)
+        curves += [str(curve) for curve in ids]
+    return curves
 
 
 # Class `Hole`:

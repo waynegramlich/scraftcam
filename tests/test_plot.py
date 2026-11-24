@@ -1,5 +1,6 @@
 """Tests for `plot.py`: run `python3 -m unittest -v`."""
 
+import itertools
 import json
 import math
 import re
@@ -9,11 +10,16 @@ from typing import Any, cast
 from scraftcam.gcode import CNC
 from scraftcam.geometry import ArcSegment
 from scraftcam.plot import (
+    MAX_POINTS,
+    PathMove,
+    SpacePoint,
     command_moves,
     path_moves,
+    path_steps,
     plot_html,
     read_gcode,
     sketch_path,
+    sketch_steps,
 )
 from tests.test_gcode import milling
 from tests.test_geometry import square
@@ -164,6 +170,68 @@ class TestPlot(unittest.TestCase):
         self.assertAlmostEqual(first[1][2], 0.05 * 25.4)
         self.assertAlmostEqual(first[2][2], -0.1 * 25.4)
         self.assertGreater(len(first), 20)
+
+    def test_jumps_split_polylines(self) -> None:
+        """A jump starts a new `sketch.line3d`; joined moves share one."""
+        moves: list[PathMove] = [
+            _move([[0, 0, 0], [1, 0, 0]]),
+            _move([[1, 0, 0], [1, 1, 0]]),
+            _move([[5, 5, 0], [6, 5, 0]]),
+            _move([[6, 5, 0], [6, 5, 0]]),
+        ]
+        steps: list[dict[str, Any]] = path_steps(moves, 2.0)
+        self.assertEqual(
+            [step["params"] for step in steps],
+            [
+                {"points": [[0, 0, 0], [2, 0, 0], [2, 2, 0]]},
+                {"points": [[10, 10, 0], [12, 10, 0]]},
+            ],
+        )
+
+    def test_long_polylines_split(self) -> None:
+        """A polyline longer than `MAX_POINTS` shares its split points."""
+        count: int = 2 * MAX_POINTS + 10
+        points: list[SpacePoint] = [[i, 0.0, 0.0] for i in range(count)]
+        steps: list[dict[str, Any]] = path_steps([_move(points)], 1.0)
+        pieces: list[list[SpacePoint]] = [
+            step["params"]["points"] for step in steps
+        ]
+        self.assertEqual(len(pieces), 3)
+        piece: list[SpacePoint]
+        for piece in pieces:
+            self.assertLessEqual(len(piece), MAX_POINTS)
+        first: list[SpacePoint]
+        second: list[SpacePoint]
+        for first, second in itertools.pairwise(pieces):
+            self.assertEqual(first[-1], second[0])
+        self.assertEqual(sum(len(p) - 1 for p in pieces), count - 1)
+
+    def test_sketch_steps(self) -> None:
+        """A batch is create, options, drawing, finish, and maybe hide."""
+        steps: list[dict[str, Any]] = sketch_steps("T01 cuts", [], hide=True)
+        self.assertEqual(
+            [step["command"] for step in steps],
+            [
+                "sketch.create",
+                "sketch.options",
+                "sketch.finish",
+                "browser.visibility",
+            ],
+        )
+        self.assertEqual(len(sketch_steps("T01 cuts", [])), 3)
+
+
+# Function `_move()`:
+def _move(points: list[SpacePoint]) -> PathMove:
+    """Return a straight cut for a test.
+
+    Arguments:
+    * `points` (`list[SpacePoint]`): Its points.
+
+    Returns:
+    * (`PathMove`): The move.
+    """
+    return {"g": 1, "line": 0, "pts": points, "f": 1.0, "tool": 1}
 
 
 # Class `FakeTransport`:

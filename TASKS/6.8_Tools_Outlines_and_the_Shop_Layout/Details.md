@@ -6,10 +6,12 @@
 A tool's facts live in one place on disk, beside its kind's outline,
 and the shop's directory tree is what the GUI's tree shows.
 
-* **A directory per object**: `tools/KIND/` holds the kind's outline
-  file (`KIND.outline.toml`), its `.svg` and its page; each tool has
-  a directory of its own (its `.toml`, drawing, page and catalog
-  files).
+* **A directory per tool outline** (#653): `KIND/` holds the kind's
+  outline file (`KIND.outline.toml`), its `.svg` and its page.  Most
+  ship in the `scraftcam` package and are not edited; a shop's own
+  may not reuse a shipped name (#655).  The shop's tools of a kind
+  are listed in one `KIND.toml` (#656); catalogs stay in a catalog
+  directory each (#654).
 * **The outline is the template** (#631, #391): the kind's outline
   file's dimension (letters) table says which fields every tool of
   that kind has in its `.toml`; each tool gives only its values.

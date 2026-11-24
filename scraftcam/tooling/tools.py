@@ -1292,7 +1292,7 @@ class DoubleEndCountersink:
 
         # Draw the flutes on it.
         send_batch(
-            solidcraft,
+            solidcraft.transport,
             flute_steps(f"{self.name()} flutes", self.flute_runs(), tip, 1.0),
         )
         return bodies[0]

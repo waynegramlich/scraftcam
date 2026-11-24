@@ -21,7 +21,6 @@ python3 -m scraftcam.demo headless > demo.ngc
 """
 
 import dataclasses
-import shutil
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -42,21 +41,12 @@ from .machine import Machine, ToolEntry
 from .plot import sketch_path, write_plot
 from .pybind.scraftpybind import (
     JSON,
-    HeadlessTransport,
     PyBind,
     Transport,
-    connect,
+    connect_cli,
 )
 from .shops import cnc_machine, read
 from .tooling.shop_registries import use_shop
-
-# A `solidcraft-cli` extracted from SolidCraft's AppImage, for
-# headless sessions when none is on the `PATH` (if it is there; it is
-# not part of this project).
-SOLIDCRAFT_CLI: Path = (
-    Path(__file__).resolve().parents[1]
-    / "solidcraft/squashfs-root/usr/bin/solidcraft-cli"
-)
 
 # SolidCraft's sketch coordinates are millimeters.
 MM_PER_INCH: float = 25.4
@@ -254,13 +244,7 @@ def model(
     """
     # A headless session uses the extracted `solidcraft-cli` when none
     # is on the `PATH` and it exists.
-    transport: Transport = connect(where)
-    if (
-        isinstance(transport, HeadlessTransport)
-        and shutil.which(transport.cli) is None
-        and SOLIDCRAFT_CLI.exists()
-    ):
-        transport = HeadlessTransport(cli=str(SOLIDCRAFT_CLI))
+    transport: Transport = connect_cli(where)
 
     # Build the plate, draw the tool path, and let it show through.
     with transport:

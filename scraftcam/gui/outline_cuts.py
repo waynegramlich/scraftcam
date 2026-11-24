@@ -87,11 +87,31 @@ def pieces(outline: Outline, axis: int, gap: float) -> list[Piece]:
     Returns:
     * (`list[Piece]`): The pieces, low to high.
     """
+    return cut_pieces(outline.points, outline.hides, axis, gap)
+
+
+# Function `cut_pieces()`:
+def cut_pieces(
+    points: list[tuple[float, float]],
+    hides: list[Hide],
+    axis: int,
+    gap: float,
+) -> list[Piece]:
+    """Return the pieces along an axis, from the points and hides.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The drawing's points.
+    * `hides` (`list[Hide]`): Its hidden strips.
+    * `axis` (`int`): `HIDE_X` or `HIDE_Y`.
+    * `gap` (`float`): The gap each cut closes to.
+
+    Returns:
+    * (`list[Piece]`): Each piece's low and high ends, and its shift,
+      low to high.
+    """
     # Each cut moves everything above it down by what it hides.
     cuts: list[tuple[float, float]] = sorted(
-        strip(outline.points, hide)
-        for hide in outline.hides
-        if hide.axis == axis
+        strip(points, hide) for hide in hides if hide.axis == axis
     )
     found: list[Piece] = []
     start: float = -FAR

@@ -24,6 +24,26 @@ Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
 
 ## The Layout (decided, not built)
 
+* #653 (the user, 2026-11-24; replaces the directory per tool
+  below): a directory per tool outline (kind); most outlines ship
+  in the package (`scraftcam/outlines/KIND/`) and are not edited.
+  #655 a shop's own (`SHOP_DIR/outlines/KIND/`) reusing a shipped
+  name is an error.  #656 one `KIND.toml` per kind in the shop,
+  listing all its tools of that kind.  #654 catalog files stay in
+  one directory per catalog (e.g. a new 2027 Shars catalog is a new
+  directory); a tool names its catalog, page and part number.
+  #657 Steps reworded (below).
+* #658 the shop's `KIND.toml` files are in `SHOP_DIR/tools/`; a
+  tool's name is unique across the shop's kinds (a repeat is an
+  error).  #659 the shop owner chooses its catalogs (in the shop);
+  scraftcam only gives the tools for getting facts out of them.
+* #683 a package shop opens read only, with [Copy to My Shops] into
+  a directory of `~/.scraftcam/settings.toml`.  #682 with no
+  settings file, only the package's example shop is listed; the
+  file is written on the first [Add Shop] or [Copy to My Shops].
+* #660-#663, #665-#667: assemblies are `T.sa~6.11` (its
+  `Details.md`); every tool is an assembly.  #661 #S2 uses the drill.
+
 * A directory per object.  `SHOP_DIR/README.md` (generated, indexes
   everything; #464).  `tools/KIND/` holds `KIND.outline.toml`, its
   `.svg` and `KIND.md` (the kind's page, listing its tools), and a
@@ -43,10 +63,13 @@ Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
   width, values on the dimensions).
 * `T.tfo~6.5` #453's `ball_end_mill` waits for this.
 
-## Steps (#638, proposed, not yet agreed)
+## Steps (#638, agreed 2026-11-24; reworded by #657)
 
 * #S1 shops from `~/.scraftcam/settings.toml`; the example shop into
-  the package (#433).  #S2 `tools/KIND/` for the Z setter
-  (303-3104).  #S3 the letters table as the tool `.toml`'s template
-  (#631).  #S4 the tree shows the files (#615).  #S5 the tool
-  panel's one table (after #586).  #S6 the rest of the example shop.
+  the package (#433).  #S2 the Z setter's (303-3104) outline
+  directory in the package, and its entry in the example shop's
+  `KIND.toml`.  #S3 the letters table as the template for a tool's
+  entry (#631).  #S4 assemblies, the Z setter then the vise
+  (`T.sa~6.11`, #668).  #S5 the tree shows the files (#615).  #S6
+  the tool panel's one table (after #586).  #S7 the rest of the
+  example shop.

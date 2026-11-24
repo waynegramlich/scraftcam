@@ -30,7 +30,7 @@ from .gcode import CNC, RS274
 from .geometry import RoundedPolygon, point_at
 
 if TYPE_CHECKING:
-    from .pybind.scraftpybind import JSON, PyBind
+    from .pybind.scraftpybind import JSON, PyBind, Transport
 
 # The page the path is filled into.
 TEMPLATE: Path = Path(__file__).resolve().parent / "plot_template.html"
@@ -477,7 +477,8 @@ def sketch_path(
     moves: list[PathMove]
     for name, moves in groups.items():
         send_batch(
-            solidcraft, sketch_steps(name, path_steps(moves, mm_per_unit))
+            solidcraft.transport,
+            sketch_steps(name, path_steps(moves, mm_per_unit)),
         )
     return list(groups)
 
@@ -532,18 +533,22 @@ def path_steps(
 
 
 # Function `sketch_steps()`:
-def sketch_steps(name: str, drawing: list[InstallStep]) -> list[InstallStep]:
+def sketch_steps(
+    name: str, drawing: list[InstallStep], *, hide: bool = False
+) -> list[InstallStep]:
     """Return the steps of one batch: a whole 3D sketch.
 
     Arguments:
     * `name` (`str`): The sketch's name.
     * `drawing` (`list[InstallStep]`): Its drawing steps (`path_steps()`).
+    * `hide` (`bool`): True to hide it at the end.
 
     Returns:
     * (`list[InstallStep]`): Create, options (3D; points, profile,
-      constraints and dimensions not shown), the drawing, finish.
+      constraints and dimensions not shown), the drawing, finish (and
+      hide).
     """
-    return [
+    steps: list[InstallStep] = [
         {"command": "sketch.create", "params": {"plane": "XY", "name": name}},
         {
             "command": "sketch.options",
@@ -559,9 +564,19 @@ def sketch_steps(name: str, drawing: list[InstallStep]) -> list[InstallStep]:
         {"command": "sketch.finish", "params": {}},
     ]
 
+    # Hide it, when asked.
+    if hide:
+        steps.append(
+            {
+                "command": "browser.visibility",
+                "params": {"visible": False, "items": [name]},
+            }
+        )
+    return steps
+
 
 # Function `send_batch()`:
-def send_batch(solidcraft: "PyBind", steps: list[InstallStep]) -> None:
+def send_batch(transport: "Transport", steps: list[InstallStep]) -> None:
     """Run steps in SolidCraft as one batch, with no rollback.
 
     A GUI takes `engine.batch` and runs the steps in one frame; a
@@ -569,7 +584,7 @@ def send_batch(solidcraft: "PyBind", steps: list[InstallStep]) -> None:
     has a `batch` tool that takes the same steps.
 
     Arguments:
-    * `solidcraft` (`PyBind`): The SolidCraft session.
+    * `transport` (`Transport`): The SolidCraft session's transport.
     * `steps` (`list[InstallStep]`): The steps.
 
     Raises:
@@ -584,7 +599,6 @@ def send_batch(solidcraft: "PyBind", steps: list[InstallStep]) -> None:
 
     # The GUI's `engine.batch`, or the headless MCP `batch` tool.
     params: dict[str, JSON] = {"commands": steps, "rollback": False}
-    transport = solidcraft.transport
     reply: object
     if isinstance(transport, HeadlessTransport):
         if transport.process is None:

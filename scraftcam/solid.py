@@ -609,32 +609,7 @@ class RoundedPolygon:
             """
             return point[0] + dx, point[1] + dy
 
-        curves: list[str] = []
-        segment: XYSegment
-        for segment in self.segments:
-            # SolidCraft's arcs go counter-clockwise from `start` to
-            # `end`, so a clockwise arc is drawn from its end.
-            result: JSON
-            if isinstance(segment, geometry.LineSegment):
-                result = solidcraft.sketch.line(
-                    points=cast(
-                        "JSON", [moved(segment.start), moved(segment.end)]
-                    )
-                )
-            else:
-                ends: tuple[Point, Point] = (segment.start, segment.end)
-                if segment.sweep < 0.0:
-                    ends = (segment.end, segment.start)
-                result = solidcraft.sketch.arc_center_point(
-                    center=moved(segment.center),
-                    start=moved(ends[0]),
-                    end=moved(ends[1]),
-                )
-            assert isinstance(result, dict)
-            ids: JSON = result["curves"]
-            assert isinstance(ids, list)
-            curves += [str(curve) for curve in ids]
-        return curves
+        return geometry.draw_segments(solidcraft, self.segments, moved)
 
 
 # Class `Layer`:

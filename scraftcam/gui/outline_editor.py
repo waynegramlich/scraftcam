@@ -144,6 +144,7 @@ from .letters import (  # noqa: E402
     use_problem,
     value_problem,
 )
+from .outline_cuts import cut_pieces  # noqa: E402
 from .outline_diagram import (  # noqa: E402
     Fillet,
     dimension_strokes,
@@ -362,8 +363,6 @@ ZIG_HIGH_PIXELS: float = 6.0
 # Half the length of the small S ending a dimension line at a cut.
 ESS_PIXELS: float = 9.0
 
-# How far the working view's pieces reach (past any drawing).
-FAR: float = 1e6
 HANDLE_EDGE_PIXELS: float = 3.0 * SQUARE_PIXELS
 
 # An outline has at least this many corners.
@@ -3747,22 +3746,7 @@ class OutlineView(QGraphicsView):
           high ends, and its shift (drawing steps).
         """
         gap: float = GAP_PIXELS / max(self.zoom(), 1e-12)
-        cuts: list[tuple[float, float]] = sorted(
-            strip(self.drawing.points, hide)
-            for hide in self.drawing.hides
-            if hide.axis == axis
-        )
-        pieces: list[tuple[float, float, float]] = []
-        start: float = -FAR
-        shift: float = 0.0
-        low: float
-        high: float
-        for low, high in cuts:
-            pieces.append((start, low, shift))
-            shift -= high - low - gap
-            start = high
-        pieces.append((start, FAR, shift))
-        return pieces
+        return cut_pieces(self.drawing.points, self.drawing.hides, axis, gap)
 
     # Method `OutlineView.draw_cut()`:
     def draw_cut(self, painter: QPainter, exposed: QRectF) -> None:

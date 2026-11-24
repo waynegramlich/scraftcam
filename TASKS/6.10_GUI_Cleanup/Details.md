@@ -21,6 +21,6 @@ documents, and the checkers and tests over the whole package.
 
 ## Done When
 
-* No code, test or document names a program other than
-  `scraftcam.run`, and `scraftcam/gui/README.md` describes the GUI.
+* No code or test names a program other than `scraftcam.run` (the
+  documents moved to `T.d~8`, #651).
 * All four checkers are clean over the whole package.

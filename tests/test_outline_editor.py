@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from scraftcam.diagram import TEXT, Stroke, Weight
 from scraftcam.geometry import ArcSegment, LineSegment
-from scraftcam.gui import outline_editor, theme
+from scraftcam.gui import outline_cuts, outline_editor, theme
 from scraftcam.gui.dimensions import (
     ANGLE,
     DIAMETER,
@@ -1602,7 +1602,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(len(pieces), 2)
         self.assertAlmostEqual(pieces[0][2], 0.0)
         self.assertAlmostEqual(pieces[1][2], -(30.0 - gap))
-        self.assertEqual(view.cut_offsets(0), [(-1e6, 1e6, 0.0)])
+        self.assertEqual(
+            view.cut_offsets(0),
+            [(-outline_cuts.FAR, outline_cuts.FAR, 0.0)],
+        )
         self.assertAlmostEqual(
             outline_editor.shift_at(pieces, 38.0), pieces[1][2]
         )

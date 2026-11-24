@@ -7,7 +7,7 @@ tool of a shop's machine is modeled (`cutter_models`), hidden, in a
 SolidCraft session where `demo.py` has modeled the part,
 and the one in the spindle is shown, following the position.  Each
 tool's planned path is drawn from the program, one tool ahead of the
-run, as a hidden 3D sketch built with one batch (`probe_batch`), and
+run, as a hidden 3D sketch built with one batch (`plot.send_batch()`), and
 only the path of the tool in the spindle is shown, whole (the user's
 choice, 2026-10-28; an earlier `RevealTrace` showed the path line by
 line as the tool reached it, but took 48 s to set up).  SolidCraft's
@@ -39,12 +39,19 @@ from typing import Protocol
 from ..carousel import Plan, gcode_sequence, plan, spoke_ends
 from ..machine import Machine
 from ..model_cache import ModelCache
-from ..plot import PathMove, command_moves, read_gcode
+from ..plot import (
+    InstallStep,
+    PathMove,
+    command_moves,
+    path_steps,
+    read_gcode,
+    send_batch,
+    sketch_steps,
+)
 from ..pybind.scraftpybind import (
-    HeadlessTransport,
     PyBind,
     Transport,
-    connect,
+    connect_cli,
 )
 from ..shops import cnc_machine, loaded_tools, read
 from ..tooling.cutter_models import (
@@ -54,12 +61,6 @@ from ..tooling.cutter_models import (
     model_tool,
     occurrence_ids,
     unique_id_digits,
-)
-from .probe_batch import (
-    InstallStep,
-    path_steps,
-    send_batch,
-    sketch_steps,
 )
 
 # SolidCraft's coordinates are millimeters.
@@ -73,13 +74,6 @@ TOOL_COLOR: str = "#e07020"
 
 # A position: X, Y and Z (inches, program coordinates).
 Position = tuple[float, float, float]
-
-# A `solidcraft-cli` extracted from SolidCraft's AppImage, for
-# headless sessions (see `transport()`).
-SOLIDCRAFT_CLI: Path = (
-    Path(__file__).resolve().parents[2]
-    / "solidcraft/squashfs-root/usr/bin/solidcraft-cli"
-)
 
 
 # Class `Sample`:
@@ -341,7 +335,9 @@ class PathRack:
         send_batch(
             self.session,
             sketch_steps(
-                name, path_steps(self.moves[number], MM_PER_INCH, False), True
+                name,
+                path_steps(self.moves[number], MM_PER_INCH),
+                hide=True,
             ),
         )
         self.sketches[number] = name
@@ -474,7 +470,7 @@ class CarouselView:  # pylint: disable=too-many-instance-attributes
                 }
                 for end in ends.values()
             ]
-            send_batch(self.session, sketch_steps(name, lines, True))
+            send_batch(self.session, sketch_steps(name, lines, hide=True))
             self.sketches[key] = name
         if self.sketches[key] != self.shown:
             if self.shown:
@@ -636,10 +632,7 @@ def transport(where: str) -> Transport:
     Raises:
     * `ValueError`: If `where` is neither.
     """
-    found: Transport = connect(where)
-    if isinstance(found, HeadlessTransport) and SOLIDCRAFT_CLI.exists():
-        found = HeadlessTransport(cli=str(SOLIDCRAFT_CLI))
-    return found
+    return connect_cli(where, always=True)
 
 
 # Function `display()`:
