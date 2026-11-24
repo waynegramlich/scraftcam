@@ -29,3 +29,7 @@
 
 [pdfplumber]
 "pdfplumber>=0.11" = []
+
+# Speech to text for recordings (`T.mi~7` #521): Whisper, run locally.
+[faster_whisper]
+"faster-whisper>=1.1" = []

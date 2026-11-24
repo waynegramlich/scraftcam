@@ -14,14 +14,18 @@ at any zoom), modifier keys held while clicking.
 
 from __future__ import annotations
 
+import dataclasses
+import time
 import typing
 from functools import partial
 from pathlib import Path
 
-from scraftcam.exposed.steps import Recording, Step, recording_text
+from scraftcam.exposed import exposed
+from scraftcam.exposed.steps import Recording, Step, recording_markdown
 from scraftcam.gui import outline_exposed
 from scraftcam.gui.outline_file import outline_text
 from scraftcam.packages import require
+from scraftcam.speech import Microphone, Word, split, transcribe
 
 # `PySide6` is put on `sys.path` before it is imported.
 require("PySide6")
@@ -67,7 +71,7 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
     * `handle` (`str`):
         Its handle, for the state after each step.
     * `path` (`Path`):
-        The `.steps.toml` file written.
+        The `.steps.md` file written.
     * `title` (`str`):
         The recording's title.
     * `outline` (`str`):
@@ -78,21 +82,42 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         The drawing's viewport, whose mouse is recorded.
     * `pressed` (`QPoint | None`):
         Where the left button went down in the viewport, while held.
-    * `waiting` (`tuple[str, dict[str, object]] | None`):
-        The step whose gesture is being handled, filed with its state
-        when the next gesture starts or Qt is idle.
+    * `waiting` (`tuple[str, dict[str, object], float] | None`):
+        The step whose gesture is being handled (its call, arguments
+        and time), filed with its state when the next gesture starts
+        or Qt is idle.
+    * `microphone` (`Microphone | None`):
+        The microphone being recorded, if any.
+    * `started` (`float`):
+        When recording started (`time.monotonic()`).
+    * `began` (`float`):
+        When the latest gesture began, in seconds from `started`
+        (#522): a step's time, to match it with what was said.
     """
 
-    def __init__(self, editor: OutlineEditor, path: Path, title: str) -> None:
+    def __init__(
+        self,
+        editor: OutlineEditor,
+        path: Path,
+        title: str,
+        *,
+        speech: bool = False,
+    ) -> None:
         """Start recording `editor` into `path` (written at once).
 
         Arguments:
         * `editor` (`OutlineEditor`):
             The editor, as it is to start.
         * `path` (`Path`):
-            The `.steps.toml` file to write.
+            The `.steps.md` file to write.
         * `title` (`str`):
             The recording's title.
+        * `speech` (`bool`):
+            True to record the microphone too (beside `path`, as a
+            `.wav`), for `finish()` to turn into each step's draft.
+
+        Raises:
+        * `OSError`: when the microphone cannot be started.
         """
         # The editor by handle, as replays reach it.
         super().__init__(editor)
@@ -104,7 +129,13 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         self.outline: str = outline_text(editor.view.drawing)
         self.steps: list[Step] = []
         self.pressed: QPoint | None = None
-        self.waiting: tuple[str, dict[str, object]] | None = None
+        self.waiting: tuple[str, dict[str, object], float] | None = None
+        # The microphone and the steps share time 0 (#532).
+        self.microphone: Microphone | None = (
+            Microphone(path.with_suffix(".wav")) if speech else None
+        )
+        self.started: float = time.monotonic()
+        self.began: float = 0.0
 
         # Every event (a new gesture files the last step), the
         # drawing's mouse, each shortcut and each button.
@@ -157,6 +188,7 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         # A new gesture starts after the last one was handled whole.
         if event.type() in STARTS:
             self.file()
+            self.began = time.monotonic() - self.started
 
         # A press is held until its release says click or drag.
         if (
@@ -213,7 +245,7 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
             Its arguments, but for the editor.
         """
         self.file()
-        self.waiting = (call, dict(arguments))
+        self.waiting = (call, dict(arguments), self.began)
         QTimer.singleShot(0, self.file)
 
     def file(self) -> None:
@@ -222,16 +254,51 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         if self.waiting is not None:
             call: str
             arguments: dict[str, object]
-            call, arguments = self.waiting
+            began: float
+            call, arguments, began = self.waiting
             self.waiting = None
             state: str = outline_exposed.state(self.handle)
-            self.steps.append(Step(call, arguments, "", state))
+            # A placeholder for the person to rewrite (#520).
+            placeholder: str = exposed.narration(
+                call, {**arguments, "editor": "the editor"}
+            )
+            self.steps.append(
+                Step(call, arguments, placeholder, state, "", began)
+            )
             self.write()
+
+    def finish(self) -> str:
+        """Stop the microphone, if any, and give each step the words
+        spoken since the step before it as its draft (#532).
+
+        Returns:
+        * (`str`): what was done, for the person.
+        """
+        # A step with nothing said keeps its placeholder.
+        self.file()
+        if self.microphone is None:
+            return f"Recorded {len(self.steps)} steps into {self.path}"
+        self.microphone.stop()
+        sound: Path = self.microphone.path
+        words: list[Word] = transcribe(sound)
+        texts: list[str] = split(words, [step.time for step in self.steps])
+        index: int
+        text: str
+        for index, text in enumerate(texts):
+            if text:
+                self.steps[index] = dataclasses.replace(
+                    self.steps[index], narration=text
+                )
+        self.write()
+        return (
+            f"Recorded {len(self.steps)} steps and {len(words)} words "
+            f"into {self.path} (the sound is in {sound.name})"
+        )
 
     def write(self) -> None:
         """Write the recording as it is now."""
         recording: Recording = Recording(
-            self.title, self.outline, tuple(self.steps)
+            self.title, "", self.outline, tuple(self.steps)
         )
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(recording_text(recording), encoding="utf-8")
+        self.path.write_text(recording_markdown(recording), encoding="utf-8")

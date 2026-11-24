@@ -10,7 +10,7 @@ window themselves at any time.
 from __future__ import annotations
 
 from scraftcam.exposed.exposed import ExposedError
-from scraftcam.exposed.steps import Player
+from scraftcam.exposed.steps import Player, Recording, Step
 from scraftcam.packages import require
 
 # `PySide6` is put on `sys.path` before it is imported.
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QLabel,
     QListWidget,
     QPushButton,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
@@ -41,7 +42,10 @@ class NarrationPanel(QWidget):  # pylint: disable=too-many-instance-attributes
     * `title` (`QLabel`):
         The recording's title, then any step's error.
     * `lines` (`QListWidget`):
-        One row per step; the next to run is the current row.
+        One row per step (its first line); the next to run is the
+        current row.
+    * `text` (`QTextBrowser`):
+        The next step's Markdown (#520), shown as Markdown.
     * `backward` (`QPushButton`):
         Undoes the last step run.
     * `forward` (`QPushButton`):
@@ -66,8 +70,11 @@ class NarrationPanel(QWidget):  # pylint: disable=too-many-instance-attributes
         self.lines: QListWidget = QListWidget()
         index: int
         for index in range(len(player.recording.steps)):
-            self.lines.addItem(f"{index + 1}. {player.narration(index)}")
+            first: str = player.narration(index).partition("\n")[0]
+            self.lines.addItem(f"{index + 1}. {first}")
         self.lines.setMaximumHeight(120)
+        self.text: QTextBrowser = QTextBrowser()
+        self.text.setMaximumHeight(140)
 
         # The buttons, under the lines.
         self.backward: QPushButton = QPushButton("Backward")
@@ -88,6 +95,7 @@ class NarrationPanel(QWidget):  # pylint: disable=too-many-instance-attributes
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.title)
         layout.addWidget(self.lines)
+        layout.addWidget(self.text)
         layout.addLayout(buttons)
         self.refresh()
 
@@ -95,12 +103,32 @@ class NarrationPanel(QWidget):  # pylint: disable=too-many-instance-attributes
         """Pick out the next step and enable the buttons that apply."""
         steps: int = len(self.player.recording.steps)
         self.lines.setCurrentRow(min(self.player.done, steps - 1))
+        self.text.setMarkdown(self.shown())
         self.backward.setEnabled(self.player.done > 0)
         self.forward.setEnabled(self.player.done < steps)
         if self.player.done >= steps:
             self.timer.stop()
         self.play.setText("Pause" if self.timer.isActive() else "Play")
         self.play.setEnabled(self.player.done < steps)
+
+    def shown(self) -> str:
+        """Give the Markdown for the next step: its section and text,
+        after the introduction before the first step.
+
+        Returns:
+        * (`str`): the Markdown.
+        """
+        recording: Recording = self.player.recording
+        if self.player.done >= len(recording.steps):
+            return "*The end.*"
+        step: Step = recording.steps[self.player.done]
+        parts: list[str] = [
+            step.section,
+            self.player.narration(self.player.done),
+        ]
+        if self.player.done == 0:
+            parts.insert(0, recording.intro)
+        return "\n\n".join(part for part in parts if part)
 
     def step_forward(self) -> None:
         """Run the next step, showing any error in the title."""

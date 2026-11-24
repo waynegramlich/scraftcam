@@ -1,5 +1,5 @@
 """Tests for recordings (`scraftcam.exposed.steps`), the narration
-panel and tutorials: every `tests/steps/*.steps.toml` is replayed."""
+panel and tutorials: every `tests/steps/*.steps.md` is replayed."""
 
 import dataclasses
 import tempfile
@@ -24,7 +24,7 @@ from tests import qt_app
 RECORDINGS: Path = Path(__file__).parent / "steps"
 
 # The first tutorial, used for the player's own tests.
-FIRST: Path = RECORDINGS / "move_a_corner.steps.toml"
+FIRST: Path = RECORDINGS / "move_a_corner.steps.md"
 
 
 def editor_for(recording: Recording) -> OutlineEditor:
@@ -44,8 +44,8 @@ class TestRecordings(unittest.TestCase):
     """Each kept recording replays with every state as recorded."""
 
     def test_every_recording(self) -> None:
-        """Every `tests/steps/*.steps.toml` matches."""
-        paths: list[Path] = sorted(RECORDINGS.glob("*.steps.toml"))
+        """Every `tests/steps/*.steps.md` matches."""
+        paths: list[Path] = sorted(RECORDINGS.glob("*.steps.md"))
         self.assertTrue(paths)
         path: Path
         for path in paths:
@@ -75,26 +75,47 @@ class TestRecordings(unittest.TestCase):
     def test_written_back(self) -> None:
         """A recording written out reads back the same."""
         recording: Recording = steps.load(FIRST)
-        text: str = steps.recording_text(recording)
-        self.assertEqual(steps.recording_from_text(text), recording)
+        text: str = steps.recording_markdown(recording)
+        self.assertEqual(steps.recording_from_markdown(text), recording)
+        self.assertEqual(text, FIRST.read_text(encoding="utf-8"))
         odd: Recording = Recording(
-            "Quotes ''' and \"",
+            "Odd Values",
+            "An introduction,\nover two lines.",
             "",
-            (steps.Step("press", {"keys": "a'''b", "n": [1, 2.5, True]}),),
+            (
+                steps.Step("press", {"keys": "a, b"}, "Two\nlines.", "x"),
+                steps.Step("", {}, "Only to read.", "", "## A Section"),
+                steps.Step(
+                    "drag",
+                    {"x": 1.5, "y": -2, "to_x": 3, "to_y": 4},
+                    "A drag.",
+                    "",
+                    "",
+                    12.5,
+                ),
+            ),
         )
-        self.assertEqual(
-            steps.recording_from_text(steps.recording_text(odd)),
-            dataclasses.replace(odd, version=__version__),
+        again: Recording = steps.recording_from_markdown(
+            steps.recording_markdown(odd)
+        )
+        self.assertEqual(again, dataclasses.replace(odd, version=__version__))
+        self.assertIn(
+            "<!-- do: drag 1.5, -2 -> 3, 4 -->", steps.recording_markdown(odd)
         )
 
     def test_bad_files(self) -> None:
         """A file that is not a recording is refused, saying why."""
+        end: str = "\n<!-- recording\nformat = 2\n-->\n"
         cases: tuple[tuple[str, str], ...] = (
-            ("format = 2", "format 2, not 1"),
-            ("format = 1\nsteps = 3", "not a list"),
-            ("format = 1\n[[steps]]\nnarration = 'x'", "has no `call`"),
-            ("format = 1\n[[steps]]\ncall = 'a'\narguments = 1", "table"),
-            ("format = = 1", "f.toml"),
+            ("# T\n", "no closing"),
+            ("# T\n\n<!-- recording\nformat = 1\n-->\n", "format 1, not 2"),
+            (
+                "* a\n  <!-- do: press A -->\n  <!-- do: press B -->" + end,
+                r"f.md:3: a second `do:`",
+            ),
+            ("* a\n  <!-- do: fly 1 -->" + end, r"f.md:2: .*fly"),
+            ("* a\n  <!-- do: press A, B -->" + end, "takes 1 values, not 2"),
+            ("x\n<!-- recording\nformat = = 2\n-->\n", "recording:"),
         )
         text: str
         message: str
@@ -103,7 +124,16 @@ class TestRecordings(unittest.TestCase):
                 self.subTest(text=text),
                 self.assertRaisesRegex(ExposedError, message),
             ):
-                steps.recording_from_text(text, "f.toml")
+                steps.recording_from_markdown(text, "f.md")
+        with self.assertRaisesRegex(ExposedError, "ends a comment"):
+            steps.recording_markdown(
+                Recording(
+                    "T",
+                    "",
+                    "",
+                    (steps.Step("press", {"keys": "A"}, "", "a --> b"),),
+                )
+            )
 
 
 class TestRecorder(unittest.TestCase):
@@ -116,13 +146,13 @@ class TestRecorder(unittest.TestCase):
         from PySide6.QtTest import QTest
 
         # The user's gestures, as Qt events on a recorded editor.
-        editor: OutlineEditor = editor_for(Recording("", "", ()))
+        editor: OutlineEditor = editor_for(Recording("", "", "", ()))
         editor.resize(*tutorial.SIZE)
         editor.show()
         editor.view.fit()
         qt_app.process_events()
         with tempfile.TemporaryDirectory() as directory:
-            path: Path = Path(directory) / "made.steps.toml"
+            path: Path = Path(directory) / "made.steps.md"
             Recorder(editor, path, "Made by doing")
             port = editor.view.viewport()
 
@@ -151,6 +181,9 @@ class TestRecorder(unittest.TestCase):
         self.assertEqual(calls, ["click", "drag", "press", "button"])
         self.assertEqual(made.steps[2].arguments, {"keys": "Ctrl+Z"})
         self.assertEqual(made.steps[3].arguments, {"word": "Grid"})
+        times: list[float] = [step.time for step in made.steps]
+        self.assertTrue(all(when >= 0 for when in times))
+        self.assertEqual(times, sorted(times))
         again: OutlineEditor = editor_for(made)
         self.assertEqual(tutorial.mismatches(again, made), [])
         again.deleteLater()

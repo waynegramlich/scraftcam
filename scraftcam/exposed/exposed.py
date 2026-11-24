@@ -14,11 +14,12 @@ as in "Drag corner {index} to {x}, {y}." (`T.mi~7` #494).
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import string
 import types
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Literal, TypeVar
 
@@ -120,6 +121,26 @@ def changes(function: Function) -> Function:
     * (`Function`): `function` itself.
     """
     return _register(function, "changes")
+
+
+@contextlib.contextmanager
+def isolated() -> Iterator[None]:
+    """Run with an empty registry, then put the old one back (#529).
+
+    For tests that register functions of their own: in one process,
+    their names would otherwise meet the real ones (a test's `drag`
+    and the editor's).
+
+    Yields:
+    * (`None`): while the registry is the empty one.
+    """
+    saved: dict[str, Exposed] = dict(REGISTRY)
+    REGISTRY.clear()
+    try:
+        yield
+    finally:
+        REGISTRY.clear()
+        REGISTRY.update(saved)
 
 
 def find(text: str = "") -> list[str]:

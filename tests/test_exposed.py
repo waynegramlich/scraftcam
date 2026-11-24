@@ -1,4 +1,5 @@
-"""Tests for `scraftcam.exposed.exposed`."""
+"""Tests for `scraftcam.exposed.exposed`; the samples below are
+registered for each test only, in a registry of their own (#529)."""
 
 import unittest
 
@@ -6,19 +7,16 @@ from scraftcam.exposed import exposed
 from scraftcam.exposed.exposed import ExposedError
 
 
-@exposed.reads
 def corner_count(outline: str) -> int:
     """Count the corners of {outline}."""
     return len(outline)
 
 
-@exposed.changes
 def drag(index: int, x: float, y: float, snap: bool = True) -> str:
     """Drag corner {index} to {x}, {y}."""
     return f"{index} {x} {y} {snap}"
 
 
-@exposed.changes
 def place(points: list[tuple[float, float]], name: str | None = None) -> int:
     """Place {name} at the points."""
     return len(points) if name is None else -len(points)
@@ -26,6 +24,13 @@ def place(points: list[tuple[float, float]], name: str | None = None) -> int:
 
 class TestExposed(unittest.TestCase):
     """The registry, `find()`, `describe()`, `call()`, `narration()`."""
+
+    def setUp(self) -> None:
+        """Register the samples in a registry of their own (#529)."""
+        self.enterContext(exposed.isolated())
+        exposed.reads(corner_count)
+        exposed.changes(drag)
+        exposed.changes(place)
 
     def test_find(self) -> None:
         """Names and narrations are searched in any case."""

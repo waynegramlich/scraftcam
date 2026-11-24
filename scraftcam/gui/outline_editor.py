@@ -108,6 +108,7 @@ from ..exposed import steps as recordings  # noqa: E402
 from ..exposed.exposed import ExposedError  # noqa: E402
 from ..exposed.steps import Recording  # noqa: E402
 from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
+from ..speech import gain_problems  # noqa: E402
 from . import theme, tutorial  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
@@ -5068,6 +5069,47 @@ def file_text(path: Path | None) -> str:
 RECORDINGS: Path = Path.home() / ".scraftcam" / "recordings"
 
 
+# Function `start_recording()`:
+def start_recording(
+    options: argparse.Namespace, editor: OutlineEditor, path: Path | None
+) -> Recorder | None:
+    """Start `--record`, with the microphone unless `--no-speech`.
+
+    Arguments:
+    * `options` (`argparse.Namespace`): The command line.
+    * `editor` (`OutlineEditor`): The editor to record.
+    * `path` (`Path | None`): The outline file edited, if any.
+
+    Returns:
+    * (`Recorder | None`): The recorder, or None without `--record`.
+    """
+    # Warn of a microphone that will sound buried in hiss (#537).
+    if options.record is None:
+        return None
+    record: Path = record_path(options.record, path)
+    title: str = record.name.split(".")[0].rsplit("_", 2)[0]
+    speech: bool = not options.no_speech
+    if speech:
+        problem: str
+        for problem in gain_problems():
+            print(f"Warning: {problem}", file=sys.stderr)
+    try:
+        recorder: Recorder = Recorder(
+            editor,
+            record,
+            title.replace("_", " ").capitalize(),
+            speech=speech,
+        )
+    except OSError as error:
+        print(f"No speech: {error}", file=sys.stderr)
+        recorder = Recorder(
+            editor, record, title.replace("_", " ").capitalize()
+        )
+    talk: str = "; talk as you go" if recorder.microphone else ""
+    print(f"Recording into {record}{talk}", flush=True)
+    return recorder
+
+
 # Function `record_path()`:
 def record_path(record: Path, path: Path | None) -> Path:
     """Give the file `--record` writes.
@@ -5080,13 +5122,13 @@ def record_path(record: Path, path: Path | None) -> Path:
     Returns:
     * (`Path`): A named file as is; in a directory, a new file
       named after the outline and the time (`end_mill_2026-11-23_
-      14-37-31.steps.toml`).
+      14-37-31.steps.md`).
     """
     if not record.is_dir() and record != RECORDINGS:
         return record
     stem: str = path.name.split(".")[0] if path is not None else "new"
     stamp: str = time.strftime("%Y-%m-%d_%H-%M-%S")
-    return record / f"{stem}_{stamp}.steps.toml"
+    return record / f"{stem}_{stamp}.steps.md"
 
 
 # Function `drawing_from()`:
@@ -5154,7 +5196,7 @@ def main() -> None:
         "--tutorial",
         type=Path,
         metavar="FILE",
-        help="play the recording FILE (`.steps.toml`)",
+        help="play the recording FILE (`.steps.md`)",
     )
     parser.add_argument(
         "--record",
@@ -5164,6 +5206,11 @@ def main() -> None:
         metavar="FILE",
         help="record what you do as steps, into FILE (by default, a "
         "new file in ~/.scraftcam/recordings/)",
+    )
+    parser.add_argument(
+        "--no-speech",
+        action="store_true",
+        help="with --record, leave the microphone off",
     )
     parser.add_argument(
         "--headless",
@@ -5215,15 +5262,15 @@ def main() -> None:
             sys.exit(1 if found else 0)
         tutorial.show_panel(editor, recording)
 
-    # Recording what the user does, step by step (#21).
-    if options.record is not None:
-        record: Path = record_path(options.record, path)
-        title: str = record.name.split(".")[0].rsplit("_", 2)[0]
-        Recorder(editor, record, title.replace("_", " ").capitalize())
-        print(f"Recording into {record}")
+    # Recording what the user does, step by step (#21), and what they
+    # say (#532), turned into each step's draft once the window closes.
+    recorder: Recorder | None = start_recording(options, editor, path)
     editor.show()
     editor.view.fit()
-    sys.exit(application.exec())
+    status: int = application.exec()
+    if recorder is not None:
+        print(recorder.finish())
+    sys.exit(status)
 
 
 if __name__ == "__main__":
