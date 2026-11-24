@@ -93,6 +93,9 @@ the scratchpad (the editor saves every change).
 * #571 the user's two live recordings use the old (x, y) form and
   no longer load: record again.
 * #559 the wheel; edges, dimensions, letters as targets.
+* #650 (from `T.gc~6.10`, #687): pseudo time for runs that wait on
+  a machine (the LinuxCNC end-to-end suite, `tests/lcnc/`);
+  headless replays already never wait.
 * Later: #544 with #547/#549, #542, #543, #546, #553-#556, #561,
   #501 `--update`, #508/#514.  #516 `scraftcam.run --drive-editor` waits.
 

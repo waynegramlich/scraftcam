@@ -83,7 +83,7 @@ python3 -m scraftcam.pybind.scraftpybind headless  # Writes a STEP file.
 ## Testing
 
 ```
-python3 -m unittest -v tests.test_scraftpybind
+python3 -m unittest -v tests.solidcraft.test_scraftpybind
 ```
 
 The offline tests use a fake control port and a fake `solidcraft-cli`.

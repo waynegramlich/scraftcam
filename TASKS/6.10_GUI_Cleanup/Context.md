@@ -84,14 +84,28 @@ task; the next is in `TASKS/Issue_Counter.md`.
   `T.toasl~6.8` #S6's tool table reuses it.  The view's arming
   (`arm()`, `light_armed()`, `hover_row()`, `row_clicked()`,
   `frame_row()`) stays in the editor.
+* #S6 looked at: #650 headless replays (`tutorial.check()` ->
+  `Player.mismatches()`) never wait: only `NarrationPanel`'s
+  `QTimer` paces a shown tutorial; 107 outline and replay tests take
+  4 s.  Pseudo time would help runs that wait on a machine
+  (LinuxCNC, end to end), not the recordings.  #622: 81 test files;
+  most are neither widget nor MCP tests (geometry, plot, shops), and
+  ~19 drive a headless SolidCraft: open #686 (the groups).
+* #S6 (#686 agreed: groups by what a test needs; #687:
+  #650 moves out).  Moved (`git mv`, `hg mv --after`): 27 fast, 34
+  qt, 15 solidcraft, 1 lcnc (`test_lcnc_end_to_end`); helpers stay in
+  `tests/`; `Path(__file__)` paths and `tests.GROUP.test_X` imports
+  fixed; CI workflow, `pybind/README.md`, `CLAUDE.md` (#664) updated.
+  All four checkers clean.  #S6 done: `test_model_cache` (its
+  `TestLive` runs `solidcraft-cli`) went to `solidcraft/`; then
+  `discover -s tests/fast -t .` 408 tests in 66 s, `tests/qt` 350 in
+  17 s, all pass; `solidcraft/` and `lcnc/` import (not run).
 * #637 (for #619) split only `gui/outline_editor.py` (5159 lines),
   along #631's seam (letters table and values versus drawing and
   editing); `window.py`, `views.py` stay.
 * #622 sort the test files: fast widget tests, and MCP recordings
-  (`T.mi~7` #555); last, after #613/#614.  Recordings may run in
-  pseudo time (#650, agreed: `steps.Player` moves a clock on by each
-  step's recorded `time`; measure the saving on `move_a_corner`
-  first).  Three sub-packages: `tests/widgets/` (fast, no MCP or
+  (`T.mi~7` #555); last, after #613/#614.  #650 (pseudo time) moved
+  to `T.mi~7` (#687).  Three sub-packages: `tests/widgets/` (fast, no MCP or
   LinuxCNC), `tests/recordings/` (MCP replays), `tests/lcnc/` (the
   end-to-end suite); the `CLAUDE.md` test command changes (#664, agreed).
 

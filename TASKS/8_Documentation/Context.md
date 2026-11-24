@@ -16,3 +16,5 @@ numbers are shared by every task; the next is in
   `Tool_Models.md:1472,1627`.
 * `T.toasl~6.8` #653-#656 change the shop layout: describe it once
   it lands.
+* `README.md` names `tests.test_*`: now `tests.GROUP.test_*`
+  (`fast`, `qt`, `solidcraft`, `lcnc`; `T.gc~6.10` #622).
