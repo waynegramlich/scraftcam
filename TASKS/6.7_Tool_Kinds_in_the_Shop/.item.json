@@ -1,7 +1,7 @@
 {
-  "state": "Suspended",
+  "state": "Closed",
   "created": "2026-11-16T00:02:26Z",
-  "updated": "2026-11-22T20:42:59Z",
+  "updated": "2026-11-24T19:40:18Z",
   "history": [
     {
       "state": "Pending",
@@ -14,6 +14,10 @@
     {
       "state": "Suspended",
       "time": "2026-11-22T20:35:25Z"
+    },
+    {
+      "state": "Closed",
+      "time": "2026-11-24T19:40:18Z"
     }
   ],
   "tag": "tkis"

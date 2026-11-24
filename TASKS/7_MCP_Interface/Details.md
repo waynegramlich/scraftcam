@@ -23,5 +23,6 @@ than videos that are stale minutes after they are posted).
 
 ## Done When
 
-* The outline editor, then the unified GUI (`scraftcam.run`), can
-  be driven over MCP and recorded, and the recordings run as tests.
+* The GUI (`scraftcam.run`, which holds the outline editor and the
+  HMI) can be driven over MCP and recorded, and the recordings run
+  as tests.

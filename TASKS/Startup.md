@@ -9,10 +9,10 @@
 @6.2_Outline_Editor/Details.md
 @6.3_Catalogs/Details.md
 @6.5_Tools_from_Outlines/Details.md
-@6.7_Tool_Kinds_in_the_Shop/Details.md
-@6.8_Shop_Directory_Layout/Details.md
-@6.9_One_GUI/Details.md
-@6.9_One_GUI/Context.md
+@6.8_Tools_Outlines_and_the_Shop_Layout/Details.md
+@6.8_Tools_Outlines_and_the_Shop_Layout/Context.md
+@6.10_GUI_Cleanup/Details.md
+@6.10_GUI_Cleanup/Context.md
 @7_MCP_Interface/Details.md
 @7_MCP_Interface/Context.md
 @2_Document_a_Shop/Summary.md

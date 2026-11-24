@@ -2,7 +2,7 @@
 
 Squeezed 2026-11-22 (fifth time, before a commit); the history is
 in `hg` and `git`.  Issue numbers are shared with `T.oe~6.2` and
-`T.sdl~6.8`; the counter is now in `TASKS/Issue_Counter.md`.  Every discussion point takes
+`T.toasl~6.8`; the counter is now in `TASKS/Issue_Counter.md`.  Every discussion point takes
 the next sticky number, never a fresh 1, 2, 3.
 
 ## Ready
@@ -56,7 +56,7 @@ the next sticky number, never a fresh 1, 2, 3.
 ## Decided
 
 * #449: roughing stays a flag on `end_mill`.  #453: ball end mills
-  become `ball_end_mill` (the user draws it), after `T.sdl~6.8`.
+  become `ball_end_mill` (the user draws it), after `T.toasl~6.8`.
   #T7: the Z setter is flat, with the flat tools.
 * #387: delete `solidcraft_link.py` and `model.py`'s `SolidModel`
   (only tests and `jaw_plate.py`, `parallel.py` use them); `Length`,

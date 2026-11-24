@@ -2,7 +2,7 @@
 
 Made 2026-11-23 from `T.oe~6.2` (#485-#505); squeezed again
 2026-11-23 late (history in `hg` and `git`).  Issue numbers are
-shared with `T.tfo~6.5`, `T.oe~6.2` and `T.sdl~6.8`; the next new
+shared with `T.tfo~6.5`, `T.oe~6.2` and `T.toasl~6.8`; the next new
 one is in `TASKS/Issue_Counter.md`.  Every list continues them.
 
 ## Decided
@@ -13,8 +13,9 @@ one is in `TASKS/Issue_Counter.md`.  Every list continues them.
   `unittest`; gestures go through Qt (`QTest`), so hit testing is
   tested.  #488/#507 live objects by counted handles (`OutlineEditor
   1`), given out when first listed.  #489 nothing that moves a
-  machine.  #492/#500 our own stdlib server.  #493 the outline editor
-  first, `scraftcam.run` once merged, never the HMI.
+  real machine (`hmi_exposed._may_move()`, simulators only).
+  #492/#500 our own stdlib server.  #493 done: `scraftcam.run` is
+  the only target; the HMI's functions are exposed too (#604).
 * #518/#517 a recording is the tutorial and the test; tests never
   need Claude.  #520/#527 recordings are Markdown (`NAME.steps.md`),
   each step a `* ` bullet with `<!-- do: CALL -->`, one closing
@@ -86,14 +87,14 @@ the scratchpad (the editor saves every change).
 ## Open
 
 * The #565 plan is done (#566, #568, #550, #567, #552, and #572).
-  The merge is `T.og~6.9`: the editor a panel of `scraftcam.run`,
-  one MCP port for everything (#577, #585).
+  The merge (`T.og~6.9`) closed 2026-11-24: one MCP port for
+  everything (#577, #585); cleanup in `T.gc~6.10`.
 * #569 `find corner` finds nothing (narrations lack plain words).
 * #571 the user's two live recordings use the old (x, y) form and
   no longer load: record again.
 * #559 the wheel; edges, dimensions, letters as targets.
 * Later: #544 with #547/#549, #542, #543, #546, #553-#556, #561,
-  #501 `--update`, #508/#514.  #516 `./drive_editor.py` waits.
+  #501 `--update`, #508/#514.  #516 `scraftcam.run --drive-editor` waits.
 
 ## Notes
 

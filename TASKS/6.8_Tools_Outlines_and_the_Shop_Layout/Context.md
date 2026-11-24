@@ -1,8 +1,24 @@
 # LLM Agent Context Log
 
-Made 2026-11-22 from `T.tfo~6.5` #460; Open while `T.tfo~6.5` runs,
-as the layout will be tweaked often.  Issue numbers are shared with
-`T.tfo~6.5` and `T.oe~6.2`.
+Made 2026-11-22 from `T.tfo~6.5` #460; renamed from "Shop Directory
+Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
+(closed).  Issue numbers are shared by every task; the next is in
+`TASKS/Issue_Counter.md`.  Waits for `T.gc~6.10` (#634).
+
+## Decided 2026-11-24
+
+* #631 (the user): a kind's outline dimension table is the template
+  for the fields of each tool's `.toml` (as #391 in `T.tkis~6.7`:
+  one outline file per kind, each tool gives only its letter
+  values); one table in the tool's panel (unifies #592/#594's two
+  dimension views).
+* #615 the tree shows outline files (`gui/tree.py:482` hides them,
+  "Until #S7").
+* From `T.tkis~6.7`: idea 1 began as `meta()` field metadata in
+  `scraftcam/model.py` (`T.cmt~5.3`); a per-model `sketch()` was
+  dropped (#260), the outline's `.svg` is the sketch.  Idea 2's
+  STEP route exists (`solid.SolidStep`, `T.rps~6.6`).  The Z setter
+  (`tooling/setters.py`) has no shop kind yet.
 
 ## The Layout (decided, not built)
 

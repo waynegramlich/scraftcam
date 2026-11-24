@@ -2,7 +2,7 @@
 
 Made 2026-11-23 (#573-#575); squeezed 2026-11-23 (history in `hg`
 and `git`).  Issue numbers are shared with `T.tfo~6.5`, `T.oe~6.2`,
-`T.sdl~6.8` and `T.mi~7`; the next is in `TASKS/Issue_Counter.md`.
+`T.toasl~6.8` and `T.mi~7`; the next is in `TASKS/Issue_Counter.md`.
 
 ## Starting Points
 
