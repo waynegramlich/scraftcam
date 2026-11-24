@@ -69,6 +69,21 @@ task; the next is in `TASKS/Issue_Counter.md`.
   lists only visible tabs.  Not yet looked at on screen.
 * #621 prune `run.py`'s 16 options to those tests, the MCP client and
   the end-to-end suite use (#607: flags are for Claude only).
+* #S5 done (#637), as planned below: `gui/outline_letters.py` (705
+  lines; the editor 4533), with `DIMENSIONS_TAB`, `FILLETS_TAB`,
+  `LETTER_ROW`, `NO_FILLET`, `COLUMNS`, `LiveDelegate`; tests use
+  `editor.letters.X`.  The plan was: `outline_editor.py` (5141 lines) is
+  `OutlineView` (2212-4158, the drawing) and `OutlineEditor`
+  (4222-5062).  The letters table's code (`letters_area()`,
+  `fill_table()`, `cell()`, `new_letter()`, `letter_edited()`,
+  `delete()`, `_uses()`, `keep()`, `rename()`, `check_letters()`,
+  `fillet_trouble()`, `show_rows()`, `add_fillet()`, `LiveDelegate`)
+  goes to a `LettersTable(QWidget)` in `gui/outline_letters.py`,
+  holding the drawing and told by callbacks to redraw and save; the
+  editor keeps `table`, `tabs` as the same objects (22 test uses).
+  `T.toasl~6.8` #S6's tool table reuses it.  The view's arming
+  (`arm()`, `light_armed()`, `hover_row()`, `row_clicked()`,
+  `frame_row()`) stays in the editor.
 * #637 (for #619) split only `gui/outline_editor.py` (5159 lines),
   along #631's seam (letters table and values versus drawing and
   editing); `window.py`, `views.py` stay.

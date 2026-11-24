@@ -134,7 +134,7 @@ def state(editor: str) -> str:
         )
     )
     problem: str
-    for problem in shown.problems.text().splitlines():
+    for problem in shown.letters.problems.text().splitlines():
         lines.append(f"  {problem}")
     lines.append(f"undo depth: {len(view.history.done)}")
     return "\n".join(lines)
