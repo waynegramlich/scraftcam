@@ -8,6 +8,12 @@ project.
 * Number every list that the user may answer item by item: issues,
   open questions, choices and next steps (1, 2, 3, ...).  The user
   answers by number (e.g. "#2: Fix.  #3: Later.").
+* Where the project keeps a shared counter of sticky numbers (e.g.
+  `TASKS/Issue_Counter.md`, "the next new one is #N"), every such
+  list continues it instead, never a fresh 1, 2, 3, even in a
+  session's first list; the counter is moved on as numbers are given
+  out.  An item's parts are letters: #590a, #590b.  Each item is
+  labeled `#N:` alone, never `1. #N:`.
 * When a list is given again, keep each item's number, so that the
   user's answers still match; a new item gets the next number, and a
   finished one is marked done rather than dropped and renumbered.

@@ -187,14 +187,11 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertFalse(view.grid_shown)
         buttons["Grid"].click()
         self.assertTrue(view.grid_shown)
-        self.assertEqual(buttons["Delete"].text(), "Delete (Del)")
-        self.assertEqual(self.editor.keys["Snap"].key().toString(), "S")
+        self.assertEqual(buttons["Delete"].text(), "Delete")
 
-        # The keys work (`G` hides the grid, then shows it again).
+        # No shortcut keys (#589): `G` leaves the grid alone.
         self.editor.activateWindow()
         qt_app.process_events()
-        QTest.keyClick(view, Qt.Key.Key_G)
-        self.assertFalse(view.grid_shown)
         QTest.keyClick(view, Qt.Key.Key_G)
         self.assertTrue(view.grid_shown)
 
@@ -788,10 +785,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         rotate[0].click()
         self.assertEqual(self.editor.view.drawing.turns, 1)
 
-        # [Grid]'s key works with [Most Common] showing, and its button
-        # on [View] follows.
+        # [Grid]'s action works with [Most Common] showing, and its
+        # button on [View] follows.
         self.assertTrue(self.editor.buttons["Grid"].isChecked())
-        self.editor.keys["Grid"].activated.emit()
+        self.editor.button_actions["Grid"].trigger()
         self.assertFalse(self.editor.button_actions["Grid"].isChecked())
         self.assertFalse(self.editor.buttons["Grid"].isChecked())
 
@@ -839,7 +836,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         is one undo step (#116)."""
         view = self.editor.view
         self.assertNotIn("Fillet", self.editor.buttons)
-        self.assertIn("(Home)", self.editor.buttons["Fit"].text())
+        self.assertEqual(self.editor.buttons["Fit"].text(), "Fit")
         view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
         view.make_squares()
         view.set_fillets([1, 2], outline_editor.NOTE_CHOICE)
@@ -1091,14 +1088,14 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
         view.drawing.dimensions[:] = [Dimension("", VERTICAL, 0, 1)]
         view.make_squares()
-        self.assertEqual(editor.buttons["Show Marks"].text(), "Show Marks (M)")
+        self.assertEqual(editor.buttons["Show Marks"].text(), "Show Marks")
         self.assertFalse(view.measures[0].isVisible())
         self.assertFalse(view.circles[0].isVisible())
         editor.buttons["Show Marks"].click()
         self.assertTrue(view.marks_shown)
         self.assertTrue(view.measures[0].isVisible())
         self.assertTrue(view.circles[0].isVisible())
-        editor.keys["Show Marks"].activated.emit()
+        editor.button_actions["Show Marks"].trigger()
         self.assertFalse(view.measures[0].isVisible())
 
     def test_corners_keep_hides(self) -> None:
@@ -1740,7 +1737,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(view.history.undone, [])
         view.redo()
         self.assertEqual(len(view.drawing.points), 3)
-        self.assertEqual(buttons["Redo"].text(), "Redo (Ctrl+Shift+Z)")
+        self.assertEqual(buttons["Redo"].text(), "Redo")
 
     def test_holes_read(self) -> None:
         """An outline file's holes come back when it is read (#23)."""
@@ -1814,7 +1811,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """[New Letter] adds a row; edits are kept and checked."""
         editor = self.editor
         self.assertEqual(editor.table.rowCount(), 1)
-        self.assertEqual(editor.buttons["New Letter"].text(), "New Letter (L)")
+        self.assertEqual(editor.buttons["New Letter"].text(), "New Letter")
         editor.buttons["New Letter"].click()
         editor.buttons["New Letter"].click()
         self.assertEqual(editor.table.rowCount(), 3)

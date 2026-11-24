@@ -18,24 +18,22 @@ Each window draws from the one `App` (`app.py`), and redraws whenever
 it changes, so all of the windows agree (#3).  A window that controls
 a running machine refuses to close (#67).
 
-With `--port`, `CommandServer` answers the command port (`port.py`,
-#96): `status` (what the windows show), `press` (a top line button,
-as a person would; `params`: `button`, and `window`, from 0) and
-`new_shop` (makes a shop, as `NewShopDialog` would; `params`:
-`directory`, `name`, `units`, `machines`) and `quit` (closes every
-window, unless one refuses).
+With `--mcp PORT`, `run()` serves MCP on that port, with the GUI's
+functions (`window_exposed.py`, #577, #585).
 """
 
 import functools
+import importlib
 import os
 import shutil
 import signal
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import FrameType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from ..packages import require
 from ..shops import CATALOG_PAGES
@@ -44,7 +42,7 @@ from ..shops import CATALOG_PAGES
 # fetches the PDF packages.
 if TYPE_CHECKING:
     from ..catalog.catxtract import App as Pages
-from . import port, theme
+from . import prompt, theme
 from .app import (
     MACHINE_KINDS,
     MANUAL_PREFIX,
@@ -69,14 +67,12 @@ from .machines import (
     is_machines_directory,
     machine_item,
 )
-from .port import Method, PortError, text_param
 from .theme import colors
 from .tree import SHOP, Node, edit_path
 from .views import (
     Panel,
     TreeView,
     TreeWatcher,
-    entry_text,
     narrow,
     splitter,
 )
@@ -104,19 +100,16 @@ from PySide6.QtGui import (  # noqa: E402
     QResizeEvent,
     QScreen,
 )
-from PySide6.QtNetwork import QHostAddress, QTcpServer, QTcpSocket  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSizePolicy,
     QSplitter,
@@ -162,6 +155,9 @@ STOP_MS: int = 250
 
 # Every open window, oldest first (the command port's `window`).
 WINDOWS: list["Window"] = []
+
+# What connects a machine by name (`run()`'s `connect`), if anything.
+CONNECT: list[Callable[[str], MachineControl | None]] = []
 
 # The `catxtract` windows open, by their `catalog.toml`: one each, in
 # a window of its own, as a page needs all the screen it can get
@@ -253,55 +249,156 @@ def run(
     model: App,
     *,
     headless: bool,
-    command_port: int,
-    machine: Callable[[], MachineControl | None] | None = None,
+    mcp_port: int,
+    makers: "MachineMakers | None" = None,
+    first_panel: "FirstPanel | None" = None,
 ) -> int:
     """Show the first window, and run Qt until the last one closes.
 
     Arguments:
     * `model` (`App`): What every window shows.
     * `headless` (`bool`): True to draw offscreen.
-    * `command_port` (`int`): The command port, or 0 for none.
-    * `machine` (`Callable[[], MachineControl | None] | None`): Makes
-      a machine's controls for the first window's panel (step 5,
-      #53), once Qt is up; it reports its own failure and gives
-      `None`.
+    * `mcp_port` (`int`): The MCP port, or 0 for none.
+    * `first_panel` (`FirstPanel | None`): What the first panel
+      opens (`outline_panel.OutlinePanel`: an outline, a tutorial, a
+      recording, #S5); it may stop at once (a tutorial checked
+      headless), and it finishes once Qt does.
+    * `makers` (`MachineMakers | None`): What makes machines'
+      controls (their HMIs): the first window's, once Qt is up (step
+      5, #53), and any the user opens later (#607).
 
     Returns:
     * (`int`): Qt's exit code, 0 normally, or 1 when the port can
       not be opened.
     """
     application: QApplication = make_application(headless=headless)
+    CONNECT.clear()
+    if makers is not None:
+        CONNECT.append(makers.connect)
     theme.follow(application, redraw_windows)
     first: Window = Window(model)
     first.show()
     watcher: TreeWatcher = TreeWatcher(model)
-    if machine is not None:
-        control: MachineControl | None = machine()
+    if makers is not None and makers.first is not None:
+        control: MachineControl | None = makers.first("")
         if control is not None:
             first.connect_machine(control)
     restore_layout(first)
     stopper: Stopper = Stopper()
 
+    # The first panel's editor (#S5); a tutorial checked headless stops.
+    if first_panel is not None:
+        checked: int | None = first_panel.open(first)
+        if checked is not None:
+            model.forget(watcher.follow)
+            return checked
+
     # No shop: offer to make one (#97), when someone can answer.
-    if model.shop is None and not headless:
+    elif model.shop is None and not headless:
         first.new_shop()
 
-    # The command port, if asked for.
-    if command_port:
-        server: CommandServer = CommandServer(model)
-        if not server.listen_local(command_port):
-            print(
-                f"Can not open port {command_port}: {server.errorString()}",
-                file=sys.stderr,
-            )
+    # MCP, if asked for: each call runs on Qt's main thread (#577).
+    if mcp_port:
+        # pylint: disable=import-outside-toplevel
+        from ..exposed import qt_runner, server
+
+        # pylint: enable=import-outside-toplevel
+        # Importing it registers its functions; by name, since it
+        # imports this module (no cycle at load time).
+        importlib.import_module(f"{__package__}.window_exposed")
+        try:
+            server.serve(mcp_port, server.Server(qt_runner.QtRunner()))
+        except OSError as error:
+            print(f"Can not open port {mcp_port}: {error}", file=sys.stderr)
             return 1
+        print(f"MCP on http://127.0.0.1:{mcp_port}{server.PATH}", flush=True)
 
     # Until the last window closes, with the trees watched.
     status: int = int(application.exec())
     model.forget(watcher.follow)
     del stopper
+    if first_panel is not None:
+        first_panel.finish()
     return status
+
+
+# Class `CatalogPanel`:
+class CatalogPanel:
+    """`--pages CATALOG`: the first panel opens a catalog's pages (#600).
+
+    Attributes:
+    * `catalog` (`Path`): The catalog's `catalog.toml`.
+    """
+
+    def __init__(self, catalog: Path) -> None:
+        """Remember the catalog.
+
+        Arguments:
+        * `catalog` (`Path`): Its `catalog.toml`.
+        """
+        self.catalog: Path = catalog
+
+    def open(self, top: "Window") -> int | None:
+        """Select the catalog in the tree, and press [Open Pages].
+
+        Arguments:
+        * `top` (`Window`): The window.
+
+        Returns:
+        * (`int | None`): 1 when the shop has no such catalog, else
+          `None`.
+        """
+        item: QTreeWidgetItem | None = top.tree.item_at_path(
+            self.catalog.resolve()
+        )
+        if item is None:
+            print(f"No catalog {self.catalog} in the shop", file=sys.stderr)
+            return 1
+        top.select_item(item)
+        top.open_pages(top.panels[top.current])
+        return None
+
+    def finish(self) -> None:
+        """Nothing to finish: the pages are saved as they close."""
+
+
+# Class `MachineMakers`:
+@dataclass(frozen=True, slots=True)
+class MachineMakers:
+    """What makes machines' controls, by machine name ("" for the
+    program's machine); each reports its own failure and gives `None`.
+
+    Constructor:
+    * `MachineMakers(first, connect)`
+
+    Attributes:
+    * `first` (`Callable[[str], MachineControl | None] | None`): The
+      first window's machine (`--program`, `--hmi`), if any.
+    * `connect` (`Callable[[str], MachineControl | None]`): A machine
+      the user opens that is not connected (#607).
+    """
+
+    # Constructor arguments:
+    first: Callable[[str], MachineControl | None] | None = field(init=True)
+    connect: Callable[[str], MachineControl | None] = field(init=True)
+
+
+# Class `FirstPanel`:
+class FirstPanel(Protocol):
+    """What `run()` opens in the first panel, and finishes after Qt."""
+
+    def open(self, top: "Window") -> int | None:
+        """Open it in `top`'s current panel.
+
+        Arguments:
+        * `top` (`Window`): The window.
+
+        Returns:
+        * (`int | None`): An exit status to stop with, or `None`.
+        """
+
+    def finish(self) -> None:
+        """Finish, once Qt has stopped."""
 
 
 # The guide in the first panel at start, after the shop and the NC
@@ -469,10 +566,6 @@ class Window(QWidget):
     * `panels` (`list[Panel]`): The panels, left to right.
     * `closing` (`list[Panel]`): Panels told to close whose machine
       is still stopping; each closes once it has stopped (#156).
-    * `exiting` (`bool`): True once [Exit] has stopped the
-      machines; every row closes once every one has stopped.
-    * `leaving` (`bool`): True once this row is to close by itself
-      (its panel brought away, or its machines told to stop, #184).
     * `machines` (`list[MachineControl]`): The machines connected to
       this window, each shown in a panel only once it is clicked
       (#135).
@@ -540,8 +633,6 @@ class Window(QWidget):
         self.splitter.addWidget(self.tree)
         self.panels: list[Panel] = []
         self.closing: list[Panel] = []
-        self.exiting: bool = False
-        self.leaving: bool = False
         self.machines: list[MachineControl] = []
         self.current: int = 0
         self.wanted: list[int] = []
@@ -864,13 +955,13 @@ class Window(QWidget):
         stopping: bool = panel in self.closing
         if panel.machines and is_active(panel.machines[0]) and not stopping:
             machine: MachineControl = panel.machines[0]
-            answer: QMessageBox.StandardButton = QMessageBox.question(
-                self,
+            # Asked in the panel itself (#606).
+            if not prompt.ask_yes_no(
+                panel,
                 "Close Panel",
                 f"{machine.name} is running.  Stop it before closing its "
                 "panel?",
-            )
-            if answer != QMessageBox.StandardButton.Yes:
+            ):
                 return
             machine.stop()
             if machine.busy():
@@ -1024,10 +1115,23 @@ class Window(QWidget):
                     )
                     top.to_front(self)
                     return
-        self.model.say(
-            f"The {name} is not connected (LinuxCNC is the only "
-            "controller so far)"
-        )
+        # Not connected: connect it (#607), one LinuxCNC simulator so
+        # far (`T.rslsao~5.8`).
+        if not CONNECT:
+            self.model.say(f"The {name} is not connected")
+            return
+        if machine_controls():
+            self.model.say(
+                f"The {name} is not connected: one LinuxCNC simulator "
+                "so far, and it is in use",
+                problem=True,
+            )
+            return
+        control: MachineControl | None = CONNECT[0](name)
+        if control is None:
+            return
+        self.connect_machine(control)
+        self.open_machine(name)
 
     def machine_label(self, name: str) -> str:
         """Return a machine's file's label in the tree (#183).
@@ -1121,8 +1225,8 @@ class Window(QWidget):
     def open_pages(self, panel: Panel) -> None:
         """Open a panel's catalog in `catxtract` ([Open Pages], #68).
 
-        In a window of its own, at its first index page (else where
-        `catxtract` starts); one already open comes to the front.
+        In the panel's [Pages] tab (#600), at its first index page
+        (else where `catxtract` starts); one already open is shown.
 
         Arguments:
         * `panel` (`Panel`): The panel whose button was pressed.
@@ -1133,8 +1237,7 @@ class Window(QWidget):
         path: Path = panel.node.path
         found: Pages | None = CATALOG_WINDOWS.get(str(path))
         if found is not None and not found.closed:
-            found.raise_()
-            found.activateWindow()
+            panel.show_pages(found)
             return
         item: dict[str, object] = panel.item
         pages: Path = path.parent / CATALOG_PAGES
@@ -1157,7 +1260,7 @@ class Window(QWidget):
             opened.page_no = start - 1
             opened.show_page()
         CATALOG_WINDOWS[str(path)] = opened
-        opened.show()
+        panel.show_pages(opened)
 
     def edit(self, panel: Panel) -> None:
         """Open a panel's file in an editor ([Edit TOML File], #124).
@@ -1227,9 +1330,11 @@ class Window(QWidget):
         return timer
 
     def follow_machines(self) -> None:
-        """Bring [Stop All] and each machine tab's bar up to date."""
+        """Bring [Stop All], each machine tab's bar, and the active
+        machines' tree items (#610) up to date."""
         self.blink = not self.blink
         self.show_stop_all()
+        self.show_active()
         panel: Panel
         for panel in self.all_panels():
             panel.show_dues(self.blink)
@@ -1239,11 +1344,6 @@ class Window(QWidget):
         for panel in list(self.closing):
             if not any(machine.busy() for machine in panel.machines):
                 self.close_panel(panel)
-        if self.exiting and not self.running():
-            self.exiting = False
-            close_rows()
-        if self.leaving and not self.busy():
-            self.close()
 
         # The layout, kept on every change (#187), by the first row.
         if (
@@ -1383,17 +1483,17 @@ class Window(QWidget):
     def new_shop(self) -> None:
         """Ask about the new shop, and make it ([New Shop])."""
         dialog: NewShopDialog = NewShopDialog(self, self.model)
-        dialog.open()
+        prompt.show_in(self.panels[self.current], dialog)
 
     def new_machine(self) -> None:
         """Ask about the new machine, and make it ([New Machine], #141)."""
         dialog: NewMachineDialog = NewMachineDialog(self, self.model)
-        dialog.open()
+        prompt.show_in(self.panels[self.current], dialog)
 
     def new_catalog(self) -> None:
         """Ask about the new catalog, and make it ([New Catalog])."""
         dialog: NewCatalogDialog = NewCatalogDialog(self, self.model)
-        dialog.open()
+        prompt.show_in(self.panels[self.current], dialog)
 
     def offer_ignores(self) -> None:
         """Offer to keep catalogs' `pages/` out of version control (#51)."""
@@ -1403,13 +1503,12 @@ class Window(QWidget):
         if not needed:
             return
         lines: str = "\n".join(f"{path}:  {line}" for path, line in needed)
-        answer: QMessageBox.StandardButton = QMessageBox.question(
-            self,
+        if not prompt.ask_yes_no(
+            self.panels[self.current],
             "Keep the PDFs out of version control?",
             "A catalog's PDF and its pages are never under version "
             f"control.  Add these lines?\n\n{lines}",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             self.model.say("Not added: " + lines.replace("\n", "; "))
             return
         try:
@@ -1442,20 +1541,11 @@ class Window(QWidget):
         * `event` (`QCloseEvent`): Accepted, or ignored with the
           reason on the top line.
         """
-        # The title bar's close asks: the last row as [Exit]
-        # does (#15), another for its own panels' machines (#184).
+        # Refused while a machine is active, naming each one and why,
+        # their windows brought forward; no question (#606, #611).
         refusal: str = self.busy()
-        if refusal and event.spontaneous() and not self.leaving:
-            asked: bool = (
-                self.ask_to_leave()
-                if any(top is not self for top in WINDOWS)
-                else self.ask_to_stop()
-            )
-            if asked:
-                refusal = self.busy()
         if refusal:
-            if not self.leaving:
-                self.model.say(refusal, problem=True)
+            refuse_exit(self.model)
             event.ignore()
             return
 
@@ -1474,310 +1564,73 @@ class Window(QWidget):
         event.accept()
 
     def exit_program(self) -> None:
-        """Close the window ([Exit], #156), asking to stop first.
-
-        With machines running: "Stop them all and exit?"; once they
-        have stopped with their spindles off, it closes.
-        """
-        if self.running() and not self.ask_to_stop():
+        """Close every window ([Exit], #156), unless a machine is
+        active: then say which, and why, and show them (#611)."""
+        if active_reasons():
+            refuse_exit(self.model)
             return
-        if not self.exiting:
-            close_rows()
+        close_rows()
 
-    def ask_to_leave(self) -> bool:
-        """Ask to stop this row's running machines before closing it.
+    def show_active(self) -> None:
+        """Keep this window's active machines in sight (#610).
 
-        Returns:
-        * (`bool`): True if the user said to stop them (they were told
-          to stop, and the row closes once they have, #184).
+        While one of its panels' machines is active, its tree is
+        shown and [Tree] greyed, and those machines' items are drawn
+        as [Stop All] is while one runs.
         """
-        names: list[str] = [
+        names: set[str] = {
             machine.name
             for panel in self.panels
             for machine in panel.machines
             if machine.busy()
-        ]
-        running: str = " and ".join(names) or "A machine"
-        verb: str = "are" if len(names) > 1 else "is"
-        answer: QMessageBox.StandardButton = QMessageBox.question(
-            self,
-            "Close Window",
-            f"{running} {verb} running.  Stop and close this window?",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return False
-        panel: Panel
-        for panel in self.panels:
-            machine: MachineControl
-            for machine in panel.machines:
-                machine.stop()
-        self.leaving = True
-        return True
-
-    def ask_to_stop(self) -> bool:
-        """Ask to stop every running machine before exiting (#13).
-
-        Returns:
-        * (`bool`): True if the user said to stop them (and they were
-          told to stop).
-        """
-        names: list[str] = [
-            machine.name for machine in machine_controls() if machine.busy()
-        ] + sorted(self.model.running)
-        running: str = " and ".join(names) or "A machine"
-        verb: str = "are" if len(names) > 1 else "is"
-        answer: QMessageBox.StandardButton = QMessageBox.question(
-            self,
-            EXIT,
-            f"{running} {verb} running.  Stop them all and exit?",
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return False
-        self.stop_all()
-        if self.running():
-            self.exiting = True
-            self.model.say(
-                "Stopping every machine: scraftcam exits once they have "
-                "stopped."
-            )
-        return True
+        }
+        if names and self.tree.isHidden():
+            self.toggle_tree()
+        self.buttons["Tree"].setEnabled(not names)
+        self.tree.mark_active(names)
 
 
-# Class `CommandServer`:
-class CommandServer(QTcpServer):
-    """The command port (`port.py`): one JSON line in, one out.
+# Function `active_reasons()`:
+def active_reasons() -> list[str]:
+    """Say why each active machine stops scraftcam closing (#611).
 
-    Attributes:
-    * `model` (`App`): What every window shows.
-    * `methods` (`dict[str, Method]`): The port's methods, by name.
+    Returns:
+    * (`list[str]`): A reason per active machine, in every window
+      ("The Shop mill's spindle is on: stop it first"); empty when
+      none is active.
     """
+    reasons: list[str] = [
+        reason
+        for reason in (machine.busy() for machine in machine_controls())
+        if reason
+    ]
+    if WINDOWS:
+        reasons += [
+            f"{name} is running" for name in sorted(WINDOWS[0].model.running)
+        ]
+    return reasons
 
-    def __init__(self, model: App) -> None:
-        """Make the server; `listen()` opens its port.
 
-        Arguments:
-        * `model` (`App`): What every window shows.
-        """
-        super().__init__()
-        self.model: App = model
-        self.methods: dict[str, Method] = {
-            "new_shop": self.new_shop,
-            "press": self.press,
-            "quit": self.quit,
-            "select": self.select,
-            "status": self.status,
-            "tree": self.tree,
-        }
-        self.newConnection.connect(self.accept)
+# Function `refuse_exit()`:
+def refuse_exit(model: App) -> None:
+    """Refuse to close: name every active machine and why, on the
+    message line, and bring their windows forward (#611).
 
-    def listen_local(self, number: int) -> bool:
-        """Listen on a port of 127.0.0.1 only.
-
-        Arguments:
-        * `number` (`int`): The port, or 0 for any free one
-          (`serverPort()` says which).
-
-        Returns:
-        * (`bool`): True when it listens.
-        """
-        return bool(
-            self.listen(
-                QHostAddress(QHostAddress.SpecialAddress.LocalHost), number
-            )
-        )
-
-    def accept(self) -> None:
-        """Take each new connection, and answer its lines."""
-        while self.hasPendingConnections():
-            socket: QTcpSocket = self.nextPendingConnection()
-            socket.readyRead.connect(functools.partial(self.answer, socket))
-            socket.disconnected.connect(socket.deleteLater)
-
-    def answer(self, socket: QTcpSocket) -> None:
-        """Answer every whole line a connection has sent.
-
-        Arguments:
-        * `socket` (`QTcpSocket`): The connection.
-        """
-        while socket.canReadLine():
-            line: str = bytes(socket.readLine().data()).decode()
-            reply_line: str = port.reply(line, self.methods)
-            socket.write((reply_line + "\n").encode())
-            socket.flush()
-
-    @staticmethod
-    def window(params: dict[str, object]) -> "Window":
-        """Return the window a request names (`window`, from 0).
-
-        Arguments:
-        * `params` (`dict[str, object]`): The request's parameters.
-
-        Returns:
-        * (`Window`): The window.
-
-        Raises:
-        * `PortError`: If there is no such window.
-        """
-        index: object = params.get("window", 0)
-        if not isinstance(index, int) or not 0 <= index < len(WINDOWS):
-            raise PortError(f"no window {index}", port.INVALID_PARAMS)
-        return WINDOWS[index]
-
-    def status(self, _params: dict[str, object]) -> object:
-        """Return what the windows show (`status`).
-
-        Arguments:
-        * `_params` (`dict[str, object]`): None needed.
-
-        Returns:
-        * (`object`): The model's state, and each window's.
-        """
-        model: App = self.model
-        latest: Message = model.latest()
-        return {
-            "title": model.title(),
-            "shop": model.shop_title,
-            "design": model.design_title(),
-            "message": latest.text,
-            "problem": latest.problem,
-            "running": sorted(model.running),
-            "windows": [
-                {
-                    "buttons": [
-                        label
-                        for label, button in top.buttons.items()
-                        if not button.isHidden()
-                    ],
-                    "tree": not top.tree.isHidden(),
-                    "panels": len(top.panels),
-                }
-                for top in WINDOWS
-            ],
-        }
-
-    def press(self, params: dict[str, object]) -> object:
-        """Press a top line button, as a person would (`press`).
-
-        Arguments:
-        * `params` (`dict[str, object]`): `button` (its label) and
-          `window` (from 0; 0 if not given).
-
-        Returns:
-        * (`object`): "pressed LABEL".
-
-        Raises:
-        * `PortError`: If there is no such button, or it is hidden.
-        """
-        top: Window = self.window(params)
-        label: str = text_param(params, "button")
-        button: QPushButton | None = top.buttons.get(label)
-        if button is None:
-            raise PortError(
-                f"no button `{label}`; there are: {', '.join(top.buttons)}",
-                port.INVALID_PARAMS,
-            )
-        if button.isHidden() or not button.isEnabled():
-            raise PortError(f"`{label}` is not showing")
-        button.click()
-        return f"pressed {label}"
-
-    def new_shop(self, params: dict[str, object]) -> object:
-        """Make a new shop, as `NewShopDialog` would (`new_shop`).
-
-        Arguments:
-        * `params` (`dict[str, object]`): `directory`, `name`, `units`
-          (strings) and `machines` (a list of kinds' keys).
-
-        Returns:
-        * (`object`): The new `shop.toml`'s path.
-
-        Raises:
-        * `PortError`: If an answer is not allowed, or it can not be
-          written.
-        """
-        machines: object = params.get("machines", [])
-        if not isinstance(machines, list) or not all(
-            isinstance(kind, str) for kind in machines
+    Arguments:
+    * `model` (`App`): What every window shows.
+    """
+    reasons: list[str] = active_reasons()
+    model.say("Stop first: " + "; ".join(reasons), problem=True)
+    top: Window
+    for top in WINDOWS:
+        if any(
+            machine.busy()
+            for panel in top.panels
+            for machine in panel.machines
         ):
-            raise PortError(
-                "`machines` must be a list of strings", port.INVALID_PARAMS
-            )
-        try:
-            shop: Path = self.model.new_shop(
-                Path(text_param(params, "directory")),
-                text_param(params, "name"),
-                text_param(params, "units"),
-                [str(kind) for kind in machines],
-            )
-        except (ValueError, OSError) as error:
-            raise PortError(str(error)) from error
-        return str(shop)
-
-    def tree(self, params: dict[str, object]) -> object:
-        """Return what a window's tree shows (`tree`).
-
-        Arguments:
-        * `params` (`dict[str, object]`): `window` (from 0; 0 if not
-          given).
-
-        Returns:
-        * (`object`): Per root, its label, then a list per child.
-        """
-        return self.window(params).tree.labels()
-
-    def select(self, params: dict[str, object]) -> object:
-        """Click a tree item, as a person would (`select`).
-
-        Arguments:
-        * `params` (`dict[str, object]`): `path` (the item's file or
-          directory) and `window` (from 0; 0 if not given).
-
-        Returns:
-        * (`object`): What the current panel shows: `label`, `fields`
-          (each field row's key and what its entry holds) and `text`.
-
-        Raises:
-        * `PortError`: If no item has that path.
-        """
-        top: Window = self.window(params)
-        path: str = text_param(params, "path")
-        item: QTreeWidgetItem | None = top.tree.item_at_path(
-            Path(path).resolve()
-        )
-        if item is None:
-            raise PortError(f"no item for {path}", port.INVALID_PARAMS)
-        top.select_item(item)
-        panel: Panel = top.panels[top.current]
-        fields: dict[str, str] = {
-            key: entry_text(entry) for key, entry in panel.entries.items()
-        }
-        return {
-            "label": panel.title.text(),
-            "fields": fields,
-            "text": panel.text.toPlainText(),
-        }
-
-    def quit(self, _params: dict[str, object]) -> object:
-        """Close every window, unless one refuses (`quit`).
-
-        The windows close `QUIT_DELAY_MS` after the answer is sent.
-
-        Arguments:
-        * `_params` (`dict[str, object]`): None needed.
-
-        Returns:
-        * (`object`): "quitting".
-
-        Raises:
-        * `PortError`: If a window controls a running machine.
-        """
-        top: Window
-        for top in WINDOWS:
-            refusal: str = top.busy()
-            if refusal:
-                raise PortError(refusal)
-        QTimer.singleShot(QUIT_DELAY_MS, close_all)
-        return "quitting"
+            top.show_active()
+            top.raise_()
+            top.activateWindow()
 
 
 # Function `close_all()`:
@@ -1895,12 +1748,8 @@ class NewShopDialog(QDialog):
         start: Path = Path(self.directory.text().strip()).expanduser()
         while not start.is_dir() and start != start.parent:
             start = start.parent
-        chosen: str = QFileDialog.getExistingDirectory(
-            self,
-            "The shop's directory",
-            str(start),
-            QFileDialog.Option.ShowDirsOnly
-            | QFileDialog.Option.DontUseNativeDialog,
+        chosen: str = prompt.ask_directory(
+            self, "The shop's directory", str(start)
         )
         if chosen:
             self.directory.setText(chosen)
@@ -2019,13 +1868,11 @@ class NewCatalogDialog(QDialog):
 
     def choose_pdf(self) -> None:
         """Choose the PDF ([Choose...]), with Qt's own dialog (#117)."""
-        chosen: str
-        chosen, _filter = QFileDialog.getOpenFileName(
+        chosen: str = prompt.ask_open_file(
             self,
             "The catalog's PDF",
-            str(Path.home()),
             "PDF files (*.pdf *.PDF)",
-            options=QFileDialog.Option.DontUseNativeDialog,
+            str(Path.home()),
         )
         if chosen:
             self.pdf.setText(chosen)

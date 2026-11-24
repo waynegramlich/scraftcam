@@ -84,9 +84,10 @@ def mismatches(editor: OutlineEditor, recording: Recording) -> list[str]:
     Returns:
     * (`list[str]`): a message per step whose state differs.
     """
-    # Shown at the one size and fitted, as a user would first see it.
-    editor.resize(*SIZE)
-    editor.show()
+    # Its window (itself, or the panel's window it sits in, #593)
+    # shown at the one size and fitted, as a user would first see it.
+    editor.window().resize(*SIZE)
+    editor.window().show()
     editor.view.fit()
     QApplication.processEvents()
     return start(editor, recording).mismatches()

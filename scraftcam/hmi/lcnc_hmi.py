@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """A minimal LinuxCNC HMI, in place of AXIS (`T.mlcp~3.4`).
 
 A small Qt window (`PySide6`, fetched into `~/.scraftcam/packages/`
@@ -43,24 +42,25 @@ the operator with Set Origin:
 
 ```
 python3 -m scraftcam.lcnc.serve_linuxcnc &
-python3 -m scraftcam.hmi.lcnc_hmi demo.ngc
-# The window alone:
-python3 -m scraftcam.hmi.lcnc_hmi --dry-run demo.ngc
-# No window, for tests:
-python3 -m scraftcam.hmi.lcnc_hmi --headless --port 5007
+python3 -m scraftcam.run --shop examples/shop --program demo.ngc
+# With no LinuxCNC:
+python3 -m scraftcam.run --shop examples/shop --program demo.ngc --dry-run
+# No window, for tests (driven over MCP, `hmi_exposed.py`):
+python3 -m scraftcam.run --headless --program demo.ngc --mcp 8765
 ```
 
-With `--headless`, Qt draws offscreen (`QT_QPA_PLATFORM=offscreen`),
-so no display is needed, and otherwise the same code runs, with its
-buttons pressed through the command port.  A question that would open
-a window then takes its answer from `ANSWERS`, in order (the port's
-`answer VALUE`), or else the answer that does nothing (No, or no
+It is the machine panel of `scraftcam.run`, never a window of its own
+(`T.og~6.9` #605).  With `--headless`, Qt draws offscreen
+(`QT_QPA_PLATFORM=offscreen`), so no display is needed, and otherwise
+the same code runs, with its buttons pressed over MCP.  A question
+that would open a window then takes its answer from `ANSWERS`, in
+order (`hmi_answer`), or else the answer that does nothing (No, or no
 file), and is added to `ASKED`.
 
-A program is opened from the command line, with Open, or through the
-command port
-(`--port PORT`, on 127.0.0.1), which takes one line per connection and
-answers one line: `ping`, `open FILE`, `start` (or `run`), `pause`,
+A program is opened from the command line, with Open, or over the
+GUI's MCP port (`hmi_exposed.py`; `hmi_line` takes the old line
+port's words, #604), one line in, one line back: `ping`, `open
+FILE`, `start` (or `run`), `pause`,
 `reset` (or `stop`), `tool+`, `tool-` (the start line to the next or
 previous tool change), `speed X`, `press LABEL` (presses a button on
 any tab, as a person would; refused when it is greyed out), `tab
@@ -81,24 +81,22 @@ echo "open demo.ngc" | nc -q 1 127.0.0.1 5007
 # lines, as `lcnc_hmi.py` does.
 # pylint: disable=too-many-lines
 
-import argparse
 import functools
 import json
 import math
 import os
-import signal
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from types import FrameType
 from typing import Any
 
 from .. import shops
 from ..assembly import Assembly, AssemblyItem
 from ..carousel import gcode_sequence, plan, plan_text
 from ..geometry import RoundedPolygon
+from ..gui import prompt
 from ..keepout import assembly_zones
-from ..lcnc.lcnc_client import PORT, BridgeError
+from ..lcnc.lcnc_client import BridgeError
 from ..machine import Machine
 from ..model_cache import ModelCache
 from ..packages import require
@@ -130,7 +128,6 @@ from .hmi_machine import (
     STEP_CHOSEN,
     TABS,
     TOGGLES,
-    CommandPort,
     HMIMachine,
     HMIStatus,
     Intervention,
@@ -168,16 +165,12 @@ from PySide6.QtCore import (  # noqa: E402
 from PySide6.QtGui import QFont, QFontDatabase  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractButton,
-    QApplication,
     QButtonGroup,
     QCheckBox,
-    QFileDialog,
     QGridLayout,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -252,7 +245,7 @@ def ask_yes_no(parent: QWidget, title: str, message: str) -> bool:
 
     Arguments:
     * `parent` (`QWidget`): The HMI.
-    * `title` (`str`): The window's title.
+    * `title` (`str`): The question's title.
     * `message` (`str`): The question.
 
     Returns:
@@ -260,14 +253,8 @@ def ask_yes_no(parent: QWidget, title: str, message: str) -> bool:
     """
     if HEADLESS:
         return next_answer(f"{title}: {message}") == "yes"
-    answer: QMessageBox.StandardButton = QMessageBox.question(
-        parent,
-        title,
-        message,
-        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        QMessageBox.StandardButton.No,
-    )
-    return answer == QMessageBox.StandardButton.Yes
+    # Inside the HMI, never over the whole screen (#606).
+    return prompt.ask_yes_no(parent, title, message)
 
 
 # Function `ask_choice()`:
@@ -289,12 +276,8 @@ def ask_choice(
     if HEADLESS:
         answer: str = next_answer(f"{title}: {message}")
         return answer if answer in choices else ""
-    choice: str
-    accepted: bool
-    choice, accepted = QInputDialog.getItem(
-        parent, title, message, choices, 0, False
-    )
-    return choice if accepted else ""
+    choice: str | None = prompt.ask_item(parent, title, message, choices)
+    return choice or ""
 
 
 # Function `ask_open_file()`:
@@ -309,11 +292,9 @@ def ask_open_file(parent: QWidget) -> str:
     """
     if HEADLESS:
         return next_answer("Open G-code")
-    path: str
-    path, _ = QFileDialog.getOpenFileName(
-        parent, "Open G-code", "", "G-code (*.ngc *.nc *.gcode);;All (*)"
+    return prompt.ask_open_file(
+        parent, "Open G-code", "G-code (*.ngc *.nc *.gcode);;All (*)"
     )
-    return path
 
 
 # Function `fixed_font()`:
@@ -442,7 +423,6 @@ class HMI(QWidget):
     * `message` (`QLabel`): LinuxCNC's last error message.
     * `origin_button` (`QPushButton`): The Set Origin button.
     * `paused` (`bool`): True while the program is paused.
-    * `port` (`CommandPort | None`): The command port, if any.
     * `position` (`QLabel`): The work position and the tool.
     * `can_start` (`bool`): True when Start (or Resume) may be
       pressed: stopped or paused, the setup drawn, the origin set.
@@ -516,6 +496,8 @@ class HMI(QWidget):
       this window.
     * `spindle` (`bool`): True while the spindle is on, at the last
       poll; True until the first poll says otherwise.
+    * `coolant` (`bool`): True while flood or mist coolant is on, as
+      `spindle` (#609).
     """
 
     # Method `HMI.__init__()`:
@@ -524,7 +506,6 @@ class HMI(QWidget):
         self,
         machine: HMIMachine,
         max_speed: float,
-        port: CommandPort | None,
         parent: QWidget | None = None,
     ) -> None:
         """Build the window.
@@ -537,14 +518,11 @@ class HMI(QWidget):
           The LinuxCNC back end.
         * `max_speed` (`float`):
           The speed slider's highest setting.
-        * `port` (`CommandPort | None`):
-          The command port, if any.
         * `parent` (`QWidget | None`):
           What it is shown in, or `None` for a window of its own.
         """
         super().__init__(parent)
         self.machine: HMIMachine = machine
-        self.port: CommandPort | None = port
         self.paused: bool = False
         self.running: bool = False
         self.start: int = 0
@@ -810,6 +788,7 @@ class HMI(QWidget):
         self.quit_button.clicked.connect(self.quit)
         self.on_quit: Callable[[], None] | None = None
         self.spindle: bool = True
+        self.coolant: bool = True
         bottom: QHBoxLayout = QHBoxLayout()
         bottom.addStretch(1)
         bottom.addWidget(self.quit_button)
@@ -1436,12 +1415,17 @@ class HMI(QWidget):
         """Say why nothing may close yet, if anything (#56).
 
         A machine is never left to crash: until it is stopped, with
-        its spindle off, the HMI (and the GUI it is in) stays.
+        its spindle and coolant off (#609; safe is per machine kind),
+        the HMI (and the GUI it is in) stays.
+
+        It asks LinuxCNC first (a poll): the last poll may be from
+        before the machine stopped (#612).
 
         Returns:
         * (`str`): Why not ("The machine is running", ...), or `""`
           when it is stopped with its spindle off.
         """
+        self.poll()
         if self.running:
             return (
                 f"The {self.program_machine or 'machine'} is "
@@ -1452,6 +1436,11 @@ class HMI(QWidget):
             return (
                 f"The {self.program_machine or 'machine'}'s spindle is "
                 "on: stop it first"
+            )
+        if self.coolant:
+            return (
+                f"The {self.program_machine or 'machine'}'s coolant is "
+                "on: turn it off first"
             )
         return ""
 
@@ -1714,7 +1703,8 @@ class HMI(QWidget):
     # branches.
     # pylint: disable-next=too-many-return-statements,too-many-branches
     def handle(self, line: str) -> str:
-        """Answer one command from the command port.
+        """Answer one command, in the old line port's words (over MCP,
+        `hmi_exposed.py`).
 
         Arguments:
         * `line` (`str`): The command.
@@ -1762,7 +1752,8 @@ class HMI(QWidget):
                 return (
                     f"file={status.file} line={status.line} "
                     f"x={x:.4f} y={y:.4f} z={z:.4f} tool={status.tool} "
-                    f"start={self.start} state={status.state}"
+                    f"start={self.start} state={status.state} "
+                    f"spindle={status.spindle} rpm={status.rpm}"
                 )
             elif word == "messages":
                 return f"messages: {' | '.join(self.machine.messages)}"
@@ -1846,24 +1837,23 @@ class HMI(QWidget):
 
     # Method `HMI.poll()`:
     def poll(self) -> None:
-        """Show the machine's state, and answer the port (`timer`)."""
+        """Show the machine's state (`timer`)."""
         # The setup's drawing.
         self.show_drawing()
 
-        # A LinuxCNC that has gone is reported, while the port still
-        # answers, and the window stays up to be read.
+        # A LinuxCNC that has gone is reported, and the window stays
+        # up to be read.
         try:
             status: HMIStatus = self.machine.status()
         except (OSError, BridgeError) as error:
             self.message.setText(f"LinuxCNC is not answering: {error}")
-            if self.port is not None:
-                self.port.poll(self.handle)
             return
 
         # The program, read once per file.  The buttons follow
         # LinuxCNC's state (a program may end, or be stopped, without
         # the HMI).
         self.spindle = status.spindle
+        self.coolant = status.coolant
         if status.file != self.lines_file:
             self.lines_file = status.file
             self.lines = self.machine.program_lines(status.file)
@@ -1929,23 +1919,6 @@ class HMI(QWidget):
             self.message.setText(status.messages[-1])
         self.message.setVisible(bool(self.message.text()))
 
-        # Commands from the port.
-        if self.port is not None:
-            self.port.poll(self.handle)
-
-
-# Function `run()`:
-def run(application: QApplication) -> int:
-    """Run Qt's loop until the last window closes.
-
-    Arguments:
-    * `application` (`QApplication`): The application.
-
-    Returns:
-    * (`int`): The exit status.
-    """
-    return application.exec()
-
 
 # The words the one run button shows (`HMI.name_run_toggle()`).
 RUN_WORDS: tuple[str, ...] = ("Start", "Pause", "Resume", "Restart")
@@ -1957,9 +1930,8 @@ class HMIStartError(Exception):
 
 
 # Function `make_hmi()`:
-def make_hmi(  # pylint: disable=too-many-arguments
+def make_hmi(
     *,
-    port: int,
     lcnc_port: int,
     solidcraft: int,
     shop: Path,
@@ -1968,11 +1940,11 @@ def make_hmi(  # pylint: disable=too-many-arguments
 ) -> HMI:
     """Start the machine, read the shop, and make the HMI.
 
-    Used by `main()` and by the GUI, which shows it in a panel
-    (`T.g~6` #52); a `QApplication` must exist.
+    Used by the GUI, which shows it in a panel (`T.g~6` #52); a
+    `QApplication` must exist.  It is driven over the GUI's MCP port
+    (`hmi_exposed.py`), never a port of its own (#604).
 
     Arguments:
-    * `port` (`int`): The command port, or 0 for none.
     * `lcnc_port` (`int`): The port of `serve_linuxcnc`.
     * `solidcraft` (`int`): A SolidCraft control port, to draw each
       program's setup, or 0 for none.
@@ -1985,14 +1957,13 @@ def make_hmi(  # pylint: disable=too-many-arguments
     * (`HMI`): The HMI, its speed at the programmed feed.
 
     Raises:
-    * `HMIStartError`: If LinuxCNC, the shop or the port fails.
+    * `HMIStartError`: If LinuxCNC or the shop fails.
     """
-    # The machine, on and homed, and the command port.
+    # The machine, on and homed.
     try:
         machine: HMIMachine = HMIMachine(dry_run, lcnc_port)
         machine.start()
         top_speed: float = machine.max_speed()
-        command_port: CommandPort | None = CommandPort(port) if port else None
     except (OSError, RuntimeError, ValueError, BridgeError) as error:
         raise HMIStartError(str(error)) from error
 
@@ -2010,93 +1981,12 @@ def make_hmi(  # pylint: disable=too-many-arguments
 
     # An earlier HMI may have left another speed, and the slider starts
     # at the programmed feed.
-    hmi: HMI = HMI(machine, top_speed, command_port, parent)
+    hmi: HMI = HMI(machine, top_speed, parent)
     hmi.set_speed(1.0)
+
+    # Polled at once (before its drawing starts), so the spindle, on
+    # until a poll says otherwise, is known before anyone may ask to
+    # quit (#612).
+    hmi.poll()
     hmi.drawer = drawer
     return hmi
-
-
-# Function `main()`:
-def main(arguments: list[str]) -> int:
-    """Show the HMI until its window is closed.
-
-    Arguments:
-    * `arguments` (`list[str]`):
-      The command line arguments, less the program name.
-
-    Returns:
-    * (`int`): The exit status.
-    """
-    # The command line.
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        description=__doc__.splitlines()[0]
-    )
-    parser.add_argument("program", nargs="?", help="G-code to open")
-    parser.add_argument("--port", type=int, help="a command port on 127.0.0.1")
-    parser.add_argument(
-        "--lcnc-port",
-        type=int,
-        default=PORT,
-        help="the port of serve_linuxcnc (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="use no LinuxCNC"
-    )
-    parser.add_argument(
-        "--solidcraft",
-        type=int,
-        help="a SolidCraft control port, to draw each program's setup",
-    )
-    parser.add_argument(
-        "--shop",
-        type=Path,
-        default=SHOP_FILE,
-        help="the shop's file (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="draw nothing (Qt offscreen), for tests through --port",
-    )
-    options: argparse.Namespace = parser.parse_args(arguments)
-    if options.headless:
-        use_headless()
-
-    # The window.
-    found: Any = QApplication.instance()
-    application: QApplication = found or QApplication(sys.argv[:1])
-    try:
-        hmi: HMI = make_hmi(
-            port=options.port or 0,
-            lcnc_port=options.lcnc_port,
-            solidcraft=options.solidcraft or 0,
-            shop=options.shop,
-            dry_run=options.dry_run,
-        )
-    except HMIStartError as error:
-        print(f"lcnc_hmi.py: {error}", file=sys.stderr)
-        return 1
-
-    # A `SIGTERM` closes it as Quit does (Python sees the signal at
-    # the next `poll()`, as Qt's loop is not Python's).
-    def terminate(_number: int, _frame: FrameType | None) -> None:
-        """Close the window on a `SIGTERM`.
-
-        Arguments:
-        * `_number` (`int`): The signal (ignored).
-        * `_frame` (`FrameType | None`): Where Python was (ignored).
-        """
-        hmi.close()
-
-    signal.signal(signal.SIGTERM, terminate)
-    if options.program:
-        try:
-            hmi.open(options.program)
-        except (ValueError, OSError) as error:
-            hmi.message.setText(str(error))
-    hmi.show()
-    return run(application)
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))

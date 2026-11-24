@@ -110,7 +110,7 @@ class TestRecordings(unittest.TestCase):
             "An introduction,\nover two lines.",
             "",
             (
-                steps.Step("press", {"keys": "a, b"}, "Two\nlines.", "x"),
+                steps.Step("button", {"word": "a, b"}, "Two\nlines.", "x"),
                 steps.Step("", {}, "Only to read.", "", "## A Section"),
                 steps.Step(
                     "drag",
@@ -139,11 +139,11 @@ class TestRecordings(unittest.TestCase):
             ("# T\n", "no closing"),
             ("# T\n\n<!-- recording\nformat = 1\n-->\n", "format 1, not 2"),
             (
-                "* a\n  <!-- do: press A -->\n  <!-- do: press B -->" + end,
+                "* a\n  <!-- do: button A -->\n  <!-- do: button B -->" + end,
                 r"f.md:3: a second `do:`",
             ),
             ("* a\n  <!-- do: fly 1 -->" + end, r"f.md:2: .*fly"),
-            ("* a\n  <!-- do: press A, B -->" + end, "takes 1 values, not 2"),
+            ("* a\n  <!-- do: button A, B -->" + end, "takes 1 values, not 2"),
             ("x\n<!-- recording\nformat = = 2\n-->\n", "recording:"),
         )
         text: str
@@ -160,7 +160,7 @@ class TestRecordings(unittest.TestCase):
                     "T",
                     "",
                     "",
-                    (steps.Step("press", {"keys": "A"}, "", "a --> b"),),
+                    (steps.Step("button", {"word": "A"}, "", "a --> b"),),
                 )
             )
 
@@ -169,7 +169,7 @@ class TestRecorder(unittest.TestCase):
     """What a user does is written as steps that replay the same."""
 
     def test_record_then_replay(self) -> None:
-        """A click, a drag, a shortcut and a button, recorded."""
+        """A click, a drag and two buttons, recorded."""
         # pylint: disable=import-outside-toplevel
         from PySide6.QtCore import QPoint, QPointF, Qt
         from PySide6.QtTest import QTest
@@ -196,9 +196,7 @@ class TestRecorder(unittest.TestCase):
             QTest.mouseMove(port, pixel(1, 6))
             QTest.mouseRelease(port, left, pos=pixel(1, 6))
             qt_app.process_events()
-            QTest.keyClick(
-                editor.view, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier
-            )
+            editor.buttons["Undo"].click()
             qt_app.process_events()
             editor.buttons["Grid"].click()
             qt_app.process_events()
@@ -207,12 +205,12 @@ class TestRecorder(unittest.TestCase):
             made: Recording = steps.load(path)
             editor.deleteLater()
         calls: list[str] = [step.call for step in made.steps]
-        self.assertEqual(calls, ["click", "drag", "press", "button"])
+        self.assertEqual(calls, ["click", "drag", "button", "button"])
         self.assertEqual(made.steps[0].arguments, {"target": "Vertex 0"})
         self.assertEqual(
             made.steps[1].arguments, {"target": "Vertex 2", "to": "(1, 6)"}
         )
-        self.assertEqual(made.steps[2].arguments, {"keys": "Ctrl+Z"})
+        self.assertEqual(made.steps[2].arguments, {"word": "Undo"})
         self.assertEqual(made.steps[3].arguments, {"word": "Grid"})
         times: list[float] = [step.time for step in made.steps]
         self.assertTrue(all(when >= 0 for when in times))

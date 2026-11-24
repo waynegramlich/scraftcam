@@ -100,7 +100,7 @@ Suspended while its children work; its own items resume after
   (`tool_plan()`, `next_intervention()`).
 * `scraftcam/shops.py` (`KINDS`, `tool_label()`, `tool_order()`);
   `tooling/tool_models.py` writes `Tool_Models.md`.
-* Tests: `test_gui_window`, `test_gui_machines`, `test_gui_port`,
+* Tests: `test_gui_window`, `test_gui_machines`, `test_window_exposed`,
   `test_gui_templates`, `test_gui_catalogs`, `test_gui_tree`,
   `test_lcnc_hmi`.  The headless show (~1 min 50 s) passes.
 

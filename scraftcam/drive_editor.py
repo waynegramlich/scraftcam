@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Open the outline editor for Claude to drive, in one command.
 
 This copies an outline file into `~/.scraftcam/drive/` (MCP edits
@@ -6,7 +5,7 @@ only copies, `T.mi~7` #489), starts the outline editor on the copy
 serving MCP on a free port, and opens a Konsole window running Claude
 Code in that directory, already connected to it:
 ```
-./drive_editor.py [FILE] [--fresh] [--prompt TEXT]
+python3 -m scraftcam.run --drive-editor [FILE] [--fresh] [--prompt TEXT]
 ```
 The Claude session starts in `~/.scraftcam/drive/`, not in the
 project, so it reads none of the project's rules, tasks or memory:
@@ -31,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 # The repository's top, where `python3 -m` runs the editor.
-TOP: Path = Path(__file__).resolve().parent
+TOP: Path = Path(__file__).resolve().parent.parent
 
 # Where the copies, the session's `CLAUDE.md` and its MCP config go.
 DRIVE: Path = Path.home() / ".scraftcam" / "drive"
@@ -129,8 +128,13 @@ def terminal(command: list[str]) -> list[str]:
     raise SystemExit("drive_editor: no terminal (konsole) found")
 
 
-def main() -> None:
-    """Copy the outline, start the editor, open Claude beside it."""
+def main(arguments: list[str]) -> None:
+    """Copy the outline, start the editor, open Claude beside it.
+
+    Arguments:
+    * `arguments` (`list[str]`): The command line, after
+      `--drive-editor`.
+    """
     # The file to drive, and the session's first words.
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="Open the outline editor for Claude to drive."
@@ -142,7 +146,7 @@ def main() -> None:
         help="copy the file again over an earlier copy",
     )
     parser.add_argument("--prompt", default=PROMPT, help="the first prompt")
-    options: argparse.Namespace = parser.parse_args()
+    options: argparse.Namespace = parser.parse_args(arguments)
     source: Path = options.path.resolve()
     if not source.is_file():
         raise SystemExit(f"drive_editor: no file {source}")
@@ -165,8 +169,8 @@ def main() -> None:
             [
                 sys.executable,
                 "-m",
-                "scraftcam.gui.outline_editor",
-                str(copy),
+                "scraftcam.run",
+                f"--outline={copy}",
                 "--mcp",
                 str(port),
             ],
@@ -218,7 +222,3 @@ def main() -> None:
     except KeyboardInterrupt:
         editor.terminate()
         editor.wait()
-
-
-if __name__ == "__main__":
-    main()

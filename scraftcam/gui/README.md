@@ -9,7 +9,7 @@ So far: the top line (step 1) and the tree (step 2).
 From the repository's top directory:
 
 ```
-python3 -m scraftcam.run [--shop=SHOP] [--design=DESIGN] [--port=PORT]
+python3 -m scraftcam.run [--shop=SHOP] [--design=DESIGN] [--mcp=PORT]
 ```
 
 or, from anywhere (not on Windows), `scraftcam/run.py` with the same
@@ -19,8 +19,16 @@ arguments.
   first `shop.toml` in the current directory or one of its parents is
   used, as `git` finds its repository.
 * `--design`: the design, a Python file or a package directory.
-* `--port`: a command port on 127.0.0.1 (see below); none by default.
+* `--mcp`: serve MCP on that port of 127.0.0.1 (see below); none by
+  default.
 * `--headless`: Qt draws offscreen, so no display is needed (tests).
+* `--outline [FILE]`: edits an outline file in the first panel,
+  saving every change (no file: a new outline, kept nowhere).
+* `--tutorial FILE`: plays a recording (`NAME.steps.md`) in the first
+  panel, with its narration panel; with `--headless`, checks every
+  step and exits 1 on a mismatch.
+* `--record [FILE]`: records what is done in that editor as steps,
+  and what is said unless `--no-speech` (`outline_panel.py`).
 
 `PySide6` (Qt) is fetched into `~/.scraftcam/packages/` the first time.
 
@@ -97,31 +105,37 @@ existing one.  The shop is yours: keep it under version control.  When
 it is not in a `git` or `hg` repository, the top line suggests one
 (or says to install `git` or `hg`).
 
-## The Command Port
+## MCP
 
-With `--port`, each line sent is one JSON request, shaped like
-JSON-RPC 2.0, and each answer is one JSON line, with `result` or
-`error`:
+With `--mcp PORT`, the GUI serves MCP (`../exposed/`) on that port,
+so Claude (or a test) can drive it; each call runs on Qt's main
+thread.  `scraftcam.exposed.client` starts one headless and calls it
+from the shell:
 
 ```
-echo '{"id": 1, "method": "status"}' | nc -q 1 127.0.0.1 5010
+python3 -m scraftcam.exposed.client start --gui [SHOP] --port 8765
+python3 -m scraftcam.exposed.client call status --port 8765
+python3 -m scraftcam.exposed.client stop --port 8765
 ```
 
-| Method | `params` | Does |
+The functions (`window_exposed.py`; a window is numbered from 0):
+
+| Function | Arguments | Does |
 | --- | --- | --- |
 | `status` | none | What the windows show. |
-| `press` | `button`, `window` (from 0) | Presses a top line or action row button, as a person would; refused if it is hidden. |
+| `top_button` | `label`, `window_number` | Presses a top line or action row button, as a person would; refused if it is hidden. |
 | `new_shop` | `directory`, `name`, `units`, `machines` | Makes a shop, as [New Shop] would. |
-| `tree` | `window` | The tree's labels, nested. |
-| `select` | `path`, `window` | Clicks the item for a file or directory; answers what the current panel shows. |
-| `quit` | none | Closes every window, unless one refuses. |
+| `tree` | `window_number` | The tree's labels, nested. |
+| `select` | `path`, `window_number` | Clicks the item for a file or directory; answers what the current panel shows. |
+| `quit_all` | none | Closes every window, unless one refuses. |
 
 ## The Code
 
 * `app.py`: the model, with no Qt: what every window shows.
 * `tree.py`: the shop's and the design's trees, with no Qt.
 * `editor.py`: which editor [Edit] opens, with no Qt.
-* `window.py`: the windows, the new shop dialog and the command port.
+* `window.py`: the windows and the new shop dialog.
 * `views.py`: the tree, the panels, and the watcher.
-* `port.py`: the command port's requests and answers, with no Qt.
+* `window_exposed.py`: the GUI's functions reached over MCP.
+* `outline_panel.py`: `--outline`, `--tutorial` and `--record`.
 * `../run.py`: the command line.

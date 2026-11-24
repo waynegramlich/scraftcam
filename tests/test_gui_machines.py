@@ -201,7 +201,7 @@ class SummaryTest(unittest.TestCase):
         panel.show_node(node)
         summary: machines.MachinesView | None = panel.summary
         assert summary is not None
-        self.assertTrue(panel.split.isHidden())
+        self.assertTrue(panel.tabs.isHidden())
         self.assertTrue(panel.guide.isHidden())
         self.assertEqual(summary.active, ("Shop mill",))
         block: machines.ActiveBlock = summary.blocks["Shop mill"]

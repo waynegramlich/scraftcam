@@ -61,9 +61,12 @@ one is in `TASKS/Issue_Counter.md`.  Every list continues them.
   `split()`, `gain_problems()`.  The user's USB mic needs `amixer -c
   1 set 'Auto Gain Control' on` (#536).  #539 `mypy.ini` and
   `faster_whisper`, open.
-* `outline_editor.main()`: `--mcp PORT`, `--headless` (1280 x 800),
-  `--tutorial FILE`, `--record [FILE]` (`--no-speech`).
-  `OutlineView.fit()` now fits the dimensions too (#572).
+* The standalone editor is gone (`T.og~6.9` #S5): `scraftcam.run
+  --outline [FILE]`, `--tutorial FILE`, `--record [FILE]`
+  (`--no-speech`), `--mcp PORT`, `--headless`
+  (`gui/outline_panel.py`).  `OutlineView.fit()` fits the
+  dimensions too (#572).  The GUI's and HMI's functions are on the
+  same port (`window_exposed.py`, `hmi/hmi_exposed.py`).
 * Tests: `test_steps`, `test_outline_exposed`, `test_outline_editor`
   (`FitTest`), `test_exposed`, `test_exposed_server`,
   `test_exposed_client`: 107 pass.  `tests/steps/move_a_corner`.
@@ -71,7 +74,8 @@ one is in `TASKS/Issue_Counter.md`.  Every list continues them.
 ## Driving the Editor (#568)
 
 ```
-python3 -m scraftcam.exposed.client start FILE      # port 8766
+python3 -m scraftcam.exposed.client start FILE      # port 8766, scraftcam.run --outline
+python3 -m scraftcam.exposed.client start --gui --shown [SHOP]   # the whole GUI, on screen
 python3 -m scraftcam.exposed.client call click editor="OutlineEditor 1" target="Vertex 3"
 python3 -m scraftcam.exposed.client call screenshot editor="OutlineEditor 1" name=x
 python3 -m scraftcam.exposed.client stop

@@ -1,8 +1,9 @@
 """The whole path, end to end, with no display.
 
-G-code from `demo.py`, through a `lcnc_hmi.py --headless`
-pressed through its command port, to `serve_linuxcnc` and a real LinuxCNC
-simulator.  This takes about two minutes and needs LinuxCNC installed
+G-code from `demo.py`, through the HMI of a `scraftcam.run --headless`
+pressed over MCP (`hmi_line`, `T.og~6.9` #608), to `serve_linuxcnc`
+and a real LinuxCNC simulator.  This takes about two minutes and needs
+LinuxCNC installed
 (`install_linuxcnc` from `scraftcam/lcnc/`) with nothing on its port, so
 it runs only when asked:
 
@@ -31,6 +32,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from scraftcam import shops
+from scraftcam.exposed import client
 from scraftcam.lcnc import lcnc_client
 from scraftcam.plot import PathMove, command_moves, read_gcode
 
@@ -63,6 +65,23 @@ Segment = tuple[tuple[float, float, float], tuple[float, float, float]]
 
 # How far a tool change can make the tip's Z read from the work (inches).
 TOOL_CHANGE_Z: float = 20.0
+
+
+def ask_hmi(port: int, line: str) -> str:
+    """Send one line to the GUI's HMI over MCP (`hmi_line`, #608).
+
+    Arguments:
+    * `port` (`int`): The GUI's MCP port.
+    * `line` (`str`): The words, as the HMI's old port took them.
+
+    Returns:
+    * (`str`): The HMI's answer.
+    """
+    return client.tool(
+        port,
+        "call",
+        {"name": "hmi_line", "arguments": {"hmi": "HMI 1", "line": line}},
+    )
 
 
 def free_port() -> int:
@@ -162,11 +181,7 @@ class TestEndToEnd(unittest.TestCase):
         """
 
         def ask(line: str) -> str:
-            with socket.create_connection(
-                ("127.0.0.1", cls.port), 30.0
-            ) as port:
-                port.sendall(f"{line}\n".encode())
-                return port.makefile().readline().strip()
+            return ask_hmi(cls.port, line)
 
         ask("type G20 G10 L2 P1 X4 Y3 Z-6")
         end: float = time.monotonic() + STEP_TIME
@@ -185,21 +200,26 @@ class TestEndToEnd(unittest.TestCase):
 
     @classmethod
     def start_hmi(cls) -> None:
-        """Start an HMI, and wait until it answers."""
+        """Start the GUI with its HMI, and wait until it answers over
+        MCP (`T.og~6.9` #608; the HMI's own program is gone)."""
         cls.port = free_port()
         cls.hmi = subprocess.Popen(
-            [sys.executable, "-m", "scraftcam.hmi.lcnc_hmi", "--headless",
-             "--port", str(cls.port)],
+            [sys.executable, "-m", "scraftcam.run", "--headless",
+             "--shop", "examples/shop", "--hmi", "--mcp", str(cls.port)],
             cwd=HERE,
         )  # fmt: skip
         end: float = time.monotonic() + STEP_TIME
         while time.monotonic() < end:
             try:
-                socket.create_connection(("127.0.0.1", cls.port), 1.0).close()
-                return
-            except OSError:
-                time.sleep(0.05)
-        raise TimeoutError("The HMI never opened its port.")
+                client.request(cls.port, "ping", {})
+                if '"HMI 1"' in client.tool(
+                    cls.port, "call", {"name": "hmis", "arguments": {}}
+                ):
+                    return
+            except client.ClientError:
+                pass
+            time.sleep(0.2)
+        raise TimeoutError("The GUI's HMI never answered over MCP.")
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -229,10 +249,8 @@ class TestEndToEnd(unittest.TestCase):
             self.wait_idle()
 
     def ask(self, line: str) -> str:
-        """Send one line to the HMI's port, and return its answer."""
-        with socket.create_connection(("127.0.0.1", self.port), 30.0) as port:
-            port.sendall(f"{line}\n".encode())
-            return port.makefile().readline().strip()
+        """Send one line to the HMI, and return its answer."""
+        return ask_hmi(self.port, line)
 
     def press(self, label: str) -> None:
         """Press a button, which must not be greyed out."""

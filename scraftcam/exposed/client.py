@@ -5,6 +5,8 @@ Claude Code's own MCP client connects only at its start, so Claude
 starts a headless outline editor itself and talks to it with this:
 ```
 python3 -m scraftcam.exposed.client start [FILE] [--port PORT]
+python3 -m scraftcam.exposed.client start --gui [SHOP] [--port PORT]
+python3 -m scraftcam.exposed.client start --gui --shown [SHOP]
 python3 -m scraftcam.exposed.client find TEXT
 python3 -m scraftcam.exposed.client describe NAME
 python3 -m scraftcam.exposed.client call NAME [KEY=VALUE ...]
@@ -12,9 +14,14 @@ python3 -m scraftcam.exposed.client stop
 ```
 A `VALUE` is JSON when it reads as JSON (`3`, `-1.5`, `[1, 2]`),
 else text (`editor="OutlineEditor 1"` and `word=Undo` both work).
-`start` runs `outline_editor --headless --mcp PORT` and waits until it
+`start` runs `scraftcam.run --headless --mcp PORT --outline [FILE]`
+(the outline editor in its first panel, #S5) and waits until it
 answers, then lists its editors (handles are given out when first
-listed); its process number is kept in `~/.scraftcam/drive/PORT.pid`,
+listed); with `--gui` it runs `scraftcam.run --headless --mcp PORT`
+instead (`SHOP` as its `--shop`), and gives its `status` (#577);
+with `--shown` the window is on the user's screen, not headless, so
+the user watches (and can take over) while Claude drives it.
+The process number is kept in `~/.scraftcam/drive/PORT.pid`,
 which `stop` uses (never `pkill`, which matched its own shell).  A
 tool's error prints to standard error, and the exit status is 1.
 """
@@ -174,14 +181,27 @@ def pid_file(port: int) -> Path:
     return DRIVE / f"{port}.pid"
 
 
-def start(port: int, outline: Path | None) -> str:
-    """Start a headless outline editor serving MCP on `port`.
+def start(
+    port: int,
+    outline: Path | None,
+    *,
+    gui: bool = False,
+    shown: bool = False,
+) -> str:
+    """Start an outline editor (or GUI) serving MCP on `port`.
+
+    Headless unless `shown`.
 
     Arguments:
     * `port` (`int`):
         The port.
     * `outline` (`Path | None`):
-        The outline file to open, or `None` for a new outline.
+        The outline file to open, or `None` for a new outline; with
+        `gui`, the shop (`--shop`), or `None` to find one from here.
+    * `gui` (`bool`):
+        True to start `scraftcam.run` rather than the editor.
+    * `shown` (`bool`):
+        True to show its window on the screen, rather than headless.
 
     Returns:
     * (`str`): what was started.
@@ -199,16 +219,20 @@ def start(port: int, outline: Path | None) -> str:
         raise ClientError(f"a server already answers on port {port}")
 
     # Started in its own session, so it outlives this command.
+    # Always the one GUI (#S5): an outline in its first panel, unless
+    # `gui` (then `outline` is the shop).
     command: list[str] = [
         sys.executable,
         "-m",
-        "scraftcam.gui.outline_editor",
-        "--headless",
+        "scraftcam.run",
+        *([] if shown else ["--headless"]),
         "--mcp",
         str(port),
     ]
     if outline is not None:
-        command.append(str(outline))
+        command.append(f"--shop={outline}" if gui else f"--outline={outline}")
+    elif not gui:
+        command.append("--outline")
     DRIVE.mkdir(parents=True, exist_ok=True)
     log: Path = DRIVE / f"{port}.log"
     with log.open("w", encoding="utf-8") as output:
@@ -237,17 +261,18 @@ def start(port: int, outline: Path | None) -> str:
             time.sleep(0.2)
             continue
         # Handles are given out when first listed (#507).
-        shown: str = tool(port, "call", {"name": "editors", "arguments": {}})
+        first: str = "status" if gui else "editors"
+        listed: str = tool(port, "call", {"name": first, "arguments": {}})
         return (
             f"started process {process.pid} on port {port} (log {log});"
-            f" editors: {shown}"
+            f" {first}: {listed}"
         )
     stop(port)
     raise ClientError(f"no answer on port {port} after {WAIT} s")
 
 
 def stop(port: int) -> str:
-    """Stop the editor `start` began on `port`.
+    """Stop the program `start` began on `port`.
 
     Arguments:
     * `port` (`int`):
@@ -281,10 +306,16 @@ def main() -> None:
     )
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument(
+        "--gui", action="store_true", help="start scraftcam.run"
+    )
+    parser.add_argument(
+        "--shown", action="store_true", help="on the screen, not headless"
+    )
+    parser.add_argument(
         "command", choices=("start", "stop", "find", "describe", "call")
     )
     parser.add_argument("words", nargs="*")
-    options: argparse.Namespace = parser.parse_args()
+    options: argparse.Namespace = parser.parse_intermixed_args()
     port: int = options.port
     words: list[str] = options.words
 
@@ -292,7 +323,12 @@ def main() -> None:
     try:
         text: str
         if options.command == "start":
-            text = start(port, Path(words[0]) if words else None)
+            text = start(
+                port,
+                Path(words[0]) if words else None,
+                gui=options.gui,
+                shown=options.shown,
+            )
         elif options.command == "stop":
             text = stop(port)
         elif options.command == "find":

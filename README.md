@@ -118,7 +118,7 @@ Each step below needs a little more than the one before it.
    port:
 
    ```
-   ./show_demo.py
+   python3 -m scraftcam.run --show-demo
    ```
 
    It starts LinuxCNC, SolidCraft with the plate in it (on the table,
@@ -132,7 +132,8 @@ Each step below needs a little more than the one before it.
    SolidCraft also opens a series of panels while it builds everything;
    leave them be.
 
-   `./show_demo.py --headless` runs the same thing with no windows
+   `python3 -m scraftcam.run --show-demo --headless` runs the same
+   thing with no windows
    (a headless SolidCraft session, the HMI drawn offscreen),
    presses Start itself, and prints what was built, with bounding
    boxes.
@@ -201,11 +202,14 @@ The code is the package `scraftcam/`:
   (`hmi_machine.py`).
 * `catalog/`: `catxtract.py`, which pulls titles, text, images and
   tables out of a vendor's PDF catalog into a Markdown file per page
-  (`python3 -m scraftcam.catalog.catxtract PDF OUTDIR`), and `pdf.py`,
+  (in a [Pages] tab of `scraftcam.run`: [Open Pages], or `--pages
+  CATALOG`), and `pdf.py`,
   the only module that touches the PDF packages.
 
-Beside it, `tests/` holds the tests and `show_demo.py` the
-demonstration that connects everything.
+Beside it, `tests/` holds the tests.  `scraftcam/show_demo.py`
+(`scraftcam.run --show-demo`) is the demonstration that connects
+everything, and `scraftcam/drive_editor.py` (`--drive-editor`) opens
+an outline for Claude to drive.
 
 * `TASKS/` and `RULES/`: the plans and work log kept with
   [`ai_contexts`](https://github.com/waynegramlich/aicontexts) while

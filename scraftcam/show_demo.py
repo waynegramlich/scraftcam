@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Bring up the whole chain, for showing it off, in one command.
 
 On Linux, this starts LinuxCNC's simulator (`serve_linuxcnc`, from
@@ -11,7 +10,7 @@ the program's setup
 SolidCraft from its `(SCC: ...)` lines alone:
 
 ```
-./show_demo.py
+python3 -m scraftcam.run --show-demo
 ```
 
 Press Start in the HMI; the tool cuts the plate in SolidCraft.  The
@@ -47,20 +46,13 @@ from pathlib import Path
 from types import FrameType
 from typing import Any, cast
 
-# Run as `./show_demo.py` (from any directory): the repository root
-# goes on the path, so that the `scraftcam` package can be imported.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-# These need the path above, so they come after it.
-# pylint: disable=wrong-import-position
+from scraftcam.exposed import client
 from scraftcam.lcnc.lcnc_client import PORT as LINUXCNC_PORT
 from scraftcam.lcnc.lcnc_client import BridgeClient, BridgeError
 from scraftcam.pybind.scraftpybind import PyBind, connect
 
-# pylint: enable=wrong-import-position
-
 # Where everything is.
-PROJECT: Path = Path(__file__).resolve().parent
+PROJECT: Path = Path(__file__).resolve().parent.parent
 SERVER_PROJECT: Path = PROJECT
 SOLIDCRAFT_BESIDE: Path = (
     PROJECT.parent / "solidcraft" / "solidcraft-linux-x86_64.AppImage"
@@ -74,9 +66,9 @@ SHOP: Path = PROJECT / "examples" / "shop" / "shop.toml"
 # The `distrobox` box that LinuxCNC is in.
 BOX: str = "lcnc"
 
-# The usual ports, of SolidCraft and of the HMI's commands.
+# The usual ports, of SolidCraft and of the GUI's MCP (`.mcp.json`'s).
 SOLIDCRAFT_PORT: int = 8080
-HMI_PORT: int = 5007
+MCP_PORT: int = 8765
 
 # The HMI's speed to start with: a whole run in about 75 seconds.
 SPEED: float = 10.0
@@ -670,14 +662,16 @@ class DemoShow:  # pylint: disable=too-many-public-methods
             [sys.executable, "-m", "scraftcam.run",
              "--shop", str(SHOP),
              "--program", str(self.program),
-             "--hmi-port", str(port),
+             "--mcp", str(port),
              "--solidcraft", str(self.options.solidcraft_port),
              *(["--headless"] if self.options.headless else [])],
         )  # fmt: skip
         self.wait_for_port("hmi", port)
-        with socket.create_connection(("127.0.0.1", port), 5.0) as hmi:
-            hmi.sendall(f"speed {self.options.speed}\n".encode())
-            hmi.makefile().readline()
+
+        # Handles are given out when first listed (#507), then the
+        # HMI is driven over MCP (`T.og~6.9` #604).
+        client.tool(port, "call", {"name": "hmis", "arguments": {}})
+        self.ask(f"speed {self.options.speed}")
 
     # Method `DemoShow.bring_up()`:
     def bring_up(self) -> None:
@@ -735,18 +729,20 @@ class DemoShow:  # pylint: disable=too-many-public-methods
 
     # Method `DemoShow.ask()`:
     def ask(self, line: str) -> str:
-        """Send one line to the HMI's port, and return its answer.
+        """Send one line to the HMI, over the GUI's MCP port
+        (`hmi_line`), and return its answer.
 
         Arguments:
-        * `line` (`str`): The command.
+        * `line` (`str`): The command, in the HMI's line words.
 
         Returns:
         * (`str`): The answer.
         """
-        address: tuple[str, int] = ("127.0.0.1", self.options.port)
-        with socket.create_connection(address, 30.0) as hmi:
-            hmi.sendall(f"{line}\n".encode())
-            return hmi.makefile().readline().strip()
+        return client.tool(
+            self.options.port,
+            "call",
+            {"name": "hmi_line", "arguments": {"hmi": "HMI 1", "line": line}},
+        )
 
     # Method `DemoShow.watch()`:
     def watch(
@@ -1024,8 +1020,12 @@ def interrupted(_number: int, _frame: FrameType | None) -> None:
 
 
 # Function `main()`:
-def main() -> int:
+def main(arguments: list[str]) -> int:
     """Bring up the whole chain, and close it when the show is over.
+
+    Arguments:
+    * `arguments` (`list[str]`): The command line, after
+      `--show-demo`.
 
     Returns:
     * (`int`): The exit status.
@@ -1045,8 +1045,9 @@ def main() -> int:
     parser.add_argument(
         "--port",
         type=int,
-        default=HMI_PORT,
-        help="the HMI's command port (default: %(default)s)",
+        default=MCP_PORT,
+        help="the GUI's MCP port, its HMI driven over it (default: "
+        "%(default)s)",
     )
     parser.add_argument(
         "--speed",
@@ -1075,7 +1076,7 @@ def main() -> int:
         action="store_true",
         help="with --headless: show the setup's keep-outs",
     )
-    show: DemoShow = DemoShow(parser.parse_args())
+    show: DemoShow = DemoShow(parser.parse_args(arguments))
     signal.signal(signal.SIGTERM, interrupted)
     status: int = 0
     try:
@@ -1095,7 +1096,3 @@ def main() -> int:
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
         show.close()
     return status
-
-
-if __name__ == "__main__":
-    sys.exit(main())

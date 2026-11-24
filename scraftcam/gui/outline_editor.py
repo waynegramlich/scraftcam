@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """The 2D outline editor (`T.oe~6.2`).
 
 A window with X and Y axes, an origin square, a grid that gets finer
@@ -9,17 +8,16 @@ edge ends in a small arrowhead showing the winding, counterclockwise
 empty space pans the view (#6).  There are no modes (#58): dragging
 moves (a corner, a dimension's line); each click adds to the
 selection (empty space clears it), and the bar's buttons act on it.
-[Dimension (N)] dimensions what is selected (#234): one edge's
+[Dimension] dimensions what is selected (#234): one edge's
 length, the angle at one corner, the angle between two edges, or the
 last two points clicked, before or after it is pressed (#60).
-The buttons sit in tabs of related ones (#319), each with its key,
-which works whichever tab is showing; no menus (#11).  [Most Common]:
-[Undo (Ctrl+Z)], [Redo (Ctrl+Shift+Z)] (#18, a whole drag being one
-change), [Delete (Del)], [Dimension (N)], [Fit (Home)], [Rotate
-Diagram (T)].  [Draw]: [Delete], [Dimension], [Dim. Kind \u21bb
-(K)], [New Letter (L)], [Revolve (R)].  [View]: [Grid (G)], [Snap
-(S)], [Fit], [Overview (O)], [Hide (H)], [Rotate Diagram], [Font +
-(])], [Font - ([)] (#273), [Show Marks (M)].  Marks (an edge level
+The buttons sit in tabs of related ones (#319); no menus (#11), and
+no shortcut keys (#589: in the GUI a key can reach the wrong panel).
+[Most Common]: [Undo], [Redo] (#18, a whole drag being one change),
+[Delete], [Dimension], [Fit], [Rotate Diagram].  [Draw]: [Delete],
+[Dimension], [Dim. Kind \u21bb], [New Letter], [Revolve].  [View]:
+[Grid], [Snap], [Fit], [Overview], [Hide], [Rotate Diagram], [Font
++], [Font -] (#273), [Show Marks].  Marks (an edge level
 or upright, a corner on an axis) are made by dragging, a corner
 snapping onto them (`T.tfo~6.5` #451), and drawn only while [Show
 Marks] is on.  The refusals and hints show under the
@@ -28,14 +26,12 @@ letters' table (#27): letter, long name, default value with its
 unit, help, each kept and checked at every keystroke.
 
 The scene is in unitless drawing steps (letters give the real sizes,
-#15), Y up.  Run alone: `python3 -m scraftcam.gui.outline_editor`.
+#15), Y up.  It runs in a panel of `scraftcam.run` (`T.og~6.9` #S5):
+`--outline FILE`, `--tutorial FILE`, `--record [FILE]`.
 """
 
-import argparse
 import math
 import re
-import sys
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from functools import partial
@@ -64,13 +60,11 @@ from PySide6.QtGui import (  # noqa: E402
     QBrush,
     QColor,
     QFont,
-    QKeySequence,
     QMouseEvent,
     QPainter,
     QPainterPath,
     QPainterPathStroker,
     QPen,
-    QShortcut,
     QTransform,
     QWheelEvent,
 )
@@ -104,12 +98,8 @@ from PySide6.QtWidgets import (  # noqa: E402
 )
 
 from ..diagram import FONT_STEP, TEXT, Stroke, svg  # noqa: E402
-from ..exposed import steps as recordings  # noqa: E402
-from ..exposed.exposed import ExposedError  # noqa: E402
-from ..exposed.steps import Recording  # noqa: E402
 from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
-from ..speech import gain_problems  # noqa: E402
-from . import theme, tutorial  # noqa: E402
+from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
     AXES,
@@ -166,11 +156,9 @@ from .outline_diagram import edge_arc as shared_arc  # noqa: E402
 from .outline_file import (  # noqa: E402
     Hole,
     Outline,
-    OutlineError,
     outline_from_text,
     outline_text,
 )
-from .recorder import Recorder  # noqa: E402
 from .values import (  # noqa: E402
     crossings,
     fillet_problems,
@@ -179,7 +167,6 @@ from .values import (  # noqa: E402
     refresh_formulas,
     values_cross,
 )
-from .window import make_application  # noqa: E402
 
 # pylint: enable=wrong-import-position,wrong-import-order
 
@@ -250,25 +237,43 @@ LETTER_POINTS: int = 11
 # zoom (#311).
 TEXT_PIXELS: float = 14.0
 
-# Each button's word and key (#20); the key works on any tab.
-BUTTON_KEYS: tuple[tuple[str, str], ...] = (
-    ("Grid", "G"),
-    ("Snap", "S"),
-    ("Delete", "Del"),
-    ("Dimension", "N"),
-    ("Dim. Kind", "K"),
-    ("Revolve", "R"),
-    ("Rotate Diagram", "T"),
-    ("Font +", "]"),
-    ("Font -", "["),
-    ("Hide", "H"),
-    ("Overview", "O"),
-    ("Fit", "Home"),
-    ("Undo", "Ctrl+Z"),
-    ("Redo", "Ctrl+Shift+Z"),
-    ("New Letter", "L"),
-    ("Show Marks", "M"),
+# Each button's word (#20); no keys (#589: a key can reach the wrong
+# panel).
+BUTTON_WORDS: tuple[str, ...] = (
+    "Grid",
+    "Snap",
+    "Delete",
+    "Dimension",
+    "Dim. Kind",
+    "Revolve",
+    "Rotate Diagram",
+    "Font +",
+    "Font -",
+    "Hide",
+    "Overview",
+    "Fit",
+    "Undo",
+    "Redo",
+    "New Letter",
+    "Show Marks",
 )
+
+# The buttons that change the outline, greyed while it is read only
+# (#590b, #590c); the rest only change the view.
+CHANGE_WORDS: tuple[str, ...] = (
+    "Delete",
+    "Dimension",
+    "Dim. Kind",
+    "New Letter",
+    "Revolve",
+    "Hide",
+    "Rotate Diagram",
+    "Undo",
+    "Redo",
+)
+
+# What a refused change says while the outline is read only (#590b).
+READ_ONLY_MESSAGE: str = "Check [Allow Changes] first."
 
 # The buttons in tabs of related ones (#319), the most used first; a
 # button may sit on more than one tab.
@@ -2213,6 +2218,8 @@ class OutlineView(QGraphicsView):
     * `grid_shown` (`bool`): Whether the grid is drawn.
     * `history` (`History`): What undo and redo go back and forth in.
     * `message` (`str`): The last refusal, for the mode bar.
+    * `read_only` (`bool`): True while nothing may be dragged
+      (#590b); presses still choose, and the view still pans.
     * `chosen_points` (`list[int]`):
       The selected points (`ORIGIN` or corners), in the order clicked.
     * `chosen_dimensions` (`list[int]`): The selected dimensions.
@@ -2286,6 +2293,7 @@ class OutlineView(QGraphicsView):
         self.dragged: int = -1
         self.history: History = History()
         self.message: str = ""
+        self.read_only: bool = False
         self.chosen_points: list[int] = []
         self.chosen_dimensions: list[int] = []
         self.chosen_edges: list[int] = []
@@ -2675,6 +2683,11 @@ class OutlineView(QGraphicsView):
             )
             return
         if self.pan_from is None:
+            # Read only, a drag of a corner, strip or dimension goes
+            # nowhere (#590b): every drag changes things only here.
+            if self.read_only and self.scene().mouseGrabberItem() is not None:
+                self.message = READ_ONLY_MESSAGE
+                return
             super().mouseMoveEvent(event)
             return
         moved: QPoint = event.position().toPoint() - self.pan_from
@@ -4230,12 +4243,14 @@ class OutlineEditor(QWidget):
       by its word (`"Grid"`, ...); its state is the buttons'.
     * `button_tabs` (`QTabWidget`): The buttons in tabs (#319).
     * `buttons` (`dict[str, QToolButton]`): Each word's first button.
-    * `keys` (`dict[str, QShortcut]`): Each button's key, by its word.
     * `drawing` (`Drawing`): The outline being drawn.
     * `new_fillet` (`QPushButton`): [New Fillet Dimension], shown
       in [Fillets] only (#214).
     * `tabs` (`QTabBar`): [Dimensions] (every letter) and [Fillets]
       (only those checked "Fillet", #213), over the one table.
+    * `read_only` (`bool`): True while the outline may not be changed
+      ([Allow Changes] unchecked in its panel, #590): the view still
+      zooms, pans and chooses.
     * `problems` (`QLabel`): The letters' problems, a line each, red,
       right under the table (#141).
     * `letter_lines` (`list[str]`): The letters' problems, a line
@@ -4264,6 +4279,7 @@ class OutlineEditor(QWidget):
         super().__init__()
         self.drawing: Drawing = Drawing() if drawing is None else drawing
         self.path: Path | None = path
+        self.read_only: bool = False
         self.saved: str = file_text(path)
         self.setWindowTitle(
             "Outline Editor" if path is None else f"Outline Editor: {path}"
@@ -4310,23 +4326,16 @@ class OutlineEditor(QWidget):
 
     # Method `OutlineEditor.make_buttons()`:
     def make_buttons(self) -> None:
-        """Make the buttons (#319): each word one `QAction` with its
-        key, shown as a button on every tab listing it, so that its
-        checked and enabled state is the same on all of them."""
+        """Make the buttons (#319): each word one `QAction`, shown as
+        a button on every tab listing it, so that its checked and
+        enabled state is the same on all of them."""
         self.button_actions: dict[str, QAction] = {}
         self.buttons: dict[str, QToolButton] = {}
-        self.keys: dict[str, QShortcut] = {}
         word: str
-        key: str
-        for word, key in BUTTON_KEYS:
+        for word in BUTTON_WORDS:
             # [Dim. Kind] cycles, so it shows a cycle arrow (U+21BB).
             cycle: str = " \u21bb" if word == "Dim. Kind" else ""
-            action: QAction = QAction(f"{word}{cycle} ({key})", self)
-            # A button's own shortcut never fired; a `QShortcut` does.
-            shortcut: QShortcut = QShortcut(QKeySequence(key), self)
-            shortcut.activated.connect(action.trigger)
-            self.keys[word] = shortcut
-            self.button_actions[word] = action
+            self.button_actions[word] = QAction(f"{word}{cycle}", self)
         for word in ("Grid", "Snap", "Revolve", "Overview", "Show Marks"):
             self.button_actions[word].setCheckable(True)
         for word in ("Grid", "Snap"):
@@ -4512,6 +4521,10 @@ class OutlineEditor(QWidget):
         Arguments:
         * `letter` (`str | None`): The letter.
         """
+        # Read only, arming would fillet the chosen corners (#590b).
+        if self.read_only and letter is not None:
+            self.view.message = READ_ONLY_MESSAGE
+            letter = None
         self.view.armed = letter
         if letter is not None:
             corners: list[int] = list(
@@ -4559,7 +4572,9 @@ class OutlineEditor(QWidget):
             QAbstractItemView.EditTrigger
         )
         self.table.setEditTriggers(
-            triggers.DoubleClicked | triggers.EditKeyPressed
+            triggers.NoEditTriggers
+            if self.read_only
+            else triggers.DoubleClicked | triggers.EditKeyPressed
             if fillets
             else triggers.CurrentChanged
             | triggers.SelectedClicked
@@ -4962,6 +4977,29 @@ class OutlineEditor(QWidget):
         self.view.toggle_revolve()
         self.button_actions["Revolve"].setChecked(self.view.drawing.revolve)
 
+    # Method `OutlineEditor.set_read_only()`:
+    def set_read_only(self, read_only: bool) -> None:
+        """Refuse every change to the outline, or allow them (#590).
+
+        Read only, the buttons that change it are greyed, the letters
+        table cannot be typed in, and drags go nowhere; zooming,
+        panning, choosing and the view's buttons still work.
+
+        Arguments:
+        * `read_only` (`bool`): True to refuse changes.
+        """
+        self.read_only = read_only
+        self.view.read_only = read_only
+        word: str
+        for word in CHANGE_WORDS:
+            self.button_actions[word].setEnabled(not read_only)
+        self.new_fillet.setEnabled(not read_only)
+        if read_only:
+            self.table.setCurrentCell(-1, -1)
+            self.arm(None)
+        self.show_rows()
+        self.show_message()
+
     # Method `OutlineEditor.save()`:
     def save(self) -> None:
         """Rewrite the file if the outline changed (not mid-drag: the
@@ -4989,8 +5027,11 @@ class OutlineEditor(QWidget):
         undo or redo.
         """
         history: History = self.view.history
-        self.button_actions["Undo"].setEnabled(bool(history.done))
-        self.button_actions["Redo"].setEnabled(bool(history.undone))
+        changes: bool = not self.read_only
+        self.button_actions["Undo"].setEnabled(changes and bool(history.done))
+        self.button_actions["Redo"].setEnabled(
+            changes and bool(history.undone)
+        )
         # [Revolve] shows the drawing's state (a refusal, an undo).
         self.button_actions["Revolve"].setChecked(self.view.drawing.revolve)
         self.button_actions["Overview"].setChecked(self.view.overview)
@@ -5073,72 +5114,6 @@ def file_text(path: Path | None) -> str:
     return path.read_text(encoding="utf-8")
 
 
-# Where `--record` writes when no file is named (#503).
-RECORDINGS: Path = Path.home() / ".scraftcam" / "recordings"
-
-
-# Function `start_recording()`:
-def start_recording(
-    options: argparse.Namespace, editor: OutlineEditor, path: Path | None
-) -> Recorder | None:
-    """Start `--record`, with the microphone unless `--no-speech`.
-
-    Arguments:
-    * `options` (`argparse.Namespace`): The command line.
-    * `editor` (`OutlineEditor`): The editor to record.
-    * `path` (`Path | None`): The outline file edited, if any.
-
-    Returns:
-    * (`Recorder | None`): The recorder, or None without `--record`.
-    """
-    # Warn of a microphone that will sound buried in hiss (#537).
-    if options.record is None:
-        return None
-    record: Path = record_path(options.record, path)
-    title: str = record.name.split(".")[0].rsplit("_", 2)[0]
-    speech: bool = not options.no_speech
-    if speech:
-        problem: str
-        for problem in gain_problems():
-            print(f"Warning: {problem}", file=sys.stderr)
-    try:
-        recorder: Recorder = Recorder(
-            editor,
-            record,
-            title.replace("_", " ").capitalize(),
-            speech=speech,
-        )
-    except OSError as error:
-        print(f"No speech: {error}", file=sys.stderr)
-        recorder = Recorder(
-            editor, record, title.replace("_", " ").capitalize()
-        )
-    talk: str = "; talk as you go" if recorder.microphone else ""
-    print(f"Recording into {record}{talk}", flush=True)
-    return recorder
-
-
-# Function `record_path()`:
-def record_path(record: Path, path: Path | None) -> Path:
-    """Give the file `--record` writes.
-
-    Arguments:
-    * `record` (`Path`): What `--record` named: a file, or a
-      directory (`RECORDINGS` when nothing was named).
-    * `path` (`Path | None`): The outline file edited, if any.
-
-    Returns:
-    * (`Path`): A named file as is; in a directory, a new file
-      named after the outline and the time (`end_mill_2026-11-23_
-      14-37-31.steps.md`).
-    """
-    if not record.is_dir() and record != RECORDINGS:
-        return record
-    stem: str = path.name.split(".")[0] if path is not None else "new"
-    stamp: str = time.strftime("%Y-%m-%d_%H-%M-%S")
-    return record / f"{stem}_{stamp}.steps.md"
-
-
 # Function `drawing_from()`:
 def drawing_from(path: Path) -> Drawing:
     """Read a drawing from an outline file.
@@ -5182,104 +5157,3 @@ def drawing_from_text(text: str, source: str = "") -> Drawing:
         outline.turns,
         outline.holes,
     )
-
-
-# Function `main()`:
-def main() -> None:
-    """Show the editor until its window is closed: on the file named
-    on the command line, if any (a new one starts as the triangle),
-    refusing one that cannot be read (#93).  With `--mcp PORT`, Claude
-    can drive it over MCP while it runs (#490); `--headless` draws
-    offscreen, for tests; `--tutorial FILE` plays a recording, or with
-    `--headless` checks it (#19)."""
-    # The file, and whether to serve MCP.
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        description="Edit a parametric 2D outline."
-    )
-    parser.add_argument("path", nargs="?", type=Path, default=None)
-    parser.add_argument(
-        "--mcp", type=int, metavar="PORT", help="serve MCP on PORT"
-    )
-    parser.add_argument(
-        "--tutorial",
-        type=Path,
-        metavar="FILE",
-        help="play the recording FILE (`.steps.md`)",
-    )
-    parser.add_argument(
-        "--record",
-        nargs="?",
-        const=RECORDINGS,
-        type=Path,
-        metavar="FILE",
-        help="record what you do as steps, into FILE (by default, a "
-        "new file in ~/.scraftcam/recordings/)",
-    )
-    parser.add_argument(
-        "--no-speech",
-        action="store_true",
-        help="with --record, leave the microphone off",
-    )
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="draw offscreen at 1280 x 800 (for tests)",
-    )
-    options: argparse.Namespace = parser.parse_args()
-    if options.record is not None and options.tutorial is not None:
-        parser.error("--record and --tutorial cannot be used together")
-    path: Path | None = options.path
-    drawing: Drawing = Drawing()
-    recording: Recording | None = None
-    try:
-        if options.tutorial is not None:
-            # A tutorial's outline is its own, and never saved.
-            recording = recordings.load(options.tutorial)
-            path = None
-            if recording.outline:
-                drawing = drawing_from_text(
-                    recording.outline, str(options.tutorial)
-                )
-        elif path is not None and path.exists():
-            drawing = drawing_from(path)
-    except (OSError, OutlineError, ExposedError) as error:
-        print(error, file=sys.stderr)
-        sys.exit(1)
-    application: QApplication = make_application(headless=options.headless)
-    editor: OutlineEditor = OutlineEditor(drawing, path=path)
-    theme.follow(application, editor.view.restyle)
-    if options.headless:
-        # One size, so that every replay sees the same window (#498).
-        editor.resize(1280, 800)
-
-    # The server runs each call on this (Qt's main) thread (#512).
-    if options.mcp is not None:
-        # pylint: disable=import-outside-toplevel
-        from ..exposed import qt_runner, server
-        from . import outline_exposed
-
-        outline_exposed.EDITORS.add(editor)
-        server.serve(options.mcp, server.Server(qt_runner.QtRunner()))
-        print(f"MCP on http://127.0.0.1:{options.mcp}{server.PATH}")
-
-    # A tutorial: checked offscreen, or shown with its panel (#19).
-    if recording is not None:
-        if options.headless:
-            found: list[str] = tutorial.mismatches(editor, recording)
-            print("\n\n".join(found) or f"{options.tutorial}: all match")
-            sys.exit(1 if found else 0)
-        tutorial.show_panel(editor, recording)
-
-    # Recording what the user does, step by step (#21), and what they
-    # say (#532), turned into each step's draft once the window closes.
-    recorder: Recorder | None = start_recording(options, editor, path)
-    editor.show()
-    editor.view.fit()
-    status: int = application.exec()
-    if recorder is not None:
-        print(recorder.finish())
-    sys.exit(status)
-
-
-if __name__ == "__main__":
-    main()

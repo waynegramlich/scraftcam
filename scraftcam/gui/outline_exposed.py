@@ -24,8 +24,8 @@ from scraftcam.packages import require
 # `PySide6` is put on `sys.path` before it is imported.
 require("PySide6")
 # pylint: disable=wrong-import-position,wrong-import-order
-from PySide6.QtCore import QKeyCombination, QPoint, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QKeySequence, QPixmap  # noqa: E402
+from PySide6.QtCore import QPoint, QPointF, Qt  # noqa: E402
+from PySide6.QtGui import QPixmap  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QToolButton, QWidget  # noqa: E402
 
@@ -46,9 +46,8 @@ HANDLES: Handles = Handles()
 # Where `screenshot()` writes its pictures (#567).
 SHOTS: Path = Path.home() / ".scraftcam" / "screenshots"
 
-# The open editors, added by whoever makes one (`outline_editor.main()`
-# runs as `__main__`, so its class cannot be imported here to look
-# for them).
+# The open editors, added by whoever makes one (a tool's panel,
+# `outline_panel.py`, a tutorial, a test).
 EDITORS: weakref.WeakSet[object] = weakref.WeakSet()
 
 
@@ -373,25 +372,6 @@ def drag(editor: str, target: str, *, to: str) -> str:
     QTest.mouseMove(port, (start + end) / 2)
     QTest.mouseMove(port, end)
     QTest.mouseRelease(port, Qt.MouseButton.LeftButton, pos=end)
-    QTest.qWait(1)
-    return state(editor)
-
-
-@exposed.changes
-def press(editor: str, keys: str) -> str:
-    """Press {keys} in {editor}."""
-    # Keys as Qt spells them (`G`, `Delete`, `Ctrl+Z`).
-    view: OutlineView = _editor(editor).view
-    sequence: QKeySequence = QKeySequence(keys)
-    if sequence.isEmpty():
-        raise ExposedError(f"`{keys}` names no keys")
-    index: int
-    for index in range(sequence.count()):
-        # PySide6's stubs lack `QKeySequence.__getitem__()`.
-        combination: QKeyCombination = sequence[index]  # type: ignore[index]
-        QTest.keyClick(
-            view, combination.key(), combination.keyboardModifiers()
-        )
     QTest.qWait(1)
     return state(editor)
 

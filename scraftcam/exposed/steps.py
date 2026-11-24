@@ -167,7 +167,7 @@ def _parameters(call: str) -> list[str]:
 
 def _value(text: str) -> object:
     """Read one argument's value: a number, `true`/`false`, a JSON
-    string, or else the bare text (`Ctrl+Z`, `Grid`).
+    string, or else the bare text (`Undo`, `Grid`).
 
     Arguments:
     * `text` (`str`):
@@ -202,7 +202,7 @@ def _value_text(value: object) -> str:
         The value.
 
     Returns:
-    * (`str`): its text (`-4`, `1.5`, `Ctrl+Z`, `"a, b"`).
+    * (`str`): its text (`-4`, `1.5`, `Undo`, `"a, b"`).
     """
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -641,6 +641,29 @@ def _unplaced(_view: View) -> None:
     """
 
 
+# The state lines a replay does not compare: the file the editor is on
+# depends on where it is replayed (alone, or in a tool's panel, #593),
+# while a recording carries its own starting outline (#527).
+UNCOMPARED: tuple[str, ...] = ("file: ",)
+
+
+def compared(state: str) -> list[str]:
+    """Give the lines of `state` that a replay compares.
+
+    Arguments:
+    * `state` (`str`):
+        A step's state, as `state()` gives it.
+
+    Returns:
+    * (`list[str]`): its lines, less those starting `UNCOMPARED`.
+    """
+    return [
+        line
+        for line in state.strip().splitlines()
+        if not line.startswith(UNCOMPARED)
+    ]
+
+
 @dataclass(slots=True)
 class Player:
     """Runs a recording's steps forward and back, on one object.
@@ -778,8 +801,8 @@ class Player:
             changes: list[str] = [
                 f"  {line}"
                 for line in difflib.unified_diff(
-                    step.state.strip().splitlines(),
-                    given.strip().splitlines(),
+                    compared(step.state),
+                    compared(given),
                     n=0,
                     lineterm="",
                 )

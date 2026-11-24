@@ -79,19 +79,11 @@ class WindowTest(unittest.TestCase):
         top.show()
         model.start_machine("shop mill")
 
-        # [Exit] asks to stop it first (#13); "No" stays.
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        from PySide6.QtWidgets import (  # pylint: disable=import-outside-toplevel
-            QMessageBox,
-        )
-
-        with mock.patch(
-            "PySide6.QtWidgets.QMessageBox.question",
-            return_value=QMessageBox.StandardButton.No,
-        ) as question:
-            top.buttons[EXIT].click()
-        self.assertIn("shop mill is running", question.call_args.args[2])
+        # [Exit] is refused, naming the machine; no question (#611).
+        top.buttons[EXIT].click()
         self.assertTrue(top.isVisible())
+        self.assertIn("Stop first: shop mill is running", model.latest().text)
+        self.assertTrue(model.latest().problem)
         model.stop_machine("shop mill")
         top.buttons[EXIT].click()
         self.assertFalse(top.isVisible())
@@ -127,7 +119,23 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(meter.value(), 750)
         self.assertEqual(top.busy(), "The mill is running")
 
+        # Active: the tree is forced on and [Tree] greyed (#610); a
+        # refused [Exit] names it (#611).
+        top.buttons["Tree"].click()
+        self.assertTrue(top.tree.isHidden())
+        top.show_active()
+        self.assertFalse(top.tree.isHidden())
+        self.assertFalse(top.buttons["Tree"].isEnabled())
+        self.assertEqual(top.tree.active, {"Mill"})
+        top.buttons[EXIT].click()
+        self.assertIn("The mill is running", top.model.latest().text)
+        self.assertTrue(top.isVisible())
+
+        # Stopped: [Tree] usable again, and it closes.
         busy.clear()
+        top.show_active()
+        self.assertTrue(top.buttons["Tree"].isEnabled())
+        self.assertEqual(top.tree.active, set())
         top.close()
         self.assertFalse(top.isVisible())
 

@@ -8,8 +8,8 @@ move one, and take the move back.
   <!-- do: click Vertex 0 -->
 * Drag the top corner up and to the right.  The edges follow it.
   <!-- do: drag Vertex 2 -> (1, 6) -->
-* Press Ctrl+Z to undo the move: the corner goes back.
-  <!-- do: press Ctrl+Z -->
+* Press [Undo] to take the move back: the corner goes back.
+  <!-- do: button Undo -->
 
 <!-- recording
 format = 2
@@ -58,7 +58,7 @@ undo depth: 1
 
 [[states]]
 step = 3
-call = "press Ctrl+Z"
+call = "button Undo"
 state = '''
 file: (new)
 revolve: False

@@ -40,7 +40,7 @@ class TestQtHMI(unittest.TestCase):
         lcnc_hmi.ANSWERS.clear()
         lcnc_hmi.ASKED.clear()
         self.machine: hmi_machine.HMIMachine = hmi_machine.HMIMachine(True)
-        self.hmi: lcnc_hmi.HMI = lcnc_hmi.HMI(self.machine, 10.0, None)
+        self.hmi: lcnc_hmi.HMI = lcnc_hmi.HMI(self.machine, 10.0)
         self.hmi.timer.stop()
         self.addCleanup(self.hmi.deleteLater)
 

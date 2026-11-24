@@ -61,7 +61,7 @@ class TestOutlineExposed(unittest.TestCase):
             exposed.call("state", {"editor": "TestOutlineExposed 1"})
 
     def test_gestures(self) -> None:
-        """A click chooses a corner, a drag moves one, Ctrl+Z undoes."""
+        """A click chooses a corner, a drag moves one, [Undo] undoes."""
         exposed.call("editors", {})
         self.editor.resize(1280, 800)
         self.editor.show()
@@ -75,7 +75,7 @@ class TestOutlineExposed(unittest.TestCase):
         )
         self.assertIn("  2: (1, 6)", str(text))
         self.assertIn("undo depth: 1", str(text))
-        text = exposed.call("press", {**handle, "keys": "Ctrl+Z"})
+        text = exposed.call("button", {**handle, "word": "Undo"})
         self.assertIn("  2: (0, 4)", str(text))
         # A target must be what is there now (#550).
         with self.assertRaisesRegex(ExposedError, "there are 3 vertices"):
@@ -86,8 +86,6 @@ class TestOutlineExposed(unittest.TestCase):
             exposed.call("click", {**handle, "target": "Mirror 1"})
         with self.assertRaisesRegex(ExposedError, "is not `Vertex N`"):
             exposed.call("click", {**handle, "target": "Corner 1"})
-        with self.assertRaisesRegex(ExposedError, "names no keys"):
-            exposed.call("press", {**handle, "keys": ""})
 
     def test_screenshot(self) -> None:
         """A picture of the window is written where it says (#567)."""

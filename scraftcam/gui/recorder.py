@@ -2,8 +2,8 @@
 
 `--record` writes the user's own gestures as the steps of a
 recording, so a tutorial (or a bug report) is made by doing it: a
-left click or drag in the drawing (`click`, `drag`), a key that
-fires a shortcut (`press`), a button clicked (`button`).  Each step
+left click or drag in the drawing (`click`, `drag`), a button
+clicked (`button`); the editor has no shortcut keys (#589).  Each step
 keeps the state after it, and the file is written after every step,
 so nothing is lost if the editor dies.
 
@@ -45,7 +45,7 @@ from PySide6.QtCore import (  # noqa: E402
     Qt,
     QTimer,
 )
-from PySide6.QtGui import QAction, QMouseEvent, QShortcut  # noqa: E402
+from PySide6.QtGui import QAction, QMouseEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication, QToolButton, QWidget  # noqa: E402
 
 # pylint: enable=wrong-import-position,wrong-import-order
@@ -53,14 +53,9 @@ from PySide6.QtWidgets import QApplication, QToolButton, QWidget  # noqa: E402
 if typing.TYPE_CHECKING:
     from scraftcam.gui.outline_editor import OutlineEditor
 
-# The events that start a gesture (a shortcut's key comes first as
-# `ShortcutOverride`).
+# The events that start a gesture.
 STARTS: frozenset[QEvent.Type] = frozenset(
-    (
-        QEvent.Type.MouseButtonPress,
-        QEvent.Type.KeyPress,
-        QEvent.Type.ShortcutOverride,
-    )
+    (QEvent.Type.MouseButtonPress, QEvent.Type.KeyPress)
 )
 
 # Places kept in a recorded point (drawing steps).
@@ -154,20 +149,13 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         self.began: float = 0.0
 
         # Every event (a new gesture files the last step), the
-        # drawing's mouse, each shortcut and each button.
+        # drawing's mouse and each button.
         self.port: QWidget = editor.view.viewport()
         application: QCoreApplication | None = QApplication.instance()
         if application is not None:
             application.installEventFilter(self)
             editor.destroyed.connect(
                 partial(application.removeEventFilter, self)
-            )
-        shortcut: QShortcut
-        for shortcut in editor.keys.values():
-            shortcut.activated.connect(
-                partial(
-                    self.later, "press", {"keys": shortcut.key().toString()}
-                )
             )
         words: dict[QAction, str] = {
             action: word for word, action in editor.button_actions.items()

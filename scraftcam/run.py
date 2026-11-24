@@ -2,33 +2,54 @@
 """Start the `scraftcam` GUI (`T.g~6`).
 
 ```
-python3 -m scraftcam.run [--shop=SHOP] [--design=DESIGN] [--port=PORT]
-./scraftcam/run.py [--shop=SHOP] [--design=DESIGN] [--port=PORT]
+python3 -m scraftcam.run [--shop=SHOP] [--design=DESIGN] [--mcp=PORT]
+./scraftcam/run.py [--shop=SHOP] [--design=DESIGN] [--mcp=PORT]
 ```
 
 `SHOP` is a shop's `shop.toml` or its directory; with none, the first
 `shop.toml` in the current directory or one of its parents is used
 (#83).  `DESIGN` is a Python file, or a package directory.  With
 `--headless`, Qt draws offscreen, so no display is needed.  With
-`--port`, the GUI answers commands on that port of 127.0.0.1, one
-JSON line in, one out (`scraftcam/gui/port.py`):
+`--mcp PORT`, the GUI serves MCP on that port of 127.0.0.1
+(`gui/window_exposed.py`; `scraftcam.exposed.client` drives it):
 
 ```
-echo '{"id": 1, "method": "status"}' | nc -q 1 127.0.0.1 5010
+python3 -m scraftcam.exposed.client start --gui --port 8765
+python3 -m scraftcam.exposed.client call status --port 8765
+```
+
+With `--outline FILE`, the first panel edits an outline file, saving
+every change; `--record [FILE]` records what is done as steps (and,
+unless `--no-speech`, what is said).  With `--pages CATALOG` (a shop's
+`catalog.toml`), the first panel opens the catalog's pages in
+`catxtract`, in its [Pages] tab.  With `--tutorial FILE`, the
+first panel plays a recording
+(`NAME.steps.md`, `T.og~6.9` #595) in an outline editor, with its
+narration panel; with `--headless` too, every step is checked, the
+mismatches printed, and the exit status is 1 if any:
+
+```
+cd tests/steps
+python3 -m scraftcam.run --headless --tutorial move_a_corner.steps.md
 ```
 
 With `--program`, the first panel controls the machine (step 5,
 `T.g~6` #52, #53): the HMI (`scraftcam.hmi.lcnc_hmi`), a
 client of a `serve_linuxcnc` already running (`--lcnc-port`), opens
-the program, stopped; it answers its own line commands on
-`--hmi-port`, and draws the program's setup in the SolidCraft on
-`--solidcraft`.  Nothing closes while the machine runs or its
-spindle is on (#56):
+the program, stopped, and draws the program's setup in the
+SolidCraft on `--solidcraft`; `--hmi` makes it with no program.  It
+is driven over `--mcp` (`hmi_exposed.py`).  Nothing closes while the
+machine runs, or its spindle or coolant is on (#56, #609):
 
 ```
 python3 -m scraftcam.run --shop examples/shop --program demo.ngc \
-    --hmi-port 5007 --solidcraft 8080
+    --solidcraft 8080
 ```
+
+`--show-demo` (`show_demo.py`) brings up LinuxCNC, SolidCraft and
+this GUI for the demo, and `--drive-editor` (`drive_editor.py`)
+opens an outline for Claude to drive beside a Claude window; the
+rest of the command line is theirs (`--show-demo -h`).
 """
 
 import argparse
@@ -45,6 +66,11 @@ if __package__ in (None, ""):
 from scraftcam.gui import window
 from scraftcam.gui.app import App, find_shop
 from scraftcam.gui.machines import Due, MachineControl, Report
+from scraftcam.gui.outline_panel import (
+    NEW_OUTLINE,
+    RECORDINGS,
+    OutlinePanel,
+)
 from scraftcam.lcnc.lcnc_client import PORT as LINUXCNC_PORT
 from scraftcam.shops import SHOP_FILE
 
@@ -79,6 +105,20 @@ def main(arguments: list[str]) -> int:
     Returns:
     * (`int`): 0 when the GUI closed normally.
     """
+    # The old programs, now flags of this one (`T.og~6.9` #603): the
+    # rest of the command line is theirs.
+    if arguments[:1] == ["--show-demo"]:
+        # pylint: disable-next=import-outside-toplevel
+        from scraftcam import show_demo
+
+        return show_demo.main(arguments[1:])
+    if arguments[:1] == ["--drive-editor"]:
+        # pylint: disable-next=import-outside-toplevel
+        from scraftcam import drive_editor
+
+        drive_editor.main(arguments[1:])
+        return 0
+
     # The command line.
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         prog="scraftcam", description="The scraftcam GUI."
@@ -89,11 +129,63 @@ def main(arguments: list[str]) -> int:
         "--headless", action="store_true", help="draw offscreen"
     )
     parser.add_argument(
-        "--port", type=int, default=0, help="command port (0: none)"
+        "--mcp", type=int, default=0, help="MCP port (0: none)"
+    )
+    parser.add_argument(
+        "--outline",
+        nargs="?",
+        const=NEW_OUTLINE,
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="edit an outline file (none: a new outline, kept nowhere)",
+    )
+    parser.add_argument(
+        "--pages",
+        type=Path,
+        default=None,
+        metavar="CATALOG",
+        help="open a catalog's pages (its catalog.toml) in catxtract",
+    )
+    parser.add_argument(
+        "--tutorial",
+        type=Path,
+        default=None,
+        help="play a recording (.steps.md); --headless checks it",
+    )
+    parser.add_argument(
+        "--record",
+        nargs="?",
+        const=RECORDINGS,
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="record what you do as steps, into FILE (by default, a "
+        "new file in ~/.scraftcam/recordings/)",
+    )
+    parser.add_argument(
+        "--no-speech",
+        action="store_true",
+        help="with --record, leave the microphone off",
+    )
+    parser.add_argument(
+        "--show-demo",
+        action="store_true",
+        help="first: bring up LinuxCNC, SolidCraft and the GUI for the "
+        "demo (`--show-demo -h` for its options)",
+    )
+    parser.add_argument(
+        "--drive-editor",
+        action="store_true",
+        help="first: open an outline for Claude to drive, beside a "
+        "Claude window (`--drive-editor -h`)",
     )
     parser.add_argument("--program", default="", help="G-code to run")
     parser.add_argument(
-        "--hmi-port", type=int, default=0, help="HMI line port (0: none)"
+        "--hmi",
+        action="store_true",
+        help="the machine panel's HMI, opening no program (LinuxCNC "
+        "keeps the one it had)",
     )
     parser.add_argument(
         "--solidcraft", type=int, default=0, help="SolidCraft port"
@@ -108,6 +200,19 @@ def main(arguments: list[str]) -> int:
         "--dry-run", action="store_true", help="use no LinuxCNC"
     )
     options: argparse.Namespace = parser.parse_args(arguments)
+    if options.record is not None and options.tutorial is not None:
+        parser.error("--record and --tutorial cannot be used together")
+    if options.pages is not None and (
+        options.outline or options.tutorial or options.record
+    ):
+        parser.error("--pages cannot be used with an outline option")
+    outline: OutlinePanel = OutlinePanel(
+        options.outline,
+        options.tutorial,
+        options.record,
+        not options.no_speech,
+        options.headless,
+    )
 
     # The model, and a shop that was named but is not there.
     design: Path | None = Path(options.design) if options.design else None
@@ -121,29 +226,45 @@ def main(arguments: list[str]) -> int:
     return window.run(
         model,
         headless=options.headless,
-        command_port=options.port,
-        machine=machine_maker(model, options) if options.program else None,
+        mcp_port=options.mcp,
+        first_panel=(
+            window.CatalogPanel(options.pages)
+            if options.pages is not None
+            else outline
+            if outline.wanted()
+            else None
+        ),
+        makers=window.MachineMakers(
+            (
+                machine_maker(model, options, program=options.program)
+                if options.program or options.hmi
+                else None
+            ),
+            machine_maker(model, options, program=""),
+        ),
     )
 
 
 # Function `machine_maker()`:
 def machine_maker(
-    model: App, options: argparse.Namespace
-) -> Callable[[], MachineControl | None]:
-    """Return what makes the machine's controls, once Qt is up.
+    model: App, options: argparse.Namespace, *, program: str
+) -> Callable[[str], MachineControl | None]:
+    """Return what makes a machine's controls, once Qt is up.
 
     Arguments:
     * `model` (`App`): The GUI's model, for its shop and messages.
     * `options` (`argparse.Namespace`): The command line.
+    * `program` (`str`): The G-code to open, or "" for none.
 
     Returns:
-    * (`Callable[[], MachineControl | None]`): Makes the HMI, with
-      the program open; on failure, says why and gives `None`.
+    * (`Callable[[str], MachineControl | None]`): Makes the HMI, for
+      the machine named (else the program's), the program open; on
+      failure, says why and gives `None`.
     """
 
     # Function `make()`:
-    def make() -> MachineControl | None:
-        """Make the HMI, with the program open."""
+    def make(name: str = "") -> MachineControl | None:
+        """Make the HMI for the machine `name`, the program open."""
         # Only now: it needs LinuxCNC's client, which the GUI does not.
         # pylint: disable=import-outside-toplevel
         from scraftcam.hmi import lcnc_hmi
@@ -158,7 +279,6 @@ def machine_maker(
             lcnc_hmi.use_headless()
         try:
             hmi: lcnc_hmi.HMI = lcnc_hmi.make_hmi(
-                port=options.hmi_port,
                 lcnc_port=options.lcnc_port,
                 solidcraft=options.solidcraft,
                 shop=model.shop,
@@ -168,6 +288,12 @@ def machine_maker(
             model.say(f"The machine did not start: {error}", problem=True)
             return None
         hmi.quit_button.hide()
+
+        # Reached over MCP (#604): importing registers the functions.
+        # pylint: disable-next=import-outside-toplevel
+        from scraftcam.hmi import hmi_exposed
+
+        hmi_exposed.HMIS.add(hmi)
         hmi.on_quit = window.close_all
 
         # Function `due()`:
@@ -193,12 +319,13 @@ def machine_maker(
                 hmi.plan.text(),
             )
 
-        try:
-            hmi.open(options.program)
-        except (ValueError, OSError) as error:
-            hmi.message.setText(str(error))
+        if program:
+            try:
+                hmi.open(program)
+            except (ValueError, OSError) as error:
+                hmi.message.setText(str(error))
         return MachineControl(
-            hmi.program_machine or "Machine",
+            name or hmi.program_machine or "Machine",
             hmi,
             hmi.busy,
             hmi.on_stop,

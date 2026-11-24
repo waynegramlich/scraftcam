@@ -46,4 +46,4 @@ def make_hmi(machine: HMIMachine) -> lcnc_hmi.HMI:
     """
     lcnc_hmi.ANSWERS.clear()
     lcnc_hmi.ASKED.clear()
-    return lcnc_hmi.HMI(machine, 10.0, None)
+    return lcnc_hmi.HMI(machine, 10.0)

@@ -2,7 +2,6 @@
 
 import json
 import os
-import signal
 import socket
 import subprocess
 import sys
@@ -17,11 +16,17 @@ from unittest import mock
 from scraftcam import shops
 from scraftcam.assembly import Assembly
 from scraftcam.demo import demo_assembly, with_setup
+from scraftcam.exposed import client as mcp_client
 from scraftcam.hmi import hmi_machine, lcnc_hmi
 from scraftcam.lcnc.lcnc_client import BridgeError
 from scraftcam.setups import SHOP as EXAMPLE_SHOP
 from scraftcam.tooling.shop_registries import use_shop
 from tests.qt_app import make_hmi
+
+# The project's top, its example shop and its demo program.
+TOP: Path = Path(__file__).resolve().parent.parent
+SHOP_TOML: Path = TOP / "examples/shop/shop.toml"
+DEMO: Path = TOP / "demo.ngc"
 
 # The constants that `FakeClient` answers with.
 IDLE = 1
@@ -81,6 +86,8 @@ class FakeClient:
             "task_state": STATE_ON,
             "current_vel": 0.0,
             "spindle": [{"enabled": 0, "speed": 0.0}],
+            "flood": 0,
+            "mist": 0,
             "tool_in_spindle": 8,
             "tool_offset": [0.0, 0.0, 2.0],
         }
@@ -375,18 +382,24 @@ class TestStatus(unittest.TestCase):
         self.assertEqual((none.what, none.left), ("end", 12.0))
 
     def test_busy(self) -> None:
-        """The HMI may close only stopped, its spindle off (#56)."""
+        """The HMI may close only stopped, its spindle off (#56); it
+        asks LinuxCNC first (#612), so the spindle, taken as on until
+        then, is known."""
         machine, lcnc = client_machine()
         hmi: lcnc_hmi.HMI = make_hmi(machine)
-        self.assertIn("spindle", hmi.busy())
-        hmi.poll()
+        self.assertTrue(hmi.spindle)
         self.assertEqual(hmi.busy(), "")
         lcnc.values["spindle"] = [{"enabled": 1, "speed": 1200.0}]
         hmi.poll()
         self.assertIn("spindle is on", hmi.busy())
         lcnc.values["spindle"] = [{"enabled": 0, "speed": 0.0}]
-        hmi.set_running(True, False)
+        lcnc.values["mist"] = 1
+        self.assertIn("coolant is on", hmi.busy())
+        lcnc.values["mist"] = 0
+        lcnc.interp_state = RUNNING
         self.assertIn("running", hmi.busy())
+        lcnc.interp_state = IDLE
+        self.assertEqual(hmi.busy(), "")
         hmi.deleteLater()
 
     def test_travel_message(self) -> None:
@@ -1004,38 +1017,40 @@ class TestSetOrigin(unittest.TestCase):
         self.assertFalse(hmi_machine.program_inches(["G0 X1"]))
 
 
-class TestMainSolidCraft(unittest.TestCase):
-    """`--solidcraft` makes the drawer; without it there is none."""
+class TestMakeSolidCraft(unittest.TestCase):
+    """`solidcraft` makes the drawer; without it there is none."""
 
-    def run_main(self, *extra: str) -> mock.MagicMock:
-        """Run `main()` headless, with SolidCraft faked."""
-        handler = signal.getsignal(signal.SIGTERM)
-        self.addCleanup(signal.signal, signal.SIGTERM, handler)
+    def make(self, solidcraft: int) -> mock.MagicMock:
+        """Make a dry-run HMI, with SolidCraft faked."""
         with (
-            mock.patch.object(lcnc_hmi, "run", return_value=0),
             mock.patch.object(lcnc_hmi, "connect"),
             mock.patch.object(lcnc_hmi, "PyBind"),
             mock.patch.object(lcnc_hmi, "ModelCache"),
             mock.patch.object(lcnc_hmi, "SetupView") as view,
         ):
-            code = lcnc_hmi.main(["--headless", "--dry-run", *extra])
-        self.assertEqual(code, 0)
+            hmi = lcnc_hmi.make_hmi(
+                lcnc_port=0,
+                solidcraft=solidcraft,
+                shop=SHOP_TOML,
+                dry_run=True,
+            )
+        self.addCleanup(hmi.deleteLater)
         return view
 
     def test_no_solidcraft(self) -> None:
-        """No `--solidcraft`: no view is made."""
-        self.assertFalse(self.run_main().called)
+        """No SolidCraft port: no view is made."""
+        self.assertFalse(self.make(0).called)
 
     def test_solidcraft(self) -> None:
-        """`--solidcraft PORT`: one view, made at the start."""
-        self.assertEqual(self.run_main("--solidcraft", "8080").call_count, 1)
+        """A SolidCraft port: one view, made at the start."""
+        self.assertEqual(self.make(8080).call_count, 1)
 
 
 class TestHeadlessProgram(unittest.TestCase):
-    """The program itself, with no display and no `tkinter`."""
+    """The GUI with its HMI, with no display and no `tkinter` (#608)."""
 
     def test_runs_without_tkinter(self) -> None:
-        """`--headless` starts, answers its port, and quits cleanly."""
+        """Headless, it answers over MCP, and quits cleanly."""
         with socket.socket() as unused:
             unused.bind(("127.0.0.1", 0))
             port = unused.getsockname()[1]
@@ -1046,18 +1061,28 @@ class TestHeadlessProgram(unittest.TestCase):
         }
         code = (
             "import sys; sys.modules['tkinter'] = None; "
-            "from scraftcam.hmi import lcnc_hmi; "
-            "sys.exit(lcnc_hmi.main(sys.argv[1:]))"
+            "from scraftcam import run; "
+            "sys.exit(run.main(sys.argv[1:]))"
         )
         with subprocess.Popen(
             [sys.executable, "-c", code, "--headless", "--dry-run",
-             "--port", str(port)],
+             "--shop", str(SHOP_TOML), "--program", str(DEMO),
+             "--mcp", str(port)],
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             env=environment,
         ) as panel:  # fmt: skip
             try:
-                self.assertIn("buttons", json.loads(ask_port(port, "show")))
-                self.assertEqual(ask_port(port, "quit"), "ok")
+                # Handles are given out when first listed (#507).
+                self.assertIn("HMI 1", call_until_up(port, "hmis"))
+                shown = call_until_up(port, "hmi_show", hmi="HMI 1")
+                self.assertIn("buttons", json.loads(shown))
+                self.assertEqual(
+                    mcp_client.tool(
+                        port, "call", {"name": "quit_all", "arguments": {}}
+                    ),
+                    "quitting",
+                )
                 self.assertEqual(panel.wait(timeout=10.0), 0)
             finally:
                 panel.kill()
@@ -1065,18 +1090,18 @@ class TestHeadlessProgram(unittest.TestCase):
             self.assertEqual(panel.stderr.read(), b"")
 
 
-def ask_port(port: int, line: str) -> str:
-    """Send a line to an HMI's port, waiting for it to start."""
+def call_until_up(port: int, name: str, **arguments: object) -> str:
+    """Call an exposed function over MCP, waiting for the GUI to start."""
     end = time.monotonic() + 20.0
     while True:
         try:
-            with socket.create_connection(("127.0.0.1", port), 5.0) as port_:
-                port_.sendall(f"{line}\n".encode())
-                return port_.makefile().readline().strip()
-        except ConnectionRefusedError:
+            return mcp_client.tool(
+                port, "call", {"name": name, "arguments": arguments}
+            )
+        except mcp_client.ClientError:
             if time.monotonic() > end:
                 raise
-            time.sleep(0.05)
+            time.sleep(0.2)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ GUI toolkit, so it can be tested with no display:
   `scraftcam.lcnc.lcnc_client`) of `serve_linuxcnc` from
   `scraftcam/lcnc/`, which runs LinuxCNC in its `lcnc` box, or in WSL
   on Windows; or, dry run, no LinuxCNC at all.
-* `CommandPort`: the HMI's command port, one line in, one line back.
 * `SetupDrawer`: draws setups in SolidCraft on a thread of its own.
 * The program's tool changes and timing (`tool_changes()`,
   `change_spans()`, `line_minutes()`, `next_tool_text()`), and the
@@ -25,7 +24,6 @@ import itertools
 import math
 import queue
 import re
-import socket
 import threading
 import time
 from collections.abc import Callable
@@ -58,8 +56,7 @@ STEP_CHOSEN: str = "#a8c8f0"
 # How close to the work origin counts as there (inches).
 AT_ORIGIN: float = 0.00005
 
-# How often the HMI polls LinuxCNC and the command port
-# (milliseconds).
+# How often the HMI polls LinuxCNC (milliseconds).
 POLL_MS: int = 100
 
 # The speed slider's range (feed override, on a logarithmic scale; 0
@@ -590,10 +587,12 @@ class HMIStatus:  # pylint: disable=too-many-instance-attributes
     * `rpm` (`float`): The spindle's speed (#98).
     * `feed` (`float`): How fast the tool moves (machine units, inches,
       a minute).
+    * `coolant` (`bool`): True while flood or mist coolant is on
+      (#609).
 
     Constructor:
     * `HMIStatus(file, line, position, tool, messages, state, spindle,
-      rpm, feed)`
+      rpm, feed, coolant)`
     """
 
     # Constructor arguments:
@@ -606,6 +605,7 @@ class HMIStatus:  # pylint: disable=too-many-instance-attributes
     spindle: bool = field(init=True, default=False)
     rpm: float = field(init=True, default=0.0)
     feed: float = field(init=True, default=0.0)
+    coolant: bool = field(init=True, default=False)
 
 
 # Function `spindle_on()`:
@@ -1286,9 +1286,11 @@ class HMIMachine:
             "actual_position",
             "current_vel",
             "file",
+            "flood",
             "g5x_offset",
             "g92_offset",
             "interp_state",
+            "mist",
             "motion_line",
             "paused",
             "spindle",
@@ -1322,55 +1324,8 @@ class HMIMachine:
             spindle_on(stat["spindle"]),
             spindle_rpm(stat["spindle"]),
             float(stat["current_vel"]) * 60.0,
+            bool(stat["flood"]) or bool(stat["mist"]),
         )
-
-
-# Class `CommandPort`:
-class CommandPort:  # pylint: disable=too-few-public-methods
-    """A command port on 127.0.0.1: one line in, one line back.
-
-    Attributes:
-    * `server` (`socket.socket`): The listening socket (not blocking).
-    """
-
-    # Method `CommandPort.__init__()`:
-    def __init__(self, port: int) -> None:
-        """Listen on a port.
-
-        Arguments:
-        * `port` (`int`): The port.
-        """
-        self.server: socket.socket = socket.socket()
-        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server.bind(("127.0.0.1", port))
-        self.server.listen()
-        self.server.setblocking(False)
-
-    # Method `CommandPort.poll()`:
-    def poll(self, handle: Any) -> None:
-        """Answer each waiting connection.
-
-        Arguments:
-        * `handle` (`Callable[[str], str]`): Answers a command line.
-        """
-        while True:
-            try:
-                connection: socket.socket = self.server.accept()[0]
-            except BlockingIOError:
-                return
-            with connection:
-                connection.settimeout(1.0)
-                try:
-                    data: bytes = b""
-                    while b"\n" not in data:
-                        chunk: bytes = connection.recv(1024)
-                        if not chunk:
-                            break
-                        data += chunk
-                    line: str = data.decode(errors="replace").strip()
-                    connection.sendall((handle(line) + "\n").encode())
-                except OSError:
-                    pass
 
 
 # Function `program_inches()`:

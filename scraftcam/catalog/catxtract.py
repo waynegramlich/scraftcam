@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Extract catalog information from PDF pages into Markdown files.
 
 `catxtract` shows one PDF page at a time.  The user drags rectangles
@@ -27,7 +26,8 @@ Moving to another page, or quitting, saves the page first.  Each
 saved pages before and after it; saving a page updates those links in
 the pages on either side as well.
 
-Usage: `python3 -m scraftcam.catalog.catxtract PDF OUTDIR`
+It runs in a [Pages] tab of `scraftcam.run` ([Open Pages], or
+`--pages CATALOG`; `T.og~6.9` #600), never in a window of its own.
 """
 
 # pylint: disable=too-many-instance-attributes,too-many-locals
@@ -39,7 +39,6 @@ import functools
 import itertools
 import json
 import re
-import sys
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -1513,22 +1512,3 @@ def write_links(out_dir: Path, number: int, before: int, after: int) -> None:
     else:
         parts.insert(1, line)
     path.write_text("\n\n".join(parts) + "\n")
-
-
-# Function `main()`:
-def main() -> None:
-    """Run `catxtract` with the command line arguments."""
-    # Check the arguments.
-    if len(sys.argv) != 3:
-        print(__doc__)
-        sys.exit(1)
-
-    # Run the window until it is closed.
-    application: QApplication = QApplication(sys.argv[:1])
-    app: App = App(Path(sys.argv[1]), Path(sys.argv[2]))
-    app.show()
-    sys.exit(application.exec())
-
-
-if __name__ == "__main__":
-    main()

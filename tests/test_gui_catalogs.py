@@ -8,7 +8,7 @@ from unittest import mock
 
 from scraftcam import shops
 from scraftcam.catalog.catxtract import App as Pages
-from scraftcam.gui import app
+from scraftcam.gui import app, prompt
 from scraftcam.gui import window as window_module
 from scraftcam.gui.app import App
 from scraftcam.gui.views import Panel
@@ -87,20 +87,14 @@ class NewCatalogTest(unittest.TestCase):
             dialog.pdf.setText(str(pdf))
             self.assertTrue(dialog.make_button.isEnabled())
 
-            # Made: linked, the ignore line added, shown, read.
-            # (`PySide6` is on `sys.path` only once `tests` is imported.)
-            from PySide6.QtWidgets import (  # pylint: disable=import-outside-toplevel
-                QMessageBox,
-            )
-
-            with (
-                mock.patch("scraftcam.gui.window.pdf_pages", return_value=456),
-                mock.patch(
-                    "PySide6.QtWidgets.QMessageBox.question",
-                    return_value=QMessageBox.StandardButton.Yes,
-                ),
+            # Made: linked, the ignore line added (answered "yes" in
+            # the panel, #606), shown, read.
+            prompt.ANSWERS.append("yes")
+            with mock.patch(
+                "scraftcam.gui.window.pdf_pages", return_value=456
             ):
                 dialog.make_catalog()
+            self.assertEqual(prompt.ANSWERS, [])
             edition: Path = top / "catalogs" / "shars" / "2026"
             self.assertTrue((edition / "pages" / "catalog.pdf").is_symlink())
             self.assertIn(
@@ -159,10 +153,14 @@ class OpenPagesTest(unittest.TestCase):
             panel.show_node(window.tree.nodes[str(path)])
             self.assertFalse(panel.pages_button.isHidden())
 
-            # Opened once, at the index; pressed again, the same one.
+            # Opened once, at the index, in the panel's [Pages] tab
+            # (#600); pressed again, the same one.
             panel.pages_button.click()
             opened: Pages = window_module.CATALOG_WINDOWS[str(path)]
             self.assertEqual(opened.page_no, 0)
+            self.assertIs(panel.pages, opened)
+            self.assertFalse(opened.isWindow())
+            self.assertEqual(panel.tabs.tabText(1), "Pages")
             panel.pages_button.click()
             self.assertEqual(len(window_module.CATALOG_WINDOWS), 1)
             self.assertIs(window_module.CATALOG_WINDOWS[str(path)], opened)
@@ -175,10 +173,11 @@ class OpenPagesTest(unittest.TestCase):
             self.assertIn("is missing", model.latest().text)
             self.assertEqual(window_module.CATALOG_WINDOWS, {})
 
-            # Not for another item.
+            # Not for another item, which closes the [Pages] tab.
             assert model.shop_root is not None
             panel.show_node(model.shop_root)
             self.assertTrue(panel.pages_button.isHidden())
+            self.assertIsNone(panel.pages)
             window.close()
 
 

@@ -19,12 +19,19 @@
 """
 
 import functools
+import importlib
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
+from typing import TYPE_CHECKING
 
 from ..packages import require
-from ..shops import KINDS, not_initialized, vendor_triple
+from ..shops import KINDS, OUTLINE_SUFFIX, not_initialized, vendor_triple
 from .app import App
+
+# Only for its type: loaded by name when an outline is shown.
+if TYPE_CHECKING:
+    from .outline_editor import OutlineEditor
 from .fields import (
     Row,
     check,
@@ -41,6 +48,7 @@ from .machines import (
     MachineTab,
     is_active,
     is_machines_directory,
+    machine_item,
 )
 from .templates import (
     FollowUp,
@@ -78,6 +86,7 @@ from PySide6.QtCore import (  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402
     QBrush,
     QColor,
+    QFont,
     QPainter,
     QPaintEvent,
 )
@@ -96,6 +105,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QScrollArea,
     QSplitter,
     QSplitterHandle,
+    QTabWidget,
     QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -364,6 +374,27 @@ def missing_label() -> QLabel:
     return label
 
 
+# Function `outline_of()`:
+def outline_of(path: Path, item: dict[str, object]) -> Path | None:
+    """Return the outline file of an item's kind, beside the item.
+
+    A tool of kind `end_mill` has `end_mill.outline.toml` in its own
+    directory (#584).
+
+    Arguments:
+    * `path` (`Path`): The item's file.
+    * `item` (`dict[str, object]`): The item, as read.
+
+    Returns:
+    * (`Path | None`): The outline file, or `None` when it has none.
+    """
+    kind: object = item.get("kind")
+    if not isinstance(kind, str) or not kind:
+        return None
+    outline: Path = path.parent / f"{kind}{OUTLINE_SUFFIX}"
+    return outline if outline.is_file() else None
+
+
 # Class `Panel`:
 # A panel shows an item, a machine, the guide or the `machines/`
 # summary, each with its own few methods, so the counts are fine.
@@ -399,13 +430,13 @@ class Panel(QFrame):
     * `say` (`Callable[[str], None]`): Reports a problem (set by the
       window).
     * `editing` (`bool`): True while its fields may be edited
-      ([Enable Editing], #140); a new item starts read only, unless
+      ([Allow Changes], #140); a new item starts read only, unless
       it was just made.
-    * `edit_row` (`QWidget`): [Enable Editing] and [Edit TOML File],
+    * `edit_row` (`QWidget`): [Allow Changes] and [Edit TOML File],
       under the title, for an item that can be edited (#153).
-    * `editing_box` (`QCheckBox`): [Enable Editing].
+    * `editing_box` (`QCheckBox`): [Allow Changes].
     * `edit_button` (`QPushButton`): [Edit TOML File], greyed while
-      [Enable Editing] is unchecked.
+      [Allow Changes] is unchecked.
     * `edit_file` (`Callable[[], None]`): What [Edit TOML File] calls
       (set by the window).
     * `pages_button` (`QPushButton`): [Open Pages], for a catalog
@@ -440,6 +471,16 @@ class Panel(QFrame):
       another, hidden when it has none.
     * `views` (`list[QSvgWidget]`): Those sketches, top first.
     * `split` (`QSplitter`): The field rows above the text.
+    * `tabs` (`QTabWidget`): [Fields] (`split`) and, for a tool whose
+      kind has an outline file, [Outline] (#587); the tab bar shows
+      only when there are two.
+    * `outline` (`OutlineEditor | None`): That outline's editor
+      (#578), if shown; it is read only unless [Allow Changes] is
+      checked (#588, #590), and saves every change (#578c).
+    * `outline_path` (`Path | None`): Its outline file.
+    * `pages` (`QWidget | None`): A catalog's pages in `catxtract`,
+      in the [Pages] tab ([Open Pages], #600), if open; closed (its
+      marks saved) when the panel shows anything else.
     * `top` (`QSplitter`): The field rows left of the sketch.
     * `units` (`str`): The shop's units.
     * `written` (`str`): The text last written, so that the file
@@ -494,7 +535,7 @@ class Panel(QFrame):
         self.left_button: QPushButton = QPushButton("<")
         self.right_button: QPushButton = QPushButton(">")
         layout.addLayout(self._make_title_line())
-        self.editing_box: QCheckBox = QCheckBox("Enable Editing")
+        self.editing_box: QCheckBox = QCheckBox("Allow Changes")
         self.edit_button: QPushButton = QPushButton(EDIT)
         self.pages_button: QPushButton = QPushButton(OPEN_PAGES)
         self.edit_row: QWidget = self._make_edit_row()
@@ -510,7 +551,13 @@ class Panel(QFrame):
         self.split: QSplitter = shared(
             Qt.Orientation.Vertical, self.top, self.text
         )
-        layout.addWidget(self.split, 1)
+        self.tabs: QTabWidget = QTabWidget()
+        self.tabs.setTabBarAutoHide(True)
+        self.tabs.addTab(self.split, "Fields")
+        self.outline: OutlineEditor | None = None
+        self.outline_path: Path | None = None
+        self.pages: QWidget | None = None
+        layout.addWidget(self.tabs, 1)
         layout.addWidget(self.guide, 1)
         self.text.viewport().installEventFilter(self)
         self.set_current(False)
@@ -568,7 +615,9 @@ class Panel(QFrame):
         self.node = None
         self.title.setText(label or machine.name)
         self.title.setStyleSheet("")
-        self.split.hide()
+        self.show_outline(None)
+        self.drop_pages()
+        self.tabs.hide()
         self._show_edit_row()
         self.header = MachineTab(machine.name)
         layout: QLayout | None = self.layout()
@@ -614,6 +663,8 @@ class Panel(QFrame):
         * `editing` (`bool`): True to let them be edited.
         """
         self.editing = editing
+        if self.outline is not None:
+            self.outline.set_read_only(not editing)
         row: Row
         for row in self.rows:
             entry: Entry | None = self.entries.get(row.schema.key)
@@ -662,7 +713,7 @@ class Panel(QFrame):
         return line
 
     def _make_edit_row(self) -> QWidget:
-        """Make the row of [Enable Editing] and [Edit TOML File] (#153).
+        """Make the row of [Allow Changes] and [Edit TOML File] (#153).
 
         Returns:
         * (`QWidget`): The row, hidden until an item can be edited.
@@ -690,7 +741,7 @@ class Panel(QFrame):
         return row
 
     def _show_edit_row(self) -> None:
-        """Show [Enable Editing] and [Edit TOML File] if they fit (#153).
+        """Show [Allow Changes] and [Edit TOML File] if they fit (#153).
 
         Only for an item with a file to edit, never with a machine,
         the `machines/` summary or the guide.
@@ -774,7 +825,7 @@ class Panel(QFrame):
         """
         self.title.setText("scraftcam")
         self.title.setStyleSheet("font-weight: bold; font-size: 16pt")
-        self.split.hide()
+        self.tabs.hide()
         self.guide.setText(text)
         self.guide.show()
         self._show_edit_row()
@@ -784,7 +835,101 @@ class Panel(QFrame):
         self.guide.hide()
         self.title.setText("Click an item in the tree.")
         self.title.setStyleSheet(f"color: {colors().quiet}")
-        self.split.show()
+        self.tabs.show()
+
+    def show_outline(self, path: Path | None) -> None:
+        """Show `path` in the [Outline] tab, or take the tab away.
+
+        The same file keeps its editor, so a redraw (the editor saving
+        its own change) leaves it alone.
+
+        Arguments:
+        * `path` (`Path | None`): The outline file, or `None` for no
+          [Outline] tab.
+        """
+        # The same file: the same editor (none, none).
+        if path == self.outline_path and (self.outline is not None) == (
+            path is not None
+        ):
+            return
+
+        # The old editor goes.
+        self.drop_outline()
+        self.outline_path = path
+        if path is None:
+            return
+
+        # The editor, by name: it imports `window`, which imports this
+        # module (no cycle at load time).
+        editors: ModuleType = importlib.import_module(
+            f"{__package__}.outline_editor"
+        )
+        exposed: ModuleType = importlib.import_module(
+            f"{__package__}.outline_exposed"
+        )
+        try:
+            drawing: object = editors.drawing_from(path)
+        except (OSError, ValueError) as error:
+            self.say(f"{path.name}: {error}")
+            return
+        editor: OutlineEditor = editors.OutlineEditor(drawing, path=path)
+        editor.set_read_only(not self.editing)
+        exposed.EDITORS.add(editor)
+        self.outline = editor
+        self.tabs.addTab(editor, "Outline")
+
+    def show_pages(self, pages: QWidget) -> None:
+        """Show a catalog's pages in the [Pages] tab (#600).
+
+        Arguments:
+        * `pages` (`QWidget`): `catxtract`'s `App` on the catalog.
+        """
+        if pages is not self.pages:
+            self.drop_pages()
+            self.pages = pages
+            self.tabs.addTab(pages, "Pages")
+        self.tabs.setCurrentWidget(pages)
+
+    def drop_pages(self) -> None:
+        """Close the [Pages] tab, if open: its marks are saved."""
+        if self.pages is not None:
+            index: int = self.tabs.indexOf(self.pages)
+            if index >= 0:
+                self.tabs.removeTab(index)
+            self.pages.close()
+            self.pages = None
+
+    def drop_outline(self) -> None:
+        """Take the [Outline] tab and its editor away, if shown."""
+        if self.outline is not None:
+            self.tabs.removeTab(self.tabs.indexOf(self.outline))
+            self.outline.deleteLater()
+            self.outline = None
+        self.outline_path = None
+
+    def hold_editor(self, editor: "OutlineEditor", title: str) -> None:
+        """Show `editor`, on no item, as the panel's [Outline] (#595).
+
+        For a tutorial: its outline is its own and never saved, so
+        changes are allowed.
+
+        Arguments:
+        * `editor` (`OutlineEditor`): The editor, on no file.
+        * `title` (`str`): The panel's title.
+        """
+        self.drop_outline()
+        self.drop_summary()
+        self.node = None
+        self.guide.hide()
+        self.title.setText(title)
+        self.title.setStyleSheet("")
+        self._show_edit_row()
+        self.editing = True
+        editor.set_read_only(False)
+        self.outline = editor
+        self.tabs.addTab(editor, "Outline")
+        self.tabs.setCurrentWidget(editor)
+        self.tabs.show()
 
     def drop_summary(self) -> None:
         """Take the `machines/` summary away, if it is shown."""
@@ -822,6 +967,7 @@ class Panel(QFrame):
         if not same:
             self.editing = created
             self.show_follow_ups([])
+            self.drop_pages()
         self.node = node
         self.units = units
         self._show_edit_row()
@@ -838,8 +984,9 @@ class Panel(QFrame):
 
         # The `machines/` directory: its summary, in place of the rest.
         self.guide.hide()
-        self.split.setVisible(not is_machines_directory(node))
+        self.tabs.setVisible(not is_machines_directory(node))
         if is_machines_directory(node):
+            self.show_outline(None)
             self.title.setText(node.label())
             self.title.setStyleSheet("")
             self.summary = MachinesView(node, self.controls, self.open_machine)
@@ -864,6 +1011,7 @@ class Panel(QFrame):
             self.item = read_item(node.path)[0]
             self.rows = rows(self.item, units)
         self._show_edit_row()
+        self.show_outline(outline_of(node.path, self.item))
         self.show_sketches(sketches(self.item) if self.rows else [])
         if not self.rows:
             self.fields.hide()
@@ -1257,6 +1405,9 @@ class TreeView(QTreeWidget):
     Attributes:
     * `nodes` (`dict[str, Node]`): Each item's node, by its path.
     * `version` (`int`): The model's `tree_version` last shown.
+    * `active` (`set[str]`): The machines marked active (#610).
+    * `machine_names` (`dict[str, str]`): Each machine file's machine
+      name, by its path, read once per fill.
     """
 
     def __init__(self) -> None:
@@ -1265,6 +1416,46 @@ class TreeView(QTreeWidget):
         self.setHeaderHidden(True)
         self.nodes: dict[str, Node] = {}
         self.version: int = -1
+        self.active: set[str] = set()
+        self.machine_names: dict[str, str] = {}
+
+    def mark_active(self, names: set[str]) -> None:
+        """Draw the active machines' items as [Stop All] is drawn
+        while one runs, their branches open and in view (#610).
+
+        Arguments:
+        * `names` (`set[str]`): The active machines' names.
+        """
+        # Each machine file's machine, read once per fill.
+        if names == self.active:
+            return
+        self.active = set(names)
+        path: str
+        node: Node
+        for path, node in self.nodes.items():
+            if node.kind != FILE or node.path.parent.name != "machines":
+                continue
+            if path not in self.machine_names:
+                self.machine_names[path] = machine_item(node).name
+            item: QTreeWidgetItem | None = self.item_at_path(node.path)
+            if item is None:
+                continue
+
+            # Bold white on the problem color, or as it was.
+            on: bool = self.machine_names[path] in names
+            font: QFont = item.font(0)
+            font.setBold(on)
+            item.setFont(0, font)
+            item.setForeground(0, QBrush(QColor("white")) if on else QBrush())
+            item.setBackground(
+                0, QBrush(QColor(colors().problem)) if on else QBrush()
+            )
+            if on:
+                parent: QTreeWidgetItem | None = item.parent()
+                while parent is not None:
+                    parent.setExpanded(True)
+                    parent = parent.parent()
+                self.scrollToItem(item)
 
     def wanted_width(self) -> int:
         """Return the width that shows the open items' labels whole.
@@ -1287,6 +1478,10 @@ class TreeView(QTreeWidget):
         * `roots` (`list[Node]`): The shop's and the design's roots.
         * `version` (`int`): The model's `tree_version`.
         """
+        # Read again, and marked again, after this fill (#610).
+        self.machine_names = {}
+        self.active = set()
+
         # What was open, by path; the roots open at first (#128).
         first: bool = self.version < 0
         opened: set[str] = set()
