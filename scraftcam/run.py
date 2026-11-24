@@ -10,7 +10,8 @@ python3 -m scraftcam.run [--shop=SHOP] [--mcp=PORT]
 `shop.toml` in the current directory or one of its parents is used
 (#83).  With `--headless`, Qt draws offscreen, so no display is
 needed.  With `--mcp PORT`, the GUI serves MCP on that port of
-127.0.0.1 (`gui/window_exposed.py`; `scraftcam.exposed.client` drives it):
+127.0.0.1 (`gui/window_exposed.py`; `scraftcam.exposed.client`
+drives it):
 
 ```
 python3 -m scraftcam.exposed.client start --gui --port 8765

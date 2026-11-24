@@ -63,7 +63,10 @@ task; the next is in `TASKS/Issue_Counter.md`.
   `window_exposed.py:218`).  #684 (the user): the tab bar always
   shows; every panel's content is in tabs ([Fields], [Outline],
   [Pages]; [Machines]; [Guide]; a machine in one [Machine] tab,
-  its own tabs inside: two rows are fine).
+  its own tabs inside: two rows are fine).  #S4 done: `Panel.own`
+  and `show_own(page, label)` (in place of [Fields], hidden with
+  `setTabVisible`); `hide_own_guide()`; `window_exposed.panel_tab`
+  lists only visible tabs.  Not yet looked at on screen.
 * #621 prune `run.py`'s 16 options to those tests, the MCP client and
   the end-to-end suite use (#607: flags are for Claude only).
 * #637 (for #619) split only `gui/outline_editor.py` (5159 lines),

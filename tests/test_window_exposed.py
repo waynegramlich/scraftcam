@@ -109,10 +109,11 @@ class ExposedTest(unittest.TestCase):
 
     def test_panel_tab_to_front(self) -> None:
         """`panel_tab` shows a tab, refusing one that is not there."""
+        # A new window's panel shows only its guide (#586).
         self.assertEqual(
-            exposed.call("panel_tab", {"label": "Fields"}), "showing Fields"
+            exposed.call("panel_tab", {"label": "Guide"}), "showing Guide"
         )
-        with self.assertRaisesRegex(ExposedError, "there are: Fields"):
+        with self.assertRaisesRegex(ExposedError, "there are: Guide$"):
             exposed.call("panel_tab", {"label": "Outline"})
         self.assertEqual(exposed.call("to_front", {}), "in front")
         # No connector (`run()` gives one): said so (#607).

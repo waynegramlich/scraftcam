@@ -214,12 +214,15 @@ def panel_tab(label: str, window_number: int = 0) -> str:
     """
     top: window.Window = _window(window_number)
     panel: Panel = top.panels[top.current]
-    labels: list[str] = [
-        panel.tabs.tabText(index) for index in range(panel.tabs.count())
+    shown: list[int] = [
+        index
+        for index in range(panel.tabs.count())
+        if panel.tabs.isTabVisible(index)
     ]
+    labels: list[str] = [panel.tabs.tabText(index) for index in shown]
     if label not in labels:
         raise ExposedError(f"no tab `{label}`; there are: {', '.join(labels)}")
-    panel.tabs.setCurrentIndex(labels.index(label))
+    panel.tabs.setCurrentIndex(shown[labels.index(label)])
     return f"showing {label}"
 
 

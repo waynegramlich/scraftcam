@@ -472,8 +472,12 @@ class Panel(QFrame):
     * `views` (`list[QSvgWidget]`): Those sketches, top first.
     * `split` (`QSplitter`): The field rows above the text.
     * `tabs` (`QTabWidget`): [Fields] (`split`) and, for a tool whose
-      kind has an outline file, [Outline] (#587); the tab bar shows
-      only when there are two.
+      kind has an outline file, [Outline] (#587); or, in place of
+      [Fields], its own tab (`own`).  The tab bar always shows
+      (#586).
+    * `own` (`QWidget | None`): The tab shown in place of [Fields],
+      if any: [Guide] (`guide`), [Machines] (`summary`), or
+      [Machine] (`header` over the machine's controls).
     * `outline` (`OutlineEditor | None`): That outline's editor
       (#578), if shown; it is read only unless [Allow Changes] is
       checked (#588, #590), and saves every change (#578c).
@@ -552,13 +556,12 @@ class Panel(QFrame):
             Qt.Orientation.Vertical, self.top, self.text
         )
         self.tabs: QTabWidget = QTabWidget()
-        self.tabs.setTabBarAutoHide(True)
         self.tabs.addTab(self.split, "Fields")
+        self.own: QWidget | None = None
         self.outline: OutlineEditor | None = None
         self.outline_path: Path | None = None
         self.pages: QWidget | None = None
         layout.addWidget(self.tabs, 1)
-        layout.addWidget(self.guide, 1)
         self.text.viewport().installEventFilter(self)
         self.set_current(False)
 
@@ -606,21 +609,21 @@ class Panel(QFrame):
         """
         assert not self.machines, "a panel holds one machine"
         self.drop_summary()
-        self.guide.hide()
         self.machines.append(machine)
         self.node = None
         self.title.setText(label or machine.name)
         self.title.setStyleSheet("")
         self.show_outline(None)
         self.drop_pages()
-        self.tabs.hide()
         self._show_edit_row()
         self.header = MachineTab(machine.name)
-        layout: QLayout | None = self.layout()
-        assert isinstance(layout, QVBoxLayout)
-        layout.addWidget(self.header)
-        layout.addWidget(machine.widget, 1)
+        page: QWidget = QWidget()
+        column: QVBoxLayout = QVBoxLayout(page)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.addWidget(self.header)
+        column.addWidget(machine.widget, 1)
         machine.widget.show()
+        self.show_own(page, "Machine")
 
     def drop_machine(self) -> None:
         """Give up the machine shown, if any, so an item can be (#154).
@@ -630,16 +633,13 @@ class Panel(QFrame):
         """
         if not self.machines:
             return
-        layout: QLayout | None = self.layout()
-        assert layout is not None
         machine: MachineControl = self.machines.pop()
-        layout.removeWidget(machine.widget)
         machine.widget.hide()
         machine.widget.setParent(None)
-        if self.header is not None:
-            layout.removeWidget(self.header)
-            self.header.deleteLater()
-            self.header = None
+        self.header = None
+        page: QWidget | None = self.show_own(None, "")
+        if page is not None:
+            page.deleteLater()
 
     def show_dues(self, blink: bool) -> None:
         """Bring the machine's bar, or the summary, up to date (#102).
@@ -821,17 +821,45 @@ class Panel(QFrame):
         """
         self.title.setText("scraftcam")
         self.title.setStyleSheet("font-weight: bold; font-size: 16pt")
-        self.tabs.hide()
         self.guide.setText(text)
-        self.guide.show()
+        self.show_own(self.guide, "Guide")
         self._show_edit_row()
 
     def hide_guide(self) -> None:
         """Take the guide away, leaving an empty panel (#200)."""
-        self.guide.hide()
+        self.hide_own_guide()
         self.title.setText("Click an item in the tree.")
         self.title.setStyleSheet(f"color: {colors().quiet}")
-        self.tabs.show()
+
+    def hide_own_guide(self) -> None:
+        """Put [Fields] back in place of [Guide], if it is shown."""
+        if self.own is self.guide:
+            self.show_own(None, "")
+
+    def show_own(self, page: QWidget | None, label: str) -> QWidget | None:
+        """Show `page` as the panel's own tab, in place of [Fields].
+
+        Arguments:
+        * `page` (`QWidget | None`): The tab's content, or `None` to
+          put [Fields] back.
+        * `label` (`str`): The tab's label.
+
+        Returns:
+        * (`QWidget | None`): The own tab it replaced, if any (the
+          caller deletes it, unless it is `guide`).
+        """
+        old: QWidget | None = self.own
+        if old is not None:
+            self.tabs.removeTab(self.tabs.indexOf(old))
+            old.setParent(None)
+        self.own = page
+        self.tabs.setTabVisible(0, page is None)
+        if page is not None:
+            self.tabs.insertTab(0, page, label)
+            self.tabs.setCurrentWidget(page)
+        else:
+            self.tabs.setCurrentIndex(0)
+        return old
 
     def show_outline(self, path: Path | None) -> None:
         """Show `path` in the [Outline] tab, or take the tab away.
@@ -916,7 +944,7 @@ class Panel(QFrame):
         self.drop_outline()
         self.drop_summary()
         self.node = None
-        self.guide.hide()
+        self.hide_own_guide()
         self.title.setText(title)
         self.title.setStyleSheet("")
         self._show_edit_row()
@@ -925,14 +953,12 @@ class Panel(QFrame):
         self.outline = editor
         self.tabs.addTab(editor, "Outline")
         self.tabs.setCurrentWidget(editor)
-        self.tabs.show()
 
     def drop_summary(self) -> None:
         """Take the `machines/` summary away, if it is shown."""
         if self.summary is not None:
-            layout: QLayout | None = self.layout()
-            assert layout is not None
-            layout.removeWidget(self.summary)
+            if self.own is self.summary:
+                self.show_own(None, "")
             self.summary.deleteLater()
             self.summary = None
 
@@ -979,16 +1005,13 @@ class Panel(QFrame):
         self.copied.hide()
 
         # The `machines/` directory: its summary, in place of the rest.
-        self.guide.hide()
-        self.tabs.setVisible(not is_machines_directory(node))
+        self.hide_own_guide()
         if is_machines_directory(node):
             self.show_outline(None)
             self.title.setText(node.label())
             self.title.setStyleSheet("")
             self.summary = MachinesView(node, self.controls, self.open_machine)
-            layout: QLayout | None = self.layout()
-            assert isinstance(layout, QVBoxLayout)
-            layout.addWidget(self.summary, 1)
+            self.show_own(self.summary, "Machines")
             return
 
         # The title, and the text.
