@@ -34,7 +34,7 @@ python3 -m scraftcam.run --headless --tutorial move_a_corner.steps.md
 ```
 
 With `--program`, the first panel controls the machine (step 5,
-`T.g~6` #52, #53): the HMI (`scraftcam.hmi.lcnc_hmi`), a
+`T.g~6` #52, #53): the HMI (`scraftcam.hmi.machine_panel`), a
 client of a `serve_linuxcnc` already running (`--lcnc-port`), opens
 the program, stopped, and draws the program's setup in the
 SolidCraft on `--solidcraft`; `--hmi` makes it with no program.  It
@@ -62,7 +62,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scraftcam.gui import window
+from scraftcam.gui import prompt, window
 from scraftcam.gui.app import App, find_shop
 from scraftcam.gui.machines import Due, MachineControl, Report
 from scraftcam.gui.outline_panel import (
@@ -268,7 +268,7 @@ def machine_maker(
         """Make the HMI for the machine `name`, the program open."""
         # Only now: it needs LinuxCNC's client, which the GUI does not.
         # pylint: disable=import-outside-toplevel
-        from scraftcam.hmi import lcnc_hmi
+        from scraftcam.hmi import machine_panel
         from scraftcam.hmi.hmi_machine import Intervention
 
         # pylint: enable=import-outside-toplevel
@@ -277,15 +277,15 @@ def machine_maker(
             model.say("--program needs a shop", problem=True)
             return None
         if options.headless:
-            lcnc_hmi.use_headless()
+            prompt.use_headless(unattended=True)
         try:
-            hmi: lcnc_hmi.HMI = lcnc_hmi.make_hmi(
+            hmi: machine_panel.HMI = machine_panel.make_hmi(
                 lcnc_port=options.lcnc_port,
                 solidcraft=options.solidcraft,
                 shop=model.shop,
                 dry_run=options.dry_run,
             )
-        except lcnc_hmi.HMIStartError as error:
+        except machine_panel.HMIStartError as error:
             model.say(f"The machine did not start: {error}", problem=True)
             return None
         hmi.quit_button.hide()

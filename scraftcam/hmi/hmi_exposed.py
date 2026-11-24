@@ -19,7 +19,7 @@ from scraftcam.exposed.exposed import ExposedError
 from scraftcam.exposed.handles import Handles
 
 if typing.TYPE_CHECKING:
-    from scraftcam.hmi.lcnc_hmi import HMI
+    from scraftcam.hmi.machine_panel import HMI
 
 # The session's handles, and the HMIs (the machine panels' controls).
 HANDLES: Handles = Handles()

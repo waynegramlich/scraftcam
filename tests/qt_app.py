@@ -8,13 +8,13 @@ import atexit
 
 from PySide6.QtWidgets import QApplication
 
-from scraftcam.gui import window
-from scraftcam.hmi import lcnc_hmi
+from scraftcam.gui import prompt, window
+from scraftcam.hmi import machine_panel
 from scraftcam.hmi.hmi_machine import HMIMachine
 
 # Offscreen, before the one `QApplication` is made; the HMI's
-# questions answered from `lcnc_hmi.ANSWERS`.
-lcnc_hmi.use_headless()
+# questions answered from `prompt.ANSWERS`.
+prompt.use_headless(unattended=True)
 APPLICATION: QApplication = window.make_application(headless=True)
 
 # Every window and HMI deleted before Python's exit, ahead of PySide's
@@ -29,7 +29,7 @@ def process_events() -> None:
 
 
 # Function `make_hmi()`:
-def make_hmi(machine: HMIMachine) -> lcnc_hmi.HMI:
+def make_hmi(machine: HMIMachine) -> machine_panel.HMI:
     """Make an HMI, with no questions waiting.
 
     Its timer runs, but nothing runs Qt's loop, so `poll()` runs only
@@ -39,8 +39,8 @@ def make_hmi(machine: HMIMachine) -> lcnc_hmi.HMI:
     * `machine` (`HMIMachine`): The LinuxCNC back end.
 
     Returns:
-    * (`lcnc_hmi.HMI`): The HMI, its speed slider up to 10x.
+    * (`machine_panel.HMI`): The HMI, its speed slider up to 10x.
     """
-    lcnc_hmi.ANSWERS.clear()
-    lcnc_hmi.ASKED.clear()
-    return lcnc_hmi.HMI(machine, 10.0)
+    prompt.ANSWERS.clear()
+    prompt.ASKED.clear()
+    return machine_panel.HMI(machine, 10.0)

@@ -88,7 +88,7 @@ def no_report() -> Report:
 class MachineControl:
     """A machine's controls, as a panel shows them (step 5, #52).
 
-    The HMI (`scraftcam.hmi.lcnc_hmi.HMI`) is one; the GUI knows it
+    The HMI (`scraftcam.hmi.machine_panel.HMI`) is one; the GUI knows it
     only through these, so that it needs no LinuxCNC to start.
 
     Attributes:

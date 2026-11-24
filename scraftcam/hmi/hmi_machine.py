@@ -1,6 +1,6 @@
 """The HMI's link to LinuxCNC, and everything else it does but draw.
 
-`lcnc_hmi.py` is the HMI, in Qt; this is what it uses that needs no
+`machine_panel.py` is the HMI, in Qt; this is what it uses that needs no
 GUI toolkit, so it can be tested with no display:
 
 * `HMIMachine`: the LinuxCNC calls, a client (through

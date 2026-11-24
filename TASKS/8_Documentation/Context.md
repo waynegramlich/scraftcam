@@ -6,7 +6,8 @@ numbers are shared by every task; the next is in
 
 ## Reminders
 
-* #616 `README.md:200-211` and "Trying It" name `lcnc_hmi.py`,
+* #616 `README.md:200-211` and "Trying It" name `lcnc_hmi.py` (now
+  `hmi/machine_panel.py`, #614),
   `show_demo.py`, `drive_editor.py`.
 * #617 `scraftcam/gui/README.md` never mentions the machine panel,
   the HMI, MCP or `prompt.py`.

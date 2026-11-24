@@ -12,17 +12,30 @@ a local event loop, so a caller reads as it did with `exec()`;
 The helpers `ask_yes_no()`, `ask_item()`, `ask_open_file()` and
 `ask_directory()` build the usual dialogs for it.  Answers queued in
 `ANSWERS` (tests, Claude over MCP) are taken first, in order, with
-no dialog shown.
+no dialog shown, and each question is kept in `ASKED`.  Unattended
+(`use_headless(unattended=True)`), a question with no answer queued
+gets "" (No, or Cancel), never a dialog that no one could answer.
 """
 
 from __future__ import annotations
+
+import os
+import sys
 
 from scraftcam.packages import require
 
 # `PySide6` is put on `sys.path` before it is imported.
 require("PySide6")
 # pylint: disable=wrong-import-position,wrong-import-order
-from PySide6.QtCore import QEvent, QEventLoop, QObject, Qt  # noqa: E402
+from PySide6.QtCore import (  # noqa: E402
+    QEvent,
+    QEventLoop,
+    QMessageLogContext,
+    QObject,
+    Qt,
+    QtMsgType,
+    qInstallMessageHandler,
+)
 from PySide6.QtGui import QColor, QPainter, QPaintEvent  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QDialog,
@@ -41,6 +54,66 @@ SHADE: QColor = QColor(0, 0, 0, 110)
 # Answers given ahead, taken by the next questions in order: "yes" or
 # "no", a choice, a file or directory ("" for Cancel).
 ANSWERS: list[str] = []
+
+# The questions answered from `ANSWERS`, or unattended, in order.
+ASKED: list[str] = []
+
+# True when no one is there to answer questions (or press Start).
+UNATTENDED: bool = False
+
+# What Qt's offscreen platform says each time a window is shown; it
+# means nothing here, so `use_headless()` drops it.
+OFFSCREEN_NOISE: str = "This plugin does not support propagateSizeHints()"
+
+
+# Function `use_headless()`:
+def use_headless(*, unattended: bool = False) -> None:
+    """Draw offscreen from now on (tests, and `--headless`).
+
+    It must be called before the `QApplication` is made.
+
+    Arguments:
+    * `unattended` (`bool`): True when no one is there either: a
+      question with no answer queued then gets "" (`UNATTENDED`).
+    """
+    # One switch for the whole program, set once at the start.
+    # pylint: disable-next=global-statement
+    global UNATTENDED
+    UNATTENDED = UNATTENDED or unattended
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    qInstallMessageHandler(qt_message)
+
+
+# Function `qt_message()`:
+def qt_message(
+    _kind: QtMsgType, _context: QMessageLogContext, message: str
+) -> None:
+    """Write a message from Qt, less `OFFSCREEN_NOISE` (headless).
+
+    Arguments:
+    * `_kind` (`QtMsgType`): Debug, warning and so on (ignored).
+    * `_context` (`QMessageLogContext`): Where it came from (ignored).
+    * `message` (`str`): The message.
+    """
+    if message != OFFSCREEN_NOISE:
+        print(message, file=sys.stderr)
+
+
+# Function `given()`:
+def given(question: str) -> str | None:
+    """Return a queued answer to a question, or `None` to ask it.
+
+    Arguments:
+    * `question` (`str`): The question, kept in `ASKED` when answered.
+
+    Returns:
+    * (`str | None`): The next of `ANSWERS`; "" unattended when none
+      is queued; else `None` (show the dialog).
+    """
+    if not ANSWERS and not UNATTENDED:
+        return None
+    ASKED.append(question)
+    return ANSWERS.pop(0) if ANSWERS else ""
 
 
 # Class `Shade`:
@@ -152,8 +225,9 @@ def ask_yes_no(host: QWidget, title: str, message: str) -> bool:
     Returns:
     * (`bool`): True for Yes.
     """
-    if ANSWERS:
-        return ANSWERS.pop(0) == "yes"
+    answer: str | None = given(f"{title}: {message}")
+    if answer is not None:
+        return answer == "yes"
     box: QMessageBox = QMessageBox(host)
     box.setText(f"<b>{title}</b>")
     box.setInformativeText(message)
@@ -180,8 +254,8 @@ def ask_item(
     Returns:
     * (`str | None`): The choice, or `None` when cancelled.
     """
-    if ANSWERS:
-        answer: str = ANSWERS.pop(0)
+    answer: str | None = given(f"{title}: {label}")
+    if answer is not None:
         return answer if answer in items else None
     box: QInputDialog = QInputDialog(host)
     box.setWindowTitle(title)
@@ -255,8 +329,9 @@ def _ask_path(
     Returns:
     * (`str`): The path, or "" when cancelled.
     """
-    if ANSWERS:
-        return ANSWERS.pop(0)
+    answer: str | None = given(title)
+    if answer is not None:
+        return answer
     box: QFileDialog = QFileDialog(host, title, start, filters)
     box.setOption(QFileDialog.Option.DontUseNativeDialog)
     box.setFileMode(mode)

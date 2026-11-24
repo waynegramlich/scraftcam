@@ -34,9 +34,16 @@ task; the next is in `TASKS/Issue_Counter.md`.
   `SOLIDCRAFT_CLI`; test in `test_scraftpybind`),
   `outline_cuts.cut_pieces()` (one `FAR`, 1e9).  `pylint -j 1
   --enable=duplicate-code` is clean over `scraftcam/` and `tests/`.
-* #613 the HMI uses `gui/prompt.py`, not its own copy
-  (`hmi/lcnc_hmi.py:189-290`: `ANSWERS`, `ASKED`, `use_headless()`,
-  `ask_*()`); tests use `prompt.ANSWERS`.
+* #S2 done.  #613: `hmi/lcnc_hmi.py`'s copy (and
+  `window.py`'s `use_headless()`, `qt_message()`, `OFFSCREEN_NOISE`)
+  went; `prompt.py` has `ASKED`, `given()`, and
+  `use_headless(*, unattended)`: `prompt.UNATTENDED` (the old HMI
+  `HEADLESS`) gives "" to unqueued questions and resumes program
+  pauses; plain headless still shows dialogs (MCP clicks them).
+  `run.py --program --headless` and `tests/qt_app.py` are unattended;
+  `test_prompt` sets it back off.  #614 done: `hmi/machine_panel.py`
+  and `tests/test_machine_panel.py` (`git mv`, `hg mv --after`);
+  only `README.md` still says `lcnc_hmi` (#616, `T.d~8`).
 * #586/#639 tabs in every panel: every panel alike, new tabs (and
   their documentation) easy to add.  Before `T.toasl~6.8`'s tool
   panel.

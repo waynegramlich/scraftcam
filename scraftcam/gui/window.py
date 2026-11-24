@@ -84,13 +84,10 @@ require("PySide6")
 from PySide6.QtCore import (  # noqa: E402
     QCoreApplication,
     QEvent,
-    QMessageLogContext,
     QObject,
     Qt,
     QTimer,
-    QtMsgType,
     QUrl,
-    qInstallMessageHandler,
 )
 from PySide6.QtGui import (  # noqa: E402
     QCloseEvent,
@@ -132,10 +129,6 @@ WIDTH: int = 720
 HEIGHT: int = 480
 
 
-# What Qt's offscreen platform says each time a window is shown; it
-# means nothing here, so `use_headless()` drops it.
-OFFSCREEN_NOISE: str = "This plugin does not support propagateSizeHints()"
-
 # The least width of `NewShopDialog`'s directory, in pixels.
 DIRECTORY_WIDTH: int = 360
 
@@ -168,43 +161,19 @@ CATALOG_WINDOWS: dict[str, "Pages"] = {}
 NEW_WINDOW: str = "New Window"
 
 
-# Function `use_headless()`:
-def use_headless() -> None:
-    """Draw offscreen from now on (tests, and `--headless`).
-
-    It must be called before the `QApplication` is made.
-    """
-    os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    qInstallMessageHandler(qt_message)
-
-
-# Function `qt_message()`:
-def qt_message(
-    _kind: QtMsgType, _context: QMessageLogContext, message: str
-) -> None:
-    """Write a message from Qt, less `OFFSCREEN_NOISE`.
-
-    Arguments:
-    * `_kind` (`QtMsgType`): Debug, warning and so on (ignored).
-    * `_context` (`QMessageLogContext`): Where it came from (ignored).
-    * `message` (`str`): The message.
-    """
-    if message != OFFSCREEN_NOISE:
-        print(message, file=sys.stderr)
-
-
 # Function `make_application()`:
 def make_application(*, headless: bool) -> QApplication:
     """Make the one `QApplication`, or return the one already made.
 
     Arguments:
-    * `headless` (`bool`): True to draw offscreen (`use_headless()`).
+    * `headless` (`bool`): True to draw offscreen
+      (`prompt.use_headless()`).
 
     Returns:
     * (`QApplication`): The application.
     """
     if headless:
-        use_headless()
+        prompt.use_headless()
     existing: object = QApplication.instance()
     if isinstance(existing, QApplication):
         return existing

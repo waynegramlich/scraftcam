@@ -1,4 +1,4 @@
-"""Tests of `lcnc_hmi.py` that need no LinuxCNC or window."""
+"""Tests of `machine_panel.py` that need no LinuxCNC or window."""
 
 import json
 import os
@@ -19,7 +19,8 @@ from scraftcam import shops
 from scraftcam.assembly import Assembly
 from scraftcam.demo import demo_assembly, with_setup
 from scraftcam.exposed import client as mcp_client
-from scraftcam.hmi import hmi_machine, lcnc_hmi
+from scraftcam.gui import prompt
+from scraftcam.hmi import hmi_machine, machine_panel
 from scraftcam.lcnc.lcnc_client import BridgeError
 from scraftcam.setups import SHOP as EXAMPLE_SHOP
 from scraftcam.tooling.shop_registries import use_shop
@@ -389,7 +390,7 @@ class TestStatus(unittest.TestCase):
         asks LinuxCNC first (#612), so the spindle, taken as on until
         then, is known."""
         machine, lcnc = client_machine()
-        hmi: lcnc_hmi.HMI = make_hmi(machine)
+        hmi: machine_panel.HMI = make_hmi(machine)
         self.assertTrue(hmi.spindle)
         self.assertEqual(hmi.busy(), "")
         lcnc.values["spindle"] = [{"enabled": 1, "speed": 1200.0}]
@@ -425,7 +426,7 @@ class TestMessages(unittest.TestCase):
 
         # The port shows them, and something when there are none.
         panel = mock.MagicMock(machine=machine)
-        handle = lcnc_hmi.HMI.handle
+        handle = machine_panel.HMI.handle
         self.assertEqual(handle(panel, "messages"), "messages: first")
         machine.messages = []
         self.assertEqual(handle(panel, "messages"), "messages: ")
@@ -556,7 +557,7 @@ class TestHeadless(unittest.TestCase):
         self.tick()
         self.assertEqual(self.ask("press Set Origin"), "ok")
         self.assertNotIn("mdi G10 L20 P1 X0 Y0 Z0", self.machine.log)
-        self.assertIn("Set Origin", lcnc_hmi.ASKED[0])
+        self.assertIn("Set Origin", prompt.ASKED[0])
         self.ask("answer yes")
         self.ask("press Set Origin")
         self.assertIn("mdi G10 L20 P1 X0 Y0 Z0", self.machine.log)
@@ -589,7 +590,7 @@ class TestHeadless(unittest.TestCase):
         self.panel.expert.click()
         self.assertFalse(self.panel.expert.isChecked())
         self.assertFalse(self.panel.slider.isEnabled())
-        lcnc_hmi.ANSWERS.append("yes")
+        prompt.ANSWERS.append("yes")
         self.panel.expert.click()
         self.assertTrue(self.panel.slider.isEnabled())
         self.panel.expert.click()
@@ -984,7 +985,7 @@ class TestSetOrigin(unittest.TestCase):
         """Picking the stock's corner sets G54 to read it, in inches."""
         self.open(True)
         self.assertTrue(self.panel.inches)
-        lcnc_hmi.ANSWERS.extend(["stock: top left outer", "yes"])
+        prompt.ANSWERS.extend(["stock: top left outer", "yes"])
         self.panel.on_set_origin()
         self.assertEqual(
             self.machine.log[-2:],
@@ -994,7 +995,7 @@ class TestSetOrigin(unittest.TestCase):
     def test_cancel(self) -> None:
         """No pick, or No at the question, sets nothing."""
         self.open(True)
-        lcnc_hmi.ANSWERS.extend(["", "stock: top left outer", "no"])
+        prompt.ANSWERS.extend(["", "stock: top left outer", "no"])
         before = list(self.machine.log)
         self.panel.on_set_origin()
         self.panel.on_set_origin()
@@ -1004,7 +1005,7 @@ class TestSetOrigin(unittest.TestCase):
         """Without a setup, Set Origin zeroes the position, as before."""
         self.open(False)
         self.assertEqual(self.panel.origins, [])
-        lcnc_hmi.ANSWERS.append("yes")
+        prompt.ANSWERS.append("yes")
         self.panel.on_set_origin()
         self.assertEqual(self.machine.log[-1], "mdi G10 L20 P1 X0 Y0 Z0")
 
@@ -1028,12 +1029,12 @@ class TestMakeSolidCraft(unittest.TestCase):
     def make(self, solidcraft: int) -> mock.MagicMock:
         """Make a dry-run HMI, with SolidCraft faked."""
         with (
-            mock.patch.object(lcnc_hmi, "connect"),
-            mock.patch.object(lcnc_hmi, "PyBind"),
-            mock.patch.object(lcnc_hmi, "ModelCache"),
-            mock.patch.object(lcnc_hmi, "SetupView") as view,
+            mock.patch.object(machine_panel, "connect"),
+            mock.patch.object(machine_panel, "PyBind"),
+            mock.patch.object(machine_panel, "ModelCache"),
+            mock.patch.object(machine_panel, "SetupView") as view,
         ):
-            hmi = lcnc_hmi.make_hmi(
+            hmi = machine_panel.make_hmi(
                 lcnc_port=0,
                 solidcraft=solidcraft,
                 shop=SHOP_TOML,

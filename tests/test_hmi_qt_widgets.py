@@ -1,8 +1,8 @@
-"""Tests for `scraftcam.hmi.lcnc_hmi`, the HMI in Qt.
+"""Tests for `scraftcam.hmi.machine_panel`, the HMI in Qt.
 
 Qt draws offscreen (`use_headless()`), so no display is needed; the
 HMI runs with a dry-run `HMIMachine` (no LinuxCNC).  The HMI's
-behaviour is tested in `test_lcnc_hmi.py` and `test_hmi_*.py`; these
+behaviour is tested in `test_machine_panel.py` and `test_hmi_*.py`; these
 are only what is Qt's own: the jog step group, the slider, and the
 filter on Qt's messages.
 """
@@ -19,10 +19,11 @@ from unittest import mock
 from PySide6.QtCore import QMessageLogContext, QtMsgType
 from PySide6.QtWidgets import QApplication
 
-from scraftcam.hmi import hmi_machine, lcnc_hmi
+from scraftcam.gui import prompt
+from scraftcam.hmi import hmi_machine, machine_panel
 
 # Offscreen, before the one `QApplication` is made.
-lcnc_hmi.use_headless()
+prompt.use_headless(unattended=True)
 APPLICATION: Any = QApplication.instance() or QApplication([])
 
 
@@ -34,10 +35,10 @@ class TestQtHMI(unittest.TestCase):
     def setUp(self) -> None:
         """Make an HMI and a small program."""
         # No questions waiting, and a dry-run machine.
-        lcnc_hmi.ANSWERS.clear()
-        lcnc_hmi.ASKED.clear()
+        prompt.ANSWERS.clear()
+        prompt.ASKED.clear()
         self.machine: hmi_machine.HMIMachine = hmi_machine.HMIMachine(True)
-        self.hmi: lcnc_hmi.HMI = lcnc_hmi.HMI(self.machine, 10.0)
+        self.hmi: machine_panel.HMI = machine_panel.HMI(self.machine, 10.0)
         self.hmi.timer.stop()
         self.addCleanup(self.hmi.deleteLater)
 
@@ -105,19 +106,19 @@ class TestQtHMI(unittest.TestCase):
         # From the slider, at its ends.
         self.hmi.slider.setValue(0)
         self.assertAlmostEqual(self.hmi.override, hmi_machine.MIN_SPEED)
-        self.hmi.slider.setValue(lcnc_hmi.SLIDER_STEPS)
+        self.hmi.slider.setValue(machine_panel.SLIDER_STEPS)
         self.assertAlmostEqual(self.hmi.override, 10.0)
 
     # Method `TestQtHMI.test_qt_messages()`:
     def test_qt_messages(self) -> None:
         """Headless, only the offscreen platform's noise is dropped."""
         with mock.patch.object(sys, "stderr", io.StringIO()) as stderr:
-            lcnc_hmi.qt_message(
+            prompt.qt_message(
                 QtMsgType.QtWarningMsg,
                 QMessageLogContext(),
-                lcnc_hmi.OFFSCREEN_NOISE,
+                prompt.OFFSCREEN_NOISE,
             )
-            lcnc_hmi.qt_message(
+            prompt.qt_message(
                 QtMsgType.QtWarningMsg, QMessageLogContext(), "Something"
             )
         self.assertEqual(stderr.getvalue(), "Something\n")

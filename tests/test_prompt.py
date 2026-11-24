@@ -26,6 +26,9 @@ class PromptTest(unittest.TestCase):
 
     def setUp(self) -> None:
         """A window of two halves: the host, and something else."""
+        # Someone is there to press the dialogs' buttons.
+        self.addCleanup(setattr, prompt, "UNATTENDED", prompt.UNATTENDED)
+        prompt.UNATTENDED = False
         qt_app.process_events()
         self.window: QWidget = QWidget()
         row: QHBoxLayout = QHBoxLayout(self.window)

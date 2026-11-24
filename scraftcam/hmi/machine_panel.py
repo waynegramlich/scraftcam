@@ -53,9 +53,9 @@ It is the machine panel of `scraftcam.run`, never a window of its own
 (`T.og~6.9` #605).  With `--headless`, Qt draws offscreen
 (`QT_QPA_PLATFORM=offscreen`), so no display is needed, and otherwise
 the same code runs, with its buttons pressed over MCP.  A question
-that would open a window then takes its answer from `ANSWERS`, in
-order (`hmi_answer`), or else the answer that does nothing (No, or no
-file), and is added to `ASKED`.
+that would open a window then takes its answer from `prompt.ANSWERS`,
+in order (`hmi_answer`), or else the answer that does nothing (No, or
+no file), and is added to `prompt.ASKED` (`gui/prompt.py`).
 
 A program is opened from the command line, with Open, or over the
 GUI's MCP port (`hmi_exposed.py`; `hmi_line` takes the old line
@@ -80,8 +80,6 @@ echo "open demo.ngc" | nc -q 1 127.0.0.1 5007
 import functools
 import json
 import math
-import os
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -152,11 +150,8 @@ from .hmi_machine import (
 require("PySide6")
 # pylint: disable=wrong-import-position,wrong-import-order
 from PySide6.QtCore import (  # noqa: E402
-    QMessageLogContext,
     Qt,
     QTimer,
-    QtMsgType,
-    qInstallMessageHandler,
 )
 from PySide6.QtGui import QFont, QFontDatabase  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
@@ -178,120 +173,8 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 # pylint: enable=wrong-import-position,wrong-import-order
 
-# True when Qt draws offscreen, with no one to answer questions.
-HEADLESS: bool = False
-
-# The answers waiting for questions, and the questions asked (headless).
-ANSWERS: list[str] = []
-ASKED: list[str] = []
-
 # How many steps the speed slider has, from `MIN_SPEED` to its top.
 SLIDER_STEPS: int = 1000
-
-# What Qt's offscreen platform says each time a window is shown; it
-# means nothing here, so `use_headless()` drops it.
-OFFSCREEN_NOISE: str = "This plugin does not support propagateSizeHints()"
-
-
-# Function `use_headless()`:
-def use_headless() -> None:
-    """Draw offscreen from now on, and answer questions from `ANSWERS`.
-
-    It must be called before the `QApplication` is made.
-    """
-    # One switch for the whole module, set once at the start.
-    # pylint: disable-next=global-statement
-    global HEADLESS
-    HEADLESS = True
-    os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    qInstallMessageHandler(qt_message)
-
-
-# Function `qt_message()`:
-def qt_message(
-    _kind: QtMsgType, _context: QMessageLogContext, message: str
-) -> None:
-    """Write a message from Qt, less `OFFSCREEN_NOISE` (headless).
-
-    Arguments:
-    * `_kind` (`QtMsgType`): Debug, warning and so on (ignored).
-    * `_context` (`QMessageLogContext`): Where it came from (ignored).
-    * `message` (`str`): The message.
-    """
-    if message != OFFSCREEN_NOISE:
-        print(message, file=sys.stderr)
-
-
-# Function `next_answer()`:
-def next_answer(question: str) -> str:
-    """Record a question asked headless, and return its answer.
-
-    Arguments:
-    * `question` (`str`): The question.
-
-    Returns:
-    * (`str`): The next of `ANSWERS`, or `""` when there is none.
-    """
-    ASKED.append(question)
-    return ANSWERS.pop(0) if ANSWERS else ""
-
-
-# Function `ask_yes_no()`:
-def ask_yes_no(parent: QWidget, title: str, message: str) -> bool:
-    """Ask a question, with No as the default.
-
-    Arguments:
-    * `parent` (`QWidget`): The HMI.
-    * `title` (`str`): The question's title.
-    * `message` (`str`): The question.
-
-    Returns:
-    * (`bool`): True for Yes.
-    """
-    if HEADLESS:
-        return next_answer(f"{title}: {message}") == "yes"
-    # Inside the HMI, never over the whole screen (#606).
-    return prompt.ask_yes_no(parent, title, message)
-
-
-# Function `ask_choice()`:
-def ask_choice(
-    parent: QWidget, title: str, message: str, choices: list[str]
-) -> str:
-    """Ask the operator to pick one of a list.
-
-    Arguments:
-    * `parent` (`QWidget`): The HMI.
-    * `title` (`str`): The window's title.
-    * `message` (`str`): The question.
-    * `choices` (`list[str]`): What may be picked.
-
-    Returns:
-    * (`str`): The choice, or `""` for Cancel (or, headless, an
-      answer that is not one of `choices`).
-    """
-    if HEADLESS:
-        answer: str = next_answer(f"{title}: {message}")
-        return answer if answer in choices else ""
-    choice: str | None = prompt.ask_item(parent, title, message, choices)
-    return choice or ""
-
-
-# Function `ask_open_file()`:
-def ask_open_file(parent: QWidget) -> str:
-    """Ask for a G-code file.
-
-    Arguments:
-    * `parent` (`QWidget`): The HMI.
-
-    Returns:
-    * (`str`): The file, or `""` for Cancel.
-    """
-    if HEADLESS:
-        return next_answer("Open G-code")
-    return prompt.ask_open_file(
-        parent, "Open G-code", "G-code (*.ngc *.nc *.gcode);;All (*)"
-    )
 
 
 # Function `fixed_font()`:
@@ -1012,7 +895,7 @@ class HMI(QWidget):
             "G20" if self.inches else "G21",
             f"G10 L20 P1 {axis}{value:g}",
         ]
-        if not ask_yes_no(
+        if not prompt.ask_yes_no(
             self,
             f"Set {axis}",
             f"Make the current {axis} read {value:g}: run {lines[-1]}?",
@@ -1140,7 +1023,9 @@ class HMI(QWidget):
     # Method `HMI.on_open()`:
     def on_open(self) -> None:
         """Choose a program with a file window, and open it."""
-        path: str = ask_open_file(self)
+        path: str = prompt.ask_open_file(
+            self, "Open G-code", "G-code (*.ngc *.nc *.gcode);;All (*)"
+        )
         if path:
             try:
                 self.open(path)
@@ -1225,7 +1110,7 @@ class HMI(QWidget):
         the program's own.
         """
         if self.expert.isChecked():
-            agreed: bool = ask_yes_no(
+            agreed: bool = prompt.ask_yes_no(
                 self,
                 "Expert",
                 "Change the speeds?  This is for experts: listen to the "
@@ -1513,7 +1398,7 @@ class HMI(QWidget):
         if self.origins:
             self.set_named_origin()
             return
-        if ask_yes_no(
+        if prompt.ask_yes_no(
             self, "Set Origin", "Make the current position the program's zero?"
         ):
             try:
@@ -1576,14 +1461,17 @@ class HMI(QWidget):
     def set_named_origin(self) -> None:
         """Pick the origin the tool tip is at, confirm, and set G54."""
         names: list[str] = [name for name, _ in self.origins]
-        picked: str = ask_choice(
-            self, "Set Origin", "Where is the tool tip now?", names
+        picked: str = (
+            prompt.ask_item(
+                self, "Set Origin", "Where is the tool tip now?", names
+            )
+            or ""
         )
         if not picked:
             return
         point: Point = dict(self.origins)[picked]
         lines: list[str] = origin_lines(point, self.inches)
-        if ask_yes_no(
+        if prompt.ask_yes_no(
             self,
             "Set Origin",
             f"The tool tip is at {picked}: run {lines[-1]}?",
@@ -1739,8 +1627,8 @@ class HMI(QWidget):
                 self.mdi_entry.setText(rest)
             elif word == "show":
                 return json.dumps(self.show_state())
-            elif word == "answer" and HEADLESS:
-                ANSWERS.append(rest.strip())
+            elif word == "answer" and prompt.UNATTENDED:
+                prompt.ANSWERS.append(rest.strip())
             elif word == "open" and rest:
                 self.open(rest.strip())
             elif word == "speed" and rest:
@@ -1873,7 +1761,11 @@ class HMI(QWidget):
         # A pause no one asked for is the program's (`M0`, at a tool
         # change; its `MSG` is on the message line).  A person presses
         # Start (Resume); with no one there (headless), it goes on.
-        if status.state == "paused" and not self.operator_paused and HEADLESS:
+        if (
+            status.state == "paused"
+            and not self.operator_paused
+            and prompt.UNATTENDED
+        ):
             self.machine.resume()
             self.set_running(True, False)
         self.show_program(status)
