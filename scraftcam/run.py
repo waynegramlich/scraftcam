@@ -2,16 +2,15 @@
 """Start the `scraftcam` GUI (`T.g~6`).
 
 ```
-python3 -m scraftcam.run [--shop=SHOP] [--design=DESIGN] [--mcp=PORT]
-./scraftcam/run.py [--shop=SHOP] [--design=DESIGN] [--mcp=PORT]
+python3 -m scraftcam.run [--shop=SHOP] [--mcp=PORT]
+./scraftcam/run.py [--shop=SHOP] [--mcp=PORT]
 ```
 
 `SHOP` is a shop's `shop.toml` or its directory; with none, the first
 `shop.toml` in the current directory or one of its parents is used
-(#83).  `DESIGN` is a Python file, or a package directory.  With
-`--headless`, Qt draws offscreen, so no display is needed.  With
-`--mcp PORT`, the GUI serves MCP on that port of 127.0.0.1
-(`gui/window_exposed.py`; `scraftcam.exposed.client` drives it):
+(#83).  With `--headless`, Qt draws offscreen, so no display is
+needed.  With `--mcp PORT`, the GUI serves MCP on that port of
+127.0.0.1 (`gui/window_exposed.py`; `scraftcam.exposed.client` drives it):
 
 ```
 python3 -m scraftcam.exposed.client start --gui --port 8765
@@ -35,8 +34,8 @@ python3 -m scraftcam.run --headless --tutorial move_a_corner.steps.md
 
 With `--program`, the first panel controls the machine (step 5,
 `T.g~6` #52, #53): the HMI (`scraftcam.hmi.machine_panel`), a
-client of a `serve_linuxcnc` already running (`--lcnc-port`), opens
-the program, stopped, and draws the program's setup in the
+client of a `serve_linuxcnc` already running (its standard port),
+opens the program, stopped, and draws the program's setup in the
 SolidCraft on `--solidcraft`; `--hmi` makes it with no program.  It
 is driven over `--mcp` (`hmi_exposed.py`).  Nothing closes while the
 machine runs, or its spindle or coolant is on (#56, #609):
@@ -125,7 +124,6 @@ def main(arguments: list[str]) -> int:
         prog="scraftcam", description="The scraftcam GUI."
     )
     parser.add_argument("--shop", default="", help="shop.toml or its dir")
-    parser.add_argument("--design", default="", help="design .py or dir")
     parser.add_argument(
         "--headless", action="store_true", help="draw offscreen"
     )
@@ -192,12 +190,6 @@ def main(arguments: list[str]) -> int:
         "--solidcraft", type=int, default=0, help="SolidCraft port"
     )
     parser.add_argument(
-        "--lcnc-port",
-        type=int,
-        default=LINUXCNC_PORT,
-        help="serve_linuxcnc's port (default: %(default)s)",
-    )
-    parser.add_argument(
         "--dry-run", action="store_true", help="use no LinuxCNC"
     )
     options: argparse.Namespace = parser.parse_args(arguments)
@@ -216,8 +208,7 @@ def main(arguments: list[str]) -> int:
     )
 
     # The model, and a shop that was named but is not there.
-    design: Path | None = Path(options.design) if options.design else None
-    model: App = App(shop_file(options.shop), design)
+    model: App = App(shop_file(options.shop), None)
     if options.shop and model.shop is None:
         model.say(f"No {SHOP_FILE} at {options.shop}.", problem=True)
     model.program = options.program or ""
@@ -280,7 +271,7 @@ def machine_maker(
             prompt.use_headless(unattended=True)
         try:
             hmi: machine_panel.HMI = machine_panel.make_hmi(
-                lcnc_port=options.lcnc_port,
+                lcnc_port=LINUXCNC_PORT,
                 solidcraft=options.solidcraft,
                 shop=model.shop,
                 dry_run=options.dry_run,

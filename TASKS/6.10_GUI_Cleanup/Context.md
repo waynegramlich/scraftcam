@@ -49,6 +49,21 @@ task; the next is in `TASKS/Issue_Counter.md`.
   panel.
 * #614 rename `hmi/lcnc_hmi.py` to `hmi/machine_panel.py`; after
   #613.
+* #S3 (#621): `--lcnc-port` dropped (nothing passed it; the HMI
+  uses `lcnc_client.PORT`; back with `T.rslsao~5.8` if needed).  The
+  rest are used (`show_demo`, tests, the end-to-end suite, the MCP
+  client, the user's recordings).  #685 `--design` dropped (the
+  user); `App(shop, design)` keeps designs for its tests and a
+  later way to open one in the GUI.  #S3 done.
+* #S4 (#586) looked at: `Panel.tabs` (views.py:554) has [Fields],
+  [Outline], [Pages] with `setTabBarAutoHide(True)`; a machine
+  (`show_machine()`), the `machines/` summary and the guide are laid
+  in beside the tabs (tests: `test_gui_machines.py:184-216`,
+  `test_panel_outline.py`, `test_gui_catalogs.py:163`,
+  `window_exposed.py:218`).  #684 (the user): the tab bar always
+  shows; every panel's content is in tabs ([Fields], [Outline],
+  [Pages]; [Machines]; [Guide]; a machine in one [Machine] tab,
+  its own tabs inside: two rows are fine).
 * #621 prune `run.py`'s 16 options to those tests, the MCP client and
   the end-to-end suite use (#607: flags are for Claude only).
 * #637 (for #619) split only `gui/outline_editor.py` (5159 lines),
