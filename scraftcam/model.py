@@ -1009,6 +1009,7 @@ class SolidModel:
             value: object = getattr(self, each.name)
             path: str = f"{prefix}{each.name}"
             if isinstance(value, SolidModel):
+                # Another instance of this class, so its own private method.
                 yield from value._walk(  # pylint: disable=protected-access
                     f"{path}.", parameters=parameters
                 )

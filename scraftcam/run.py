@@ -62,7 +62,6 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# pylint: disable=wrong-import-position
 from scraftcam.gui import window
 from scraftcam.gui.app import App, find_shop
 from scraftcam.gui.machines import Due, MachineControl, Report
@@ -108,11 +107,13 @@ def main(arguments: list[str]) -> int:
     # The old programs, now flags of this one (`T.og~6.9` #603): the
     # rest of the command line is theirs.
     if arguments[:1] == ["--show-demo"]:
+        # Imported only for its flag, so the GUI starts without it.
         # pylint: disable-next=import-outside-toplevel
         from scraftcam import show_demo
 
         return show_demo.main(arguments[1:])
     if arguments[:1] == ["--drive-editor"]:
+        # Imported only for its flag, so the GUI starts without it.
         # pylint: disable-next=import-outside-toplevel
         from scraftcam import drive_editor
 

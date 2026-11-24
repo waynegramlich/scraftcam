@@ -15,9 +15,6 @@ python3 -m unittest -v
 ```
 """
 
-# One module holds every test, so it is longer than `pylint` likes.
-# pylint: disable=too-many-lines
-
 import contextlib
 import inspect
 import io

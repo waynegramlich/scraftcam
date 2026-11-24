@@ -77,10 +77,6 @@ echo "open demo.ngc" | nc -q 1 127.0.0.1 5007
 ```
 """
 
-# The HMI's methods each need their docstring, so it passes 1000
-# lines, as `lcnc_hmi.py` does.
-# pylint: disable=too-many-lines
-
 import functools
 import json
 import math
@@ -203,6 +199,7 @@ def use_headless() -> None:
 
     It must be called before the `QApplication` is made.
     """
+    # One switch for the whole module, set once at the start.
     # pylint: disable-next=global-statement
     global HEADLESS
     HEADLESS = True
@@ -386,6 +383,7 @@ def elided(lines: list[str]) -> str:
 
 
 # Class `HMI`:
+# The HMI's window keeps every widget and handler of its own.
 # pylint: disable-next=too-many-instance-attributes,too-many-public-methods
 class HMI(QWidget):
     """The HMI window, laid out as in `T.mlcp~3.4`.
@@ -501,6 +499,7 @@ class HMI(QWidget):
     """
 
     # Method `HMI.__init__()`:
+    # It builds the whole window, one widget after another.
     # pylint: disable-next=too-many-locals,too-many-statements
     def __init__(
         self,

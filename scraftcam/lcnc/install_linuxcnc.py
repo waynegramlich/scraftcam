@@ -37,7 +37,7 @@ serve_linuxcnc                    # Run it, serving JSON on a port.
 
 # The steps are closures, whose many small functions count as
 # locals.
-# pylint: disable=too-many-lines,too-many-locals
+# pylint: disable=too-many-locals
 
 import argparse
 import base64

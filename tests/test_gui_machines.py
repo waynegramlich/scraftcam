@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PySide6.QtWidgets import QLabel
+
 from scraftcam.gui import machines, tree
 from scraftcam.gui.app import App
 from scraftcam.gui.machines import Due, MachineControl, Report, no_report
@@ -108,10 +110,6 @@ def texts(view: machines.MachinesView) -> list[str]:
     Returns:
     * (`list[str]`): Its labels' texts.
     """
-    # Imported here: `PySide6` is on `sys.path` only once `tests` is.
-    from PySide6.QtWidgets import (  # pylint: disable=import-outside-toplevel
-        QLabel,
-    )
 
     return [label.text() for label in view.findChildren(QLabel)]
 

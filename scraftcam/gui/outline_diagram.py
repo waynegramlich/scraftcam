@@ -495,8 +495,6 @@ def _circle(center: Point, radius: float) -> Stroke:
 
 
 # Function `fillet_arcs()`:
-# Type hints on every variable inflate its count of locals.
-# pylint: disable-next=too-many-locals
 def fillet_arcs(
     outline: Outline, scale: float | None = None
 ) -> dict[int, Fillet]:

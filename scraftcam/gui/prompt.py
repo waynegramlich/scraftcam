@@ -74,9 +74,7 @@ class Shade(QWidget):
         self.show()
         self.raise_()
 
-    def eventFilter(  # pylint: disable=invalid-name
-        self, watched: QObject, event: QEvent
-    ) -> bool:
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """Follow the host's size.
 
         Arguments:
@@ -90,9 +88,7 @@ class Shade(QWidget):
             self.setGeometry(self.host.rect())
         return super().eventFilter(watched, event)
 
-    def paintEvent(  # pylint: disable=invalid-name
-        self, _event: QPaintEvent
-    ) -> None:
+    def paintEvent(self, _event: QPaintEvent) -> None:
         """Grey the host under it.
 
         Arguments:

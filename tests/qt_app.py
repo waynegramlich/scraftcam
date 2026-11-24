@@ -5,20 +5,17 @@ before any window or HMI is made.
 """
 
 import atexit
-from typing import TYPE_CHECKING
+
+from PySide6.QtWidgets import QApplication
 
 from scraftcam.gui import window
 from scraftcam.hmi import lcnc_hmi
 from scraftcam.hmi.hmi_machine import HMIMachine
 
-# Only for the type: importing `window` puts `PySide6` on `sys.path`.
-if TYPE_CHECKING:
-    from PySide6.QtWidgets import QApplication
-
 # Offscreen, before the one `QApplication` is made; the HMI's
 # questions answered from `lcnc_hmi.ANSWERS`.
 lcnc_hmi.use_headless()
-APPLICATION: "QApplication" = window.make_application(headless=True)
+APPLICATION: QApplication = window.make_application(headless=True)
 
 # Every window and HMI deleted before Python's exit, ahead of PySide's
 # own clean up, which crashed with many of them left.

@@ -4433,9 +4433,7 @@ class OutlineEditor(QWidget):
         self.table.viewport().installEventFilter(self)
 
     # Method `OutlineEditor.eventFilter()`:
-    def eventFilter(  # pylint: disable=invalid-name
-        self, watched: QObject, event: QEvent
-    ) -> bool:
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """Put the lit letter out when the pointer leaves the table.
 
         Arguments:

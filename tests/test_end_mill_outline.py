@@ -11,10 +11,9 @@ and boxes must agree.  Ball end mills are drawn separately.
 import unittest
 from pathlib import Path
 
-from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_file import Outline, outline_from_text
 from scraftcam.gui.outline_polygon import outline_revolved
-from scraftcam.gui.values import refresh_formulas
+from scraftcam.gui.values import set_letters
 from scraftcam.shops import END_MILL_LETTERS, read
 from scraftcam.solid import SolidRevolved
 from scraftcam.tooling.cutter_models import (
@@ -22,7 +21,7 @@ from scraftcam.tooling.cutter_models import (
     profile,
     shop_tools,
 )
-from tests.test_drill_outline import MM, turned
+from tests.test_drill_outline import MM, assert_same, turned
 
 # The kind's outline drawing.
 END_MILL: Path = Path(__file__).resolve().parent.parent / (
@@ -50,11 +49,7 @@ def outline_end_mill(tool: dict[str, object]) -> SolidRevolved:
     }
     if "SD" not in values:
         values["SD"] = values["D"]
-    each: Letter
-    for each in outline.letters:
-        if each.letter in values:
-            each.default = values[each.letter]
-    refresh_formulas(outline.letters)
+    set_letters(outline.letters, values)
     return outline_revolved(outline, f"end_mill_{tool['unique_id']}")
 
 
@@ -82,10 +77,7 @@ class TestEndMillOutline(unittest.TestCase):
                 old: tuple[float, float, float] = turned(
                     [(r * MM, z * MM) for r, z in profile("end_mills", tool)]
                 )
-                for found, expected in zip(new, old, strict=True):
-                    self.assertAlmostEqual(
-                        found / expected, 1.0, places=6, msg=(new, old)
-                    )
+                assert_same(self, new, old)
 
 
 if __name__ == "__main__":

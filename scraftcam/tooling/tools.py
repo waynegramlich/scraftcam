@@ -28,10 +28,6 @@ python3 -m scraftcam.tooling.tools 8080 421-0261
 # runs past `pylint`'s limit on attributes.
 # pylint: disable=too-many-instance-attributes
 
-# All of the tooling models live together for now, which runs past
-# `pylint`'s limit on a module's size.
-# pylint: disable=too-many-lines
-
 import itertools
 import math
 import sys

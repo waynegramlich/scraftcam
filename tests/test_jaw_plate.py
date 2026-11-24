@@ -9,9 +9,10 @@ import unittest
 from fractions import Fraction
 
 from scraftcam.model import Length
-from scraftcam.pybind.scraftpybind import JSON, PyBind, connect
+from scraftcam.pybind.scraftpybind import PyBind, connect
 from scraftcam.tooling.jaw_plate import JawPlate
 from scraftcam.tooling.tools import KURT_JAW_PLATE
+from tests.solidcraft_checks import totals
 
 # Whether a headless SolidCraft can be run.
 HAVE_SOLIDCRAFT: bool = shutil.which("solidcraft-cli") is not None
@@ -28,16 +29,10 @@ def body_facts(solidcraft: PyBind) -> tuple[float, list[float]]:
     * (`tuple[float, list[float]]`): The volume (mm^3) and the box's
       maximum corner (mm).
     """
-    properties: JSON = solidcraft.component.properties()
-    assert isinstance(properties, dict)
-    total: JSON = properties["total"]
-    assert isinstance(total, dict)
-    volume: JSON = total["volume_mm3"]
-    box: JSON = total["bbox"]
-    assert isinstance(volume, float) and isinstance(box, dict)
-    top: JSON = box["max"]
-    assert isinstance(top, list)
-    return volume, [float(each) for each in top if isinstance(each, float)]
+    volume: float
+    top: list[float]
+    volume, _, top = totals(solidcraft.component.properties())
+    return volume, top
 
 
 # Class `TestJawPlate`:

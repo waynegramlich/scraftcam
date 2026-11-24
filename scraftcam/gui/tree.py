@@ -58,6 +58,7 @@ SKIPPED: tuple[str, ...] = ("__pycache__",)
 
 
 # Class `Node`:
+# Each attribute is one fact it holds; grouping them would not read better.
 @dataclass(slots=True)
 class Node:  # pylint: disable=too-many-instance-attributes
     """One item of the tree.

@@ -4,15 +4,10 @@ thread (#512)."""
 import threading
 import unittest
 
-from scraftcam.packages import require
+from PySide6.QtCore import QCoreApplication, QTimer
 
-# `PySide6` is put on `sys.path` before it is imported.
-require("PySide6")
-# pylint: disable=wrong-import-position,wrong-import-order,ungrouped-imports
-from PySide6.QtCore import QCoreApplication, QTimer  # noqa: E402
-
-from scraftcam.exposed.exposed import ExposedError  # noqa: E402
-from scraftcam.exposed.qt_runner import QtRunner  # noqa: E402
+from scraftcam.exposed.exposed import ExposedError
+from scraftcam.exposed.qt_runner import QtRunner
 
 
 def application() -> QCoreApplication:
@@ -35,6 +30,7 @@ class TestQtRunner(unittest.TestCase):
         def worker() -> None:
             """Call the runner, keeping its result or error."""
             try:
+                # `work` may be anything, callable or not, to test both.
                 outcome["result"] = runner(work)  # type: ignore[arg-type]
             except ExposedError as error:
                 outcome["error"] = error

@@ -7,10 +7,12 @@ from scraftcam.exposed.exposed import ExposedError
 from scraftcam.exposed.handles import Handles
 
 
+# A stand-in with only what the code under test uses.
 class View:  # pylint: disable=too-few-public-methods
     """A stand-in for a live object."""
 
 
+# A stand-in with only what the code under test uses.
 class Window:  # pylint: disable=too-few-public-methods
     """Another kind of live object."""
 

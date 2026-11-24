@@ -23,7 +23,7 @@ from scraftcam.tooling.tools import GridPlate
 
 
 # Function `setUpModule()`:
-def setUpModule() -> None:  # pylint: disable=invalid-name
+def setUpModule() -> None:
     """Fill the name registries from the example shop."""
     use_shop(read(EXAMPLE_SHOP))
 

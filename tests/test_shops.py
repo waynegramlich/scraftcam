@@ -19,6 +19,7 @@ EXAMPLES: Path = Path(__file__).parent.parent / "examples" / "shop"
 def lines_of(text: str) -> dict[shops.KeyPath, int]:
     """Return the line of every key path in some TOML."""
     tomllib.loads(text)
+    # The private helper is tested on its own.
     # pylint: disable-next=protected-access
     return shops._Scanner(text).document()
 
@@ -507,8 +508,10 @@ class TestReader(CopiedShop):
 
     def test_controller_by_name(self) -> None:
         """A machine's controller by name: refused, it needs a copy."""
+        # The private helper is tested on its own.
         # pylint: disable-next=protected-access
         reader = shops._Reader(self.directory)
+        # The private helper is tested on its own.
         # pylint: disable-next=protected-access
         source = shops._Source(self.MILL, {})
         self.assertEqual(
@@ -690,6 +693,7 @@ class TestAxisLimits(TestToolCutting):
     def test_widest(self) -> None:
         """A corner rounding mill is as wide as its tip and radii."""
         self.assertAlmostEqual(
+            # The private helper is tested on its own.
             shops._widest(  # pylint: disable=protected-access
                 {"tip_diameter": "0.0469 in", "radius": "1/16 in"}
             ),
@@ -705,6 +709,7 @@ class TestNotInitialized(CopiedShop):
         self.change(TestReader.MILL, 'travel = "18 in"\n', "")
         self.change(TestReader.MILL, 'max_rpm = "5000 rpm"\n', "")
         shop: dict[str, object] = shops.read(self.directory / "shop.toml")
+        # The private helper is tested on its own.
         # pylint: disable-next=protected-access
         mill: dict[str, object] = shops._machine(shop, "Shop mill")
         self.assertEqual(
@@ -864,8 +869,10 @@ class TestMarkdown(unittest.TestCase):
         """Each kind's example checks against its kind."""
         for kind in shops.KINDS.values():
             with self.subTest(kind=kind.kind):
+                # The private helper is tested on its own.
                 # pylint: disable-next=protected-access
                 reader = shops._Reader(EXAMPLES)
+                # The private helper is tested on its own.
                 # pylint: disable-next=protected-access
                 source = shops._Source(kind.kind, {})
                 reader.table(tomllib.loads(kind.example), kind, (), source)

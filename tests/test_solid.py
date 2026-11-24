@@ -26,6 +26,7 @@ from scraftcam.solid import (
 )
 from scraftcam.tooling.jaw_plate import JawPlate
 from scraftcam.tooling.kurt_vise import jaw_plate_solid
+from tests.solidcraft_checks import totals
 
 # Whether a headless SolidCraft can be run.
 HAVE_SOLIDCRAFT: bool = shutil.which("solidcraft-cli") is not None
@@ -125,6 +126,7 @@ class TestSolidStep(unittest.TestCase):
     def test_base_does_not_build(self) -> None:
         """`Solid` itself can not be built."""
         with self.assertRaises(NotImplementedError):
+            # A fake stands in for `PyBind`.
             Solid("thing").build(FakeSolidCraft())  # type: ignore[arg-type]
 
     def test_suffix(self) -> None:
@@ -142,8 +144,10 @@ class TestSolidStep(unittest.TestCase):
                 "vise", path, appearance=Appearance(0.5, 0.5, 0.5)
             )
             with self.assertRaises(FileNotFoundError):
+                # A fake stands in for `PyBind`.
                 solid.build(fake)  # type: ignore[arg-type]
             path.write_text("ISO-10303-21;\n")
+            # A fake stands in for `PyBind`.
             bodies: list[str] = solid.build(fake)  # type: ignore[arg-type]
         self.assertEqual(bodies, ["body1"])
         self.assertEqual(
@@ -254,6 +258,7 @@ class TestRoundedPolygon(unittest.TestCase):
     def test_immutable(self) -> None:
         """A polygon can not be changed once made."""
         with self.assertRaises(AttributeError):
+            # Changing a frozen field is what is tested.
             square().name = "other"  # type: ignore[misc]
 
     def test_flip(self) -> None:
@@ -289,6 +294,7 @@ class TestRoundedPolygon(unittest.TestCase):
         fake: FakeSolidCraft = FakeSolidCraft()
         polygon: RoundedPolygon = square(10.0, 1.0)
         curves: list[str] = polygon.draw(
+            # A fake stands in for `PyBind`.
             fake,  # type: ignore[arg-type]
             5.0,
             0.0,
@@ -314,6 +320,7 @@ class TestRoundedPolygon(unittest.TestCase):
         )
         self.assertFalse(clockwise.is_ccw())
         fake = FakeSolidCraft()
+        # A fake stands in for `PyBind`.
         clockwise.draw(fake, 0.0, 0.0)  # type: ignore[arg-type]
         arc: LineSegment | ArcSegment = clockwise.segments[1]
         assert isinstance(arc, ArcSegment) and arc.sweep < 0.0
@@ -366,19 +373,13 @@ def jaw() -> SolidRoundedPolygon:
 # Function `measured()`:
 def measured(solidcraft: PyBind) -> tuple[float, list[float]]:
     """Return the design's volume (mm^3) and its box's sorted sides."""
-    properties: JSON = solidcraft.component.properties(component="root")
-    assert isinstance(properties, dict)
-    total: JSON = properties["total"]
-    assert isinstance(total, dict)
-    volume: JSON = total["volume_mm3"]
-    box: JSON = total["bbox"]
-    assert isinstance(volume, float) and isinstance(box, dict)
-    low: JSON = box["min"]
-    high: JSON = box["max"]
-    assert isinstance(low, list) and isinstance(high, list)
-    sides: list[float] = sorted(
-        float(str(b)) - float(str(a)) for a, b in zip(low, high, strict=True)
+    volume: float
+    low: list[float]
+    high: list[float]
+    volume, low, high = totals(
+        solidcraft.component.properties(component="root")
     )
+    sides: list[float] = sorted(b - a for a, b in zip(low, high, strict=True))
     return volume, sides
 
 
@@ -424,6 +425,7 @@ class TestSolidRoundedPolygon(unittest.TestCase):
     def test_build(self) -> None:
         """The plate goes up; counterbores and holes are cut."""
         fake: FakeSolidCraft = FakeSolidCraft()
+        # A fake stands in for `PyBind`.
         self.assertEqual(jaw().build(fake), ["jaw"])  # type: ignore[arg-type]
         extrudes: list[dict[str, object]] = [
             arguments
@@ -431,16 +433,15 @@ class TestSolidRoundedPolygon(unittest.TestCase):
             if name == "extrude"
         ]
         self.assertEqual(len(extrudes), 4)
-        self.assertAlmostEqual(extrudes[0]["distance"], 25.4)  # type: ignore[misc]
         self.assertEqual(extrudes[1]["operation"], "cut")
-        self.assertAlmostEqual(
-            extrudes[1]["distance"],
-            (0.47 - 1) * 25.4,  # type: ignore[misc]
-        )
-        self.assertAlmostEqual(
-            extrudes[2]["distance"],
-            -0.47 * 25.4,  # type: ignore[misc]
-        )
+
+        # The plate, then a counterbore and a hole, each cut down.
+        distances: list[float] = [
+            float(str(extrude["distance"])) for extrude in extrudes[:3]
+        ]
+        self.assertAlmostEqual(distances[0], 25.4)
+        self.assertAlmostEqual(distances[1], (0.47 - 1) * 25.4)
+        self.assertAlmostEqual(distances[2], -0.47 * 25.4)
 
     def test_turned_layers(self) -> None:
         """A layer turns about its center; its children turn along."""
@@ -536,15 +537,11 @@ class TestSolidRoundedPolygon(unittest.TestCase):
             solidcraft: PyBind = PyBind(transport)
             self.assertEqual(jaw().build(solidcraft), ["jaw"])
             properties: JSON = solidcraft.component.properties()
-        assert isinstance(properties, dict)
-        total: JSON = properties["total"]
-        assert isinstance(total, dict)
-        box: JSON = total["bbox"]
-        assert isinstance(box, dict)
-        top: JSON = box["max"]
-        assert isinstance(top, list)
+        volume: float
+        top: list[float]
+        volume, _, top = totals(properties)
         self.assertEqual(
-            [round(float(str(v)), 4) for v in top],
+            [round(v, 4) for v in top],
             [round(v * 25.4, 4) for v in (6.0, 2.0, 1.0)],
         )
 
@@ -554,8 +551,6 @@ class TestSolidRoundedPolygon(unittest.TestCase):
         counterbore: float = math.pi * (13 / 32) ** 2 * (1 - 0.47)
         clearance: float = math.pi * (17 / 64) ** 2 * 0.47
         expected: float = (12 - 2 * (counterbore + clearance)) * inch3
-        volume: JSON = total["volume_mm3"]
-        assert isinstance(volume, float)
         self.assertLess(abs(volume - expected) / expected, 1e-3)
 
 
@@ -633,19 +628,14 @@ class TestSolidAssembly(unittest.TestCase):
             properties: JSON = solidcraft.component.properties(
                 component="root"
             )
-        assert isinstance(properties, dict)
         parents: dict[str, str] = parents_of(listed)
         self.assertEqual(parents["jaw"], "pair")
         self.assertEqual(parents["pair"], "vise")
-        total: JSON = properties["total"]
-        assert isinstance(total, dict)
-        box: JSON = total["bbox"]
-        assert isinstance(box, dict)
-        low: JSON = box["min"]
-        high: JSON = box["max"]
-        assert isinstance(low, list) and isinstance(high, list)
+        low: list[float]
+        high: list[float]
+        _, low, high = totals(properties)
         self.assertEqual(
-            [round(float(str(v)) / 25.4, 6) for v in (*low, *high)],
+            [round(v / 25.4, 6) for v in (*low, *high)],
             [1.0, 0.0, 2.0, 7.0, 5.0, 3.0],
         )
 

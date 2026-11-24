@@ -15,10 +15,6 @@ in from the last.  As they shrink the rings may come apart, so they
 make a tree (`Ring`), which is cut from the smallest rings out.
 """
 
-# Most of this module's lines are docstrings and comments, so it is
-# longer than `pylint` likes.
-# pylint: disable=too-many-lines
-
 import math
 import shlex
 import subprocess

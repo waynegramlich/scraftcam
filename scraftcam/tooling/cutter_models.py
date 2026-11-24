@@ -45,9 +45,6 @@ python3 -m scraftcam.tooling.cutter_models 8080 \
 # past `pylint`'s limit on local variables.
 # pylint: disable=too-many-locals
 
-# It is one job, modeling a tool, so its length is fine.
-# pylint: disable=too-many-lines
-
 import itertools
 import json
 import math

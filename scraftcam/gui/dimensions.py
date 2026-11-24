@@ -933,6 +933,7 @@ def _along_length(
 
 
 # Function `_angle_way()`:
+# Each argument is one thing the angle's side depends on.
 def _angle_way(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     points: list[tuple[float, float]],
     dimension: Dimension,

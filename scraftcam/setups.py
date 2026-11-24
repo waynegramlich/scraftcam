@@ -77,9 +77,7 @@ TOLERANCE: float = 1.0e-6
 
 # The shop whose tooling the JSON can name, chosen by `main()`
 # (`use_shop()`).
-SHOP: Path = (
-    Path(__file__).resolve().parents[1] / "examples/shop/shop.toml"
-)
+SHOP: Path = Path(__file__).resolve().parents[1] / "examples/shop/shop.toml"
 
 
 # Class `Placement`:
@@ -611,8 +609,8 @@ def _part_notes(material: PlacedWork) -> list[str]:
     return notes
 
 
-# Function `_gap()`:
-def _gap(layer: MachineViseLayer, placement: Placement) -> Prism:
+# Function `jaw_gap()`:
+def jaw_gap(layer: MachineViseLayer, placement: Placement) -> Prism:
     """Return the space between a vise's jaw plates, up to their tops.
 
     Arguments:
@@ -658,7 +656,7 @@ def _held_notes(tool: PlacedTool, material: PlacedWork) -> list[str]:
     * (`list[str]`): The notes, one sentence each.
     """
     assert isinstance(tool.layer, MachineViseLayer)
-    gap: Prism = _gap(tool.layer, tool.placement)
+    gap: Prism = jaw_gap(tool.layer, tool.placement)
     bounds: Prism = material.bounds()
     across: int = 1 if tool.placement.turns % 2 else 0
     along: int = 1 - across

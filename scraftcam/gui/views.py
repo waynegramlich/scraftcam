@@ -562,9 +562,7 @@ class Panel(QFrame):
         self.text.viewport().installEventFilter(self)
         self.set_current(False)
 
-    def eventFilter(  # pylint: disable=invalid-name
-        self, watched: QObject, event: QEvent
-    ) -> bool:
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """Notice a click on the text, and `notes` losing the focus.
 
         Arguments:
@@ -586,9 +584,7 @@ class Panel(QFrame):
                     self.write(key)
         return super().eventFilter(watched, event)
 
-    def mousePressEvent(  # pylint: disable=invalid-name
-        self, event: object
-    ) -> None:
+    def mousePressEvent(self, event: object) -> None:
         """Make this the current panel when it is clicked.
 
         Arguments:
@@ -1335,9 +1331,7 @@ class GripHandle(QSplitterHandle):
     Attributes: none of its own.
     """
 
-    def paintEvent(  # pylint: disable=invalid-name
-        self, event: QPaintEvent
-    ) -> None:
+    def paintEvent(self, event: QPaintEvent) -> None:
         """Draw the handle as the style says, then the grip's dots.
 
         Arguments:
@@ -1369,7 +1363,7 @@ class GripSplitter(QSplitter):
     Attributes: none of its own.
     """
 
-    def createHandle(  # pylint: disable=invalid-name
+    def createHandle(
         self,
     ) -> QSplitterHandle:
         """Return a new handle, with a grip.

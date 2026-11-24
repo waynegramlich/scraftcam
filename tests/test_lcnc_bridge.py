@@ -18,6 +18,7 @@ from scraftcam.lcnc.install_linuxcnc import InstallTarget
 Tool = namedtuple("Tool", "id zoffset")
 
 
+# A stand-in with only what the code under test uses.
 # pylint: disable-next=too-few-public-methods
 class FakeStat:
     """Stands in for `linuxcnc.stat`."""
@@ -31,7 +32,6 @@ class FakeStat:
         """Do nothing, as the real one reads shared memory."""
 
 
-# pylint: disable-next=too-few-public-methods
 class FakeCommand:
     """Stands in for `linuxcnc.command`."""
 

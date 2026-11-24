@@ -25,7 +25,7 @@ it is.
 
 # The generator is one long, plain pass over the command list; its
 # size limits are not worth splitting it for.
-# pylint: disable=too-many-lines,too-many-locals
+# pylint: disable=too-many-locals
 # pylint: disable=too-many-instance-attributes
 # pylint: disable=too-many-return-statements
 

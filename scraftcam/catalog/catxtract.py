@@ -30,8 +30,6 @@ It runs in a [Pages] tab of `scraftcam.run` ([Open Pages], or
 `--pages CATALOG`; `T.og~6.9` #600), never in a window of its own.
 """
 
-# pylint: disable=too-many-instance-attributes,too-many-locals
-
 from __future__ import annotations
 
 import bisect
@@ -699,9 +697,7 @@ class PageView(QWidget):
         self.update()
 
     # Method `PageView.paintEvent()`:
-    def paintEvent(  # pylint: disable=invalid-name
-        self, _event: QPaintEvent
-    ) -> None:
+    def paintEvent(self, _event: QPaintEvent) -> None:
         """Draw the page, its regions and the rectangle being dragged.
 
         Qt names this method; the selected region is drawn thick and
@@ -741,9 +737,7 @@ class PageView(QWidget):
         painter.end()
 
     # Method `PageView.mousePressEvent()`:
-    def mousePressEvent(  # pylint: disable=invalid-name
-        self, event: QMouseEvent
-    ) -> None:
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         """Start a drag (left button), or ignore a region (right).
 
         Arguments:
@@ -761,9 +755,7 @@ class PageView(QWidget):
             self.app.on_delete(x, y)
 
     # Method `PageView.mouseMoveEvent()`:
-    def mouseMoveEvent(  # pylint: disable=invalid-name
-        self, event: QMouseEvent
-    ) -> None:
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Stretch the rectangle being dragged.
 
         Arguments:
@@ -775,9 +767,7 @@ class PageView(QWidget):
             self.update()
 
     # Method `PageView.mouseReleaseEvent()`:
-    def mouseReleaseEvent(  # pylint: disable=invalid-name
-        self, event: QMouseEvent
-    ) -> None:
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Finish the rectangle being dragged.
 
         Arguments:
@@ -791,7 +781,8 @@ class PageView(QWidget):
 
 
 # Class `App`:
-class App(QWidget):
+# Its widgets and their state are its attributes, one each.
+class App(QWidget):  # pylint: disable=too-many-instance-attributes
     """The `catxtract` window.
 
     Attributes:
@@ -822,7 +813,8 @@ class App(QWidget):
     """
 
     # Method `App.__init__()`:
-    # pylint: disable-next=too-many-statements
+    # It builds the whole window, one widget after another.
+    # pylint: disable-next=too-many-statements,too-many-locals
     def __init__(
         self, pdf: Path, out_dir: Path, parent: QWidget | None = None
     ) -> None:
@@ -1182,9 +1174,7 @@ class App(QWidget):
         self.command("x")
 
     # Method `App.closeEvent()`:
-    def closeEvent(  # pylint: disable=invalid-name
-        self, event: QCloseEvent
-    ) -> None:
+    def closeEvent(self, event: QCloseEvent) -> None:
         """Save the page and close the PDF as the window closes.
 
         Qt names this method; Quit and the window's close button both
@@ -1400,7 +1390,9 @@ class App(QWidget):
             self.save()
 
     # Method `App.save()`:
-    def save(self) -> None:
+    # It writes the regions, then each region's text, image or table
+    # in reading order, then the links to the neighboring pages.
+    def save(self) -> None:  # pylint: disable=too-many-locals
         """Write the current page's Markdown, images and regions."""
         # Save the regions, so that the page can be redone.
         self.json_path().parent.mkdir(parents=True, exist_ok=True)

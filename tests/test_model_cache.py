@@ -255,9 +255,9 @@ class TestLive(unittest.TestCase):
     """Models in a headless SolidCraft."""
 
     def setUp(self) -> None:
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        self.directory = Path(temporary.name)
+        # `enterContext()` closes it at cleanup, which `pylint` misses.
+        # pylint: disable-next=consider-using-with
+        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.cache = model_cache.ModelCache(self.directory)
         self.setup = setups.Setup(
             json.loads(STACK.read_text(encoding="utf-8"))

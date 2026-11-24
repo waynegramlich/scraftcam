@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any, cast
 from unittest import mock
 
+from PySide6.QtWidgets import QWidget
+
 from scraftcam import shops
 from scraftcam.assembly import Assembly
 from scraftcam.demo import demo_assembly, with_setup
@@ -63,7 +65,6 @@ class TestToolSpeeds(unittest.TestCase):
         self.assertIn('"unobtainium" is not one of', text)
 
 
-# pylint: disable-next=too-many-instance-attributes
 class FakeClient:
     """Stands in for `lcnc_client.BridgeClient`, and records the calls."""
 
@@ -169,6 +170,7 @@ class TestStart(unittest.TestCase):
                 lcnc.values["homed"] = [1, 1, 1]
             return real(name, *args)
 
+        # The test puts a stand-in in place of the method.
         lcnc.call = call  # type: ignore[method-assign]
         machine.start()
         self.assertEqual(lcnc.sent("command.home"), [(-1,)])
@@ -229,6 +231,7 @@ class TestPrograms(unittest.TestCase):
     def test_lines_of_an_unreadable_program(self) -> None:
         """A program the server will not give shows no lines."""
         machine, lcnc = client_machine()
+        # The test puts a stand-in in place of the method.
         lcnc.call = mock.MagicMock(  # type: ignore[method-assign]
             side_effect=BridgeError("ValueError", "no")
         )
@@ -434,6 +437,7 @@ class TestHeadless(unittest.TestCase):
     def setUp(self) -> None:
         self.machine = hmi_machine.HMIMachine(True)
         self.panel = make_hmi(self.machine)
+        # Removed when the test ends.
         # pylint: disable-next=consider-using-with
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
@@ -543,6 +547,7 @@ class TestHeadless(unittest.TestCase):
 
     def test_set_origin_asks(self) -> None:
         """Set Origin does nothing unless the answer is yes."""
+        # The test puts a stand-in in place of the method.
         self.machine.status = mock.MagicMock(  # type: ignore[method-assign]
             return_value=hmi_machine.HMIStatus(
                 "", 0, (1.0, 0.0, 0.0), 0, [], ""
@@ -592,10 +597,6 @@ class TestHeadless(unittest.TestCase):
 
     def test_tabs(self) -> None:
         """Each tab holds its task's controls (#159), and can be shown."""
-        # Imported here: `PySide6` is on `sys.path` only once `tests` is.
-        from PySide6.QtWidgets import (  # pylint: disable=import-outside-toplevel
-            QWidget,
-        )
 
         # Each control on its task's tab; the core above the tabs.
         widget: QWidget
@@ -649,6 +650,7 @@ class TestHeadless(unittest.TestCase):
 
     def test_lost_server(self) -> None:
         """A LinuxCNC that goes away is shown; the HMI keeps polling."""
+        # The test puts a stand-in in place of the method.
         self.machine.status = mock.MagicMock(  # type: ignore[method-assign]
             side_effect=BrokenPipeError("gone")
         )
@@ -685,6 +687,7 @@ class TestSetupDrawing(unittest.TestCase):
         self.panel = make_hmi(self.machine)
         self.view = FakeView()
         self.panel.drawer = hmi_machine.SetupDrawer(self.view)
+        # Removed when the test ends.
         # pylint: disable-next=consider-using-with
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
@@ -894,6 +897,7 @@ class TestSetupDrawing(unittest.TestCase):
             shown(assembly)
             self.view.progress = (7, 7)
 
+        # The test puts a stand-in in place of the method.
         self.view.show = slow  # type: ignore[method-assign]
         self.panel.open(self.program(with_setup(self.gcode, demo_assembly())))
         self.assertTrue(started.wait(5.0))
@@ -962,6 +966,7 @@ class TestSetOrigin(unittest.TestCase):
         use_shop(shops.read(EXAMPLE_SHOP))
         self.machine = hmi_machine.HMIMachine(True)
         self.panel = make_hmi(self.machine)
+        # Removed when the test ends.
         # pylint: disable-next=consider-using-with
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)

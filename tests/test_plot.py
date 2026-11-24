@@ -167,6 +167,7 @@ class TestPlot(unittest.TestCase):
 
 
 # Class `FakeTransport`:
+# A stand-in with only what the code under test uses.
 class FakeTransport:  # pylint: disable=too-few-public-methods
     """Stands in for a GUI's transport, recording `engine.batch` steps.
 

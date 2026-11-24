@@ -25,6 +25,7 @@ from scraftcam.solid import (
     SolidRevolved,
     SolidRoundedPolygon,
 )
+from tests.solidcraft_checks import totals
 
 # The example drill's outline file.
 DRILL: Path = Path("examples/shop/tools/drill.outline.toml")
@@ -170,18 +171,12 @@ class TestOutlineRevolved(unittest.TestCase):
             solidcraft: PyBind = PyBind(transport)
             self.assertEqual(drill.build(solidcraft), ["drill"])
             properties: JSON = solidcraft.component.properties()
-        assert isinstance(properties, dict)
-        total: JSON = properties["total"]
-        assert isinstance(total, dict)
-        volume: JSON = total["volume_mm3"]
-        assert isinstance(volume, float)
+        volume: float
+        high: list[float]
+        volume, _, high = totals(properties)
         expected: float = turned_volume(list(drill.flat.corners))
         self.assertLess(abs(volume - expected) / expected, 2e-3)
-        box: JSON = total["bbox"]
-        assert isinstance(box, dict)
-        high: JSON = box["max"]
-        assert isinstance(high, list)
-        self.assertAlmostEqual(float(str(high[2])), 4 * 25.4, 3)
+        self.assertAlmostEqual(high[2], 4 * 25.4, 3)
 
 
 if __name__ == "__main__":

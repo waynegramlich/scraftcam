@@ -33,6 +33,7 @@ POINTER_COLOR: str = "#202020"
 
 
 # Class `ZSetter`:
+# Each attribute is one fact it holds; grouping them would not read better.
 @dataclass(frozen=True, slots=True)
 class ZSetter:  # pylint: disable=too-many-instance-attributes
     """A magnetic Z-axis zero setter.

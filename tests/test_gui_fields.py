@@ -5,6 +5,9 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from typing import cast
+
+from PySide6.QtWidgets import QLineEdit
 
 from scraftcam.gui import fields
 from scraftcam.gui.tree import FILE, Node
@@ -118,9 +121,11 @@ class PanelFieldsTest(unittest.TestCase):
             self.assertEqual(panel.shown["radius"].text(), "1.5875 mm")
 
             # Read only until editing is enabled (#140).
-            self.assertTrue(panel.entries["radius"].isReadOnly())
+            # The radius is a one line entry.
+            radius: QLineEdit = cast(QLineEdit, panel.entries["radius"])
+            self.assertTrue(radius.isReadOnly())
             panel.set_editing(True)
-            self.assertFalse(panel.entries["radius"].isReadOnly())
+            self.assertFalse(radius.isReadOnly())
 
             # A bad value: light red, not written.
             before: str = path.read_text(encoding="utf-8")

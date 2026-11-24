@@ -406,6 +406,7 @@ class Bridge:
                 with self.lock:
                     result = self.dispatch(call, args)
             reply["result"] = to_json(result)
+        # Any error is reported, not left to end the program.
         # pylint: disable-next=broad-exception-caught
         except Exception as error:  # noqa: BLE001
             reply["error"] = {

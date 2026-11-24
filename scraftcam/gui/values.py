@@ -216,6 +216,25 @@ def refresh_formulas(letters: list[Letter]) -> None:
         )
 
 
+# Function `set_letters()`:
+def set_letters(letters: list[Letter], values: dict[str, str]) -> None:
+    """Give letters their values, then work out the formula letters.
+
+    This is how a tool's own values go into its kind's outline.
+
+    Arguments:
+    * `letters` (`list[Letter]`): The outline's letters, changed in
+      place.
+    * `values` (`dict[str, str]`): Values with their units (`1/4 in`),
+      by letter; letters not named keep their defaults.
+    """
+    letter: Letter
+    for letter in letters:
+        if letter.letter in values:
+            letter.default = values[letter.letter]
+    refresh_formulas(letters)
+
+
 # Function `evaluate()`:
 def evaluate(expression: str, values: dict[str, float]) -> float:
     """Work out a formula.

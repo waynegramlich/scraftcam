@@ -47,6 +47,7 @@ UNSET: SolidRoundedPolygon = SolidRoundedPolygon(
 
 
 # Class `Parallel`:
+# Each attribute is one fact it holds; grouping them would not read better.
 @dataclass(slots=True)
 class Parallel(SolidModel):  # pylint: disable=too-many-instance-attributes
     """A parallel: a thin steel bar that work sits on in a vise.

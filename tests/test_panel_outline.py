@@ -2,18 +2,16 @@
 
 import shutil
 import tempfile
-import typing
 import unittest
 from pathlib import Path
 
-from scraftcam.gui import outline_exposed
+from scraftcam.exposed import steps
+from scraftcam.gui import outline_exposed, tutorial
+from scraftcam.gui.outline_editor import Drawing, OutlineEditor
+from scraftcam.gui.outline_file import outline_text
 from scraftcam.gui.tree import FILE, Node
 from scraftcam.gui.views import Panel, outline_of
 from tests import qt_app
-
-# Only for its type: `views` puts `PySide6` on `sys.path` at run time.
-if typing.TYPE_CHECKING:
-    from scraftcam.gui.outline_editor import OutlineEditor
 
 # The example shop's tools, an end mill and its kind's outline.
 TOOLS: Path = Path(__file__).resolve().parent.parent / "examples/shop/tools"
@@ -91,8 +89,6 @@ class OutlineTabTest(unittest.TestCase):
 
     def test_hold_editor(self) -> None:
         """A tutorial's editor, on no file, goes when an item shows."""
-        # pylint: disable-next=import-outside-toplevel
-        from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 
         held: OutlineEditor = OutlineEditor(Drawing())
         self.panel.hold_editor(held, "Tutorial: x")
@@ -110,13 +106,7 @@ class ReplayInPanelTest(unittest.TestCase):
 
     def test_every_recording(self) -> None:
         """Every `tests/steps/*.steps.md` matches in a tool's panel."""
-        # pylint: disable=import-outside-toplevel
-        from scraftcam.exposed import steps
-        from scraftcam.gui import tutorial
-        from scraftcam.gui.outline_editor import Drawing
-        from scraftcam.gui.outline_file import outline_text
 
-        # pylint: enable=import-outside-toplevel
         paths: list[Path] = sorted(RECORDINGS.glob("*.steps.md"))
         self.assertTrue(paths)
         path: Path

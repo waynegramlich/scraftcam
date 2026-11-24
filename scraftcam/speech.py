@@ -123,6 +123,7 @@ def gain_problems() -> list[str]:
     return found
 
 
+# It does one job, so it has one method.
 class Microphone:  # pylint: disable=too-few-public-methods
     """The default PipeWire source, recorded to a `.wav`.
 
@@ -192,6 +193,7 @@ def transcribe(path: Path) -> list[Word]:
     from scraftcam.packages import require  # pylint: disable=import-outside-toplevel
 
     require("faster_whisper")
+    # Imported only when speech is used: it is large.
     # pylint: disable=import-outside-toplevel,import-error
     # They live in `~/.scraftcam/packages/`, out of `mypy`'s sight.
     import numpy  # type: ignore[import-not-found]

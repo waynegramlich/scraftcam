@@ -22,6 +22,7 @@ from scraftcam.gui.values import (
     placed_corners,
     real_corners,
     refresh_formulas,
+    set_letters,
     values_cross,
 )
 
@@ -196,6 +197,14 @@ class TestFormulas(unittest.TestCase):
         refresh_formulas(found)
         self.assertEqual(found[2].default, "67.5 deg")
         self.assertEqual(found[3].default, "0.0625 in")
+
+    def test_set_letters(self) -> None:
+        """A tool's values go in, and its formula letters follow."""
+        found: list[Letter] = drill()
+        set_letters(found, {"D": "1/4 in", "Q": "1 in"})
+        self.assertEqual(found[0].default, "1/4 in")
+        self.assertEqual(found[1].default, "135 deg")
+        self.assertEqual(found[3].default, "0.125 in")
 
     def test_problems(self) -> None:
         """Unknown names, formula letters and bad values are refused."""

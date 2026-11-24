@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
-"""Tests of `show_demo.py` that start nothing."""
+"""Tests of `scraftcam/show_demo.py` that start nothing."""
 
 import json
 import os
 import socket
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
-# Run as `./tests/test_show_demo.py` too: the repository root goes on
-# the path, so that `show_demo` can be imported.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-import show_demo
+from scraftcam import show_demo
 from scraftcam.pybind import headless_server
 
 
@@ -23,10 +18,9 @@ class TestLeftovers(unittest.TestCase):
     """What may be removed of a SolidCraft that has gone."""
 
     def setUp(self) -> None:
+        # `enterContext()` closes it at cleanup, which `pylint` misses.
         # pylint: disable-next=consider-using-with
-        scratch = tempfile.TemporaryDirectory()
-        self.addCleanup(scratch.cleanup)
-        self.directory = Path(scratch.name)
+        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
 
     def test_recovery_files_of_one_only(self) -> None:
         """Another SolidCraft's recovery files are left alone."""

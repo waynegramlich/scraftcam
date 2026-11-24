@@ -16,16 +16,13 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from PySide6.QtCore import QMessageLogContext, QtMsgType
+from PySide6.QtWidgets import QApplication
+
 from scraftcam.hmi import hmi_machine, lcnc_hmi
 
 # Offscreen, before the one `QApplication` is made.
 lcnc_hmi.use_headless()
-# pylint: disable-next=wrong-import-order,wrong-import-position
-from PySide6.QtCore import QMessageLogContext, QtMsgType  # noqa: E402
-
-# pylint: disable-next=wrong-import-order,wrong-import-position
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
 APPLICATION: Any = QApplication.instance() or QApplication([])
 
 
@@ -46,6 +43,7 @@ class TestQtHMI(unittest.TestCase):
 
         # A program with two tool changes.
         directory: tempfile.TemporaryDirectory[str] = (
+            # Removed when the test ends.
             tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         )
         self.top: Path = Path(self.enterContext(directory))

@@ -141,6 +141,7 @@ class TestExamples(unittest.TestCase):
         """Each Python example is good Python."""
         for page in tool_models.PAGES:
             compile(
+                # The private helper is tested on its own.
                 tool_models._python(page),  # pylint: disable=W0212
                 page.kind,
                 "exec",
@@ -153,6 +154,7 @@ class TestExamples(unittest.TestCase):
             'language = "English"\nversion = "0.0.1"\n'
         )
         for page in tool_models.PAGES:
+            # The private helper is tested on its own.
             entry = tool_models._toml(page)  # pylint: disable=W0212
             with tempfile.TemporaryDirectory() as directory:
                 top = Path(directory)

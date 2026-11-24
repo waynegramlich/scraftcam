@@ -299,6 +299,7 @@ def run(
 
     # MCP, if asked for: each call runs on Qt's main thread (#577).
     if mcp_port:
+        # The MCP server is imported only when it is asked for.
         # pylint: disable=import-outside-toplevel
         from ..exposed import qt_runner, server
 
@@ -877,9 +878,7 @@ class Window(QWidget):
         """Forget the sizes `fit_width()` wanted, once they are set."""
         self.wanted = []
 
-    def resizeEvent(  # pylint: disable=invalid-name
-        self, event: QResizeEvent
-    ) -> None:
+    def resizeEvent(self, event: QResizeEvent) -> None:
         """Give the panels the widths `fit_width()` wanted (#177-#180).
 
         Arguments:
@@ -1283,6 +1282,7 @@ class Window(QWidget):
             return
         if command:
             try:
+                # The program runs on its own; nothing waits for it.
                 subprocess.Popen(  # pylint: disable=consider-using-with
                     command, start_new_session=True
                 )
@@ -1530,9 +1530,7 @@ class Window(QWidget):
             )
             self.show_actions()
 
-    def closeEvent(  # pylint: disable=invalid-name
-        self, event: QCloseEvent
-    ) -> None:
+    def closeEvent(self, event: QCloseEvent) -> None:
         """Close, unless this window controls a running machine (#67).
 
         (Qt's name for it; [x] and the window's own close come here.)

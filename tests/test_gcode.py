@@ -68,6 +68,7 @@ def machine(**changes: object) -> Machine:
         ),
     }
     settings.update(changes)
+    # `settings` mixes types, as TOML gives them.
     return Machine(**settings)  # type: ignore[arg-type]
 
 

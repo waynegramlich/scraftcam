@@ -19,3 +19,9 @@ max-module-lines = 10000
 # no `connect` (or `emit`, `disconnect`) on them; `mypy` checks them
 # from `PySide6`'s stubs (agreed with the user, 2026-11-12).
 generated-members = connect, disconnect, emit
+
+[BASIC]
+# `unittest` calls a module's `setUpModule()` by that name; the rest
+# are `pylint`'s own defaults, which this list replaces (agreed with
+# the user, 2026-11-24, #642).
+good-names = i, j, k, ex, Run, _, setUpModule

@@ -74,7 +74,7 @@ class TestExample(unittest.TestCase):
         """Each parallel touches a jaw's plate, along the jaw."""
         vise = self.setup.tooling[1].layer
         assert isinstance(vise, MachineViseLayer)
-        gap = setups._gap(vise, self.setup.tooling[1].placement)
+        gap = setups.jaw_gap(vise, self.setup.tooling[1].placement)
         self.assertAlmostEqual(gap.high[1], 3.0 * INCH)
         self.assertAlmostEqual(gap.low[1], -3.0 * INCH)
         first = self.setup.tooling[2].keep_out().prisms[0].grown(-3.175)
@@ -325,64 +325,88 @@ class TestModel(unittest.TestCase):
 
     def test_model(self) -> None:
         """Nothing overlaps, and everything lands where the JSON says."""
-        program = shutil.which("solidcraft-cli") or str(CLI)
-        setup = setups.Setup(example())
+        program: str = shutil.which("solidcraft-cli") or str(CLI)
+        setup: setups.Setup = setups.Setup(example())
         with HeadlessTransport(program) as transport:
-            solidcraft = PyBind(transport)
-            names = setup.model(solidcraft)
+            solidcraft: PyBind = PyBind(transport)
+            names: list[str] = setup.model(solidcraft)
             self.assertEqual(len(names), 1 + 12 + 2 + 1 + 1)
 
             # The part overlaps its material on purpose.
-            others = [name for name in names if name != "Grid plate"]
+            others: list[str] = [
+                name for name in names if name != "Grid plate"
+            ]
             result: Any = solidcraft.inspect.interference(bodies=others)
             self.assertEqual(result["interferences"], [])
             self.assertEqual(result["unchecked"], [])
 
             # The fixed jaw is at the rear, its middle on `X = 0`.
-            fixed: Any = solidcraft.inspect.center_of_mass(
-                bodies=["Kurt D688 fixed jaw"]
+            self.assert_center(
+                solidcraft,
+                "Kurt D688 fixed jaw",
+                (
+                    0.0,
+                    (3.0 + 0.725 + 0.5) * INCH,
+                    (2.64 + 1.735 / 2.0) * INCH,
+                ),
             )
-            x, y, z = fixed["center"]
-            self.assertAlmostEqual(x, 0.0)
-            self.assertAlmostEqual(y, (3.0 + 0.725 + 0.5) * INCH)
-            self.assertAlmostEqual(z, (2.64 + 1.735 / 2.0) * INCH)
 
             # A parallel lies along the jaw, next to it.
-            parallel: Any = solidcraft.inspect.center_of_mass(
-                bodies=["Parallel 1-1/2 in A"]
+            self.assert_center(
+                solidcraft,
+                "Parallel 1-1/2 in A",
+                (0.0, 2.9375 * INCH, (2.64 + 0.75) * INCH),
             )
-            x, y, z = parallel["center"]
-            self.assertAlmostEqual(x, 0.0)
-            self.assertAlmostEqual(y, 2.9375 * INCH)
-            self.assertAlmostEqual(z, (2.64 + 0.75) * INCH)
+            self.check_grid_plate(solidcraft)
 
-            # The part's corners and grid holes turned with it: 20 along X
-            # and 10 along Y, each hole two half cylinders.  Its tooling
-            # holes are other sizes.
-            faces: Any = solidcraft.model.faces(body="Grid plate")
-            arcs = [
-                face["cylinder"]
-                for face in faces["faces"]
-                if face.get("cylinder")
-            ]
-            hole = FLAT_PLATE.hole_diameter / 2.0
-            corners = [arc for arc in arcs if arc["radius"] > 0.2 * INCH]
-            origins = [
-                arc["origin"]
-                for arc in arcs
-                if abs(arc["radius"] - hole) < 0.001
-            ]
-            self.assertEqual(len(corners), 4)
-            for corner in corners:
-                self.assertAlmostEqual(corner["radius"], 0.25 * INCH)
-                self.assertAlmostEqual(abs(corner["origin"][0]) / INCH, 5.0)
-                self.assertAlmostEqual(abs(corner["origin"][1]) / INCH, 2.5)
-            self.assertEqual(len(origins), 2 * 200)
-            xs = {round(origin[0], 3) for origin in origins}
-            ys = {round(origin[1], 3) for origin in origins}
-            self.assertEqual((len(xs), len(ys)), (20, 10))
-            self.assertAlmostEqual(max(xs) / INCH, 4.75, 2)
-            self.assertAlmostEqual(max(ys) / INCH, 2.25, 2)
+    def assert_center(
+        self,
+        solidcraft: PyBind,
+        body: str,
+        expected: tuple[float, float, float],
+    ) -> None:
+        """Check where a body's center of mass is.
+
+        Arguments:
+        * `solidcraft` (`PyBind`): The headless SolidCraft.
+        * `body` (`str`): The body's name.
+        * `expected` (`tuple[float, float, float]`): Its center, in mm.
+        """
+        mass: Any = solidcraft.inspect.center_of_mass(bodies=[body])
+        for found, wanted in zip(mass["center"], expected, strict=True):
+            self.assertAlmostEqual(found, wanted)
+
+    def check_grid_plate(self, solidcraft: PyBind) -> None:
+        """Check that the part's corners and grid holes turned with it.
+
+        There are 20 holes along X and 10 along Y, each two half
+        cylinders.  Its tooling holes are other sizes.
+
+        Arguments:
+        * `solidcraft` (`PyBind`): The headless SolidCraft.
+        """
+        faces: Any = solidcraft.model.faces(body="Grid plate")
+        arcs: list[Any] = [
+            face["cylinder"] for face in faces["faces"] if face.get("cylinder")
+        ]
+        hole: float = FLAT_PLATE.hole_diameter / 2.0
+        corners: list[Any] = [
+            arc for arc in arcs if arc["radius"] > 0.2 * INCH
+        ]
+        origins: list[Any] = [
+            arc["origin"] for arc in arcs if abs(arc["radius"] - hole) < 0.001
+        ]
+        self.assertEqual(len(corners), 4)
+        for corner in corners:
+            self.assertAlmostEqual(corner["radius"], 0.25 * INCH)
+            self.assertAlmostEqual(abs(corner["origin"][0]) / INCH, 5.0)
+            self.assertAlmostEqual(abs(corner["origin"][1]) / INCH, 2.5)
+        self.assertEqual(len(origins), 2 * 200)
+        xs: set[float] = {round(origin[0], 3) for origin in origins}
+        ys: set[float] = {round(origin[1], 3) for origin in origins}
+        self.assertEqual((len(xs), len(ys)), (20, 10))
+        self.assertAlmostEqual(max(xs) / INCH, 4.75, 2)
+        self.assertAlmostEqual(max(ys) / INCH, 2.25, 2)
 
 
 if __name__ == "__main__":

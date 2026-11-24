@@ -13,6 +13,7 @@ from scraftcam.shops import read
 from scraftcam.tooling import tools
 from scraftcam.tooling.cutter_models import EXAMPLE_SHOP
 from scraftcam.tooling.shop_registries import use_shop
+from tests.solidcraft_checks import assert_apart
 
 # An extracted `solidcraft-cli` (as the demo uses) for the live test.
 HERE: Path = Path(__file__).resolve().parent.parent
@@ -95,6 +96,7 @@ class TestKeepOut(unittest.TestCase):
 
     def test_one_per_table(self) -> None:
         """Each table's prism encloses it, 1/8 inch away."""
+        # The tables need no machine, so none is given.
         tormach = tools.Tormach(None)  # type: ignore[arg-type]
         keep_out = tormach.mill_table_keep_out()
         self.assertEqual(len(keep_out.prisms), len(tools.MILL_TABLES))
@@ -964,11 +966,7 @@ class TestModels(unittest.TestCase):
             ):
                 solidcraft = PyBind(transport)
                 names = vise.model(solidcraft, opening=opening)
-                result = solidcraft.inspect.interference(bodies=names)
-                assert isinstance(result, dict)
-                self.assertEqual(result["checked"], len(names))
-                self.assertEqual(result["interferences"], [])
-                self.assertEqual(result["unchecked"], [])
+                assert_apart(self, solidcraft, names)
 
     def test_vise_keep_out_volumes(self) -> None:
         """The vise's keep-out bodies have the volumes of their prisms."""

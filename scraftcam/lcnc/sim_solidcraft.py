@@ -118,9 +118,7 @@ class Sample(Protocol):
 
 
 # Class `ToolModel`:
-# It keeps the last position between moves, so it is a class with
-# one method.
-class ToolModel:  # pylint: disable=too-few-public-methods
+class ToolModel:
     """One tool in SolidCraft, made from its description in the shop.
 
     Its tip starts at the program's zero.  SolidCraft moves a
@@ -279,7 +277,7 @@ class ToolRack:  # pylint: disable=too-few-public-methods
 
 
 # Class `PathRack`:
-class PathRack:  # pylint: disable=too-few-public-methods
+class PathRack:
     """Each tool's planned path in SolidCraft; the one in use is shown.
 
     A path is drawn one tool ahead of the run: the first tool's before

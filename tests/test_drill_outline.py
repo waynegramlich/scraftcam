@@ -11,10 +11,9 @@ import math
 import unittest
 from pathlib import Path
 
-from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_file import Outline, outline_from_text
 from scraftcam.gui.outline_polygon import outline_revolved
-from scraftcam.gui.values import refresh_formulas
+from scraftcam.gui.values import set_letters
 from scraftcam.shops import DRILL_LETTERS, read
 from scraftcam.solid import SolidRevolved
 from scraftcam.tooling.cutter_models import (
@@ -30,6 +29,26 @@ DRILL: Path = Path(__file__).resolve().parent.parent / (
 
 # Millimeters per inch: `cutter_models` works in inches.
 MM: float = 25.4
+
+
+# Function `assert_same()`:
+def assert_same(
+    case: unittest.TestCase,
+    new: tuple[float, float, float],
+    old: tuple[float, float, float],
+) -> None:
+    """Check that two turned profiles agree to 6 places, as ratios.
+
+    Arguments:
+    * `case` (`unittest.TestCase`): The test that checks.
+    * `new` (`tuple[float, float, float]`): The outline's volume,
+      radius and height.
+    * `old` (`tuple[float, float, float]`): The old model's.
+    """
+    found: float
+    expected: float
+    for found, expected in zip(new, old, strict=True):
+        case.assertAlmostEqual(found / expected, 1.0, places=6, msg=(new, old))
 
 
 # Function `turned()`:
@@ -78,11 +97,7 @@ def outline_drill(tool: dict[str, object]) -> SolidRevolved:
         for key, letter in DRILL_LETTERS.items()
         if key in tool
     }
-    each: Letter
-    for each in outline.letters:
-        if each.letter in values:
-            each.default = values[each.letter]
-    refresh_formulas(outline.letters)
+    set_letters(outline.letters, values)
     return outline_revolved(outline, f"drill_{tool['unique_id']}")
 
 
@@ -111,10 +126,7 @@ class TestDrillOutline(unittest.TestCase):
                     (r * MM, z * MM) for r, z in profile("drills", tool)
                 ]
                 old: tuple[float, float, float] = turned(old_points)
-                for found, expected in zip(new, old, strict=True):
-                    self.assertAlmostEqual(
-                        found / expected, 1.0, places=6, msg=(new, old)
-                    )
+                assert_same(self, new, old)
 
 
 if __name__ == "__main__":

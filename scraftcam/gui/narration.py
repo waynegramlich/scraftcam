@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 PACE: int = 1500
 
 
+# Its widgets and their state are its attributes, one each.
 class NarrationPanel(QWidget):  # pylint: disable=too-many-instance-attributes
     """Shows a recording's steps and plays them.
 

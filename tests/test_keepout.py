@@ -15,8 +15,15 @@ from scraftcam.demo import (
     demo_assembly,
 )
 from scraftcam.gcode import CNC
-from scraftcam.geometry import SLOP, ArcSegment, LineSegment, RoundedPolygon
+from scraftcam.geometry import (
+    SLOP,
+    ArcSegment,
+    LineSegment,
+    RoundedPolygon,
+    XYSegment,
+)
 from scraftcam.machine import Machine, ToolEntry
+from scraftcam.setups import PlacedWork
 from scraftcam.shops import cnc_machine, read
 from scraftcam.tooling.shop_registries import use_shop
 
@@ -320,63 +327,102 @@ class TestCrashes(unittest.TestCase):
         self.assertEqual(names, set(TOPS) - {JAWS[1], PARALLELS[1]})
 
 
+# Function `line_walk()`:
+def line_walk(
+    start: tuple[float, float], end: tuple[float, float]
+) -> tuple[LineSegment, list[tuple[float, float]]]:
+    """Return a line move and points walked closely along it.
+
+    Arguments:
+    * `start` (`tuple[float, float]`): Where it starts.
+    * `end` (`tuple[float, float]`): Where it ends.
+
+    Returns:
+    * (`tuple[LineSegment, list[tuple[float, float]]]`): The move and
+      501 points along it.
+    """
+    points: list[tuple[float, float]] = [
+        (
+            start[0] + (end[0] - start[0]) * index / 500,
+            start[1] + (end[1] - start[1]) * index / 500,
+        )
+        for index in range(501)
+    ]
+    return LineSegment(start, end), points
+
+
+# Function `arc_walk()`:
+def arc_walk(
+    generator: random.Random,
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> tuple[ArcSegment, list[tuple[float, float]]]:
+    """Return a random arc move and points walked closely along it.
+
+    Arguments:
+    * `generator` (`random.Random`): The random numbers.
+    * `start` (`tuple[float, float]`): Where it starts.
+    * `end` (`tuple[float, float]`): Where it ends.
+
+    Returns:
+    * (`tuple[ArcSegment, list[tuple[float, float]]]`): The move and
+      801 points along it.
+    """
+    # Keep the center equally far from both ends.
+    code: int = generator.choice((2, 3))
+    chord: tuple[float, float] = (end[0] - start[0], end[1] - start[1])
+    length: float = math.hypot(*chord) or 1.0
+    along: float = generator.uniform(-3, 3)
+    offset: tuple[float, float] = (
+        chord[0] / 2.0 - chord[1] / length * along,
+        chord[1] / 2.0 + chord[0] / length * along,
+    )
+    arc: XYSegment = keepout.arc_segments(start, end, offset, code)[0]
+    assert isinstance(arc, ArcSegment)
+
+    # Walk it from the start's angle.
+    center: tuple[float, float] = arc.center
+    first: float = math.atan2(start[1] - center[1], start[0] - center[0])
+    points: list[tuple[float, float]] = [
+        (
+            center[0] + arc.radius * math.cos(first + arc.sweep * index / 800),
+            center[1] + arc.radius * math.sin(first + arc.sweep * index / 800),
+        )
+        for index in range(801)
+    ]
+    return arc, points
+
+
 class TestBruteForce(unittest.TestCase):
     """The answers against plain distances, with no offsets."""
 
     def test_random_moves(self) -> None:
         """Walk points along random moves and measure them directly."""
-        generator = random.Random(4)
-        zones = setup_zones()
-        checked = 0
+        generator: random.Random = random.Random(4)
+        zones: list[RoundedPolygon] = setup_zones()
+        checked: int = 0
         for _ in range(4000):
-            radius = generator.uniform(0.02, 0.5)
-            start = (generator.uniform(-18, 18), generator.uniform(-14, 8))
-            end = (
+            radius: float = generator.uniform(0.02, 0.5)
+            start: tuple[float, float] = (
+                generator.uniform(-18, 18),
+                generator.uniform(-14, 8),
+            )
+            end: tuple[float, float] = (
                 start[0] + generator.uniform(-6, 6),
                 start[1] + generator.uniform(-6, 6),
             )
-            z = generator.uniform(-6.0, 0.5)
+            z: float = generator.uniform(-6.0, 0.5)
             move: LineSegment | ArcSegment
+            points: list[tuple[float, float]]
             if generator.random() < 0.5:
-                move = LineSegment(start, end)
-                points = [
-                    (
-                        start[0] + (end[0] - start[0]) * index / 500,
-                        start[1] + (end[1] - start[1]) * index / 500,
-                    )
-                    for index in range(501)
-                ]
+                move, points = line_walk(start, end)
             else:
-                code = generator.choice((2, 3))
-                # Keep the center equally far from both ends.
-                chord = (end[0] - start[0], end[1] - start[1])
-                length = math.hypot(*chord) or 1.0
-                along = generator.uniform(-3, 3)
-                offset = (
-                    chord[0] / 2.0 - chord[1] / length * along,
-                    chord[1] / 2.0 + chord[0] / length * along,
-                )
-                arc = keepout.arc_segments(start, end, offset, code)[0]
-                assert isinstance(arc, ArcSegment)
-                move = arc
-                center = arc.center
-                first = math.atan2(start[1] - center[1], start[0] - center[0])
-                points = [
-                    (
-                        center[0]
-                        + arc.radius
-                        * math.cos(first + arc.sweep * index / 800),
-                        center[1]
-                        + arc.radius
-                        * math.sin(first + arc.sweep * index / 800),
-                    )
-                    for index in range(801)
-                ]
+                move, points = arc_walk(generator, start, end)
             for zone in zones:
                 if zone.z_end <= z:
                     self.assertFalse(zone.hits(move, z, radius))
                     continue
-                nearest = min(
+                nearest: float = min(
                     rectangle_distance(point, zone.box) for point in points
                 )
                 # The walk can miss a little, and the zone grows by `SLOP`.
@@ -508,23 +554,27 @@ class TestPrograms(unittest.TestCase):
 
     def test_grid_plate_fails_as_predicted(self) -> None:
         """The grid plate's long edges, and nothing else, enter zones."""
-        setup = setups.Setup(
+        setup: setups.Setup = setups.Setup(
             json.loads(setups.EXAMPLE.read_text(encoding="utf-8"))
         )
-        material = setup.materials[0]
-        cnc = keepout.grid_plate_program(
+        material: PlacedWork = setup.materials[0]
+        cnc: CNC = keepout.grid_plate_program(
             material.parts[0].placement.turns,
             keepout.shop_machine_with_hole_drill(),
         )
-        zones = keepout.work_zones(setup, material)
-        found = keepout.check_program(cnc, zones)
+        zones: list[RoundedPolygon] = keepout.work_zones(setup, material)
+        found: list[keepout.Violation] = keepout.check_program(cnc, zones)
         self.assertEqual({item.kind for item in found}, {"keep out"})
-        names = {item.zone for item in found if item.kind == "keep out"}
+        names: set[str] = {
+            item.zone for item in found if item.kind == "keep out"
+        }
         self.assertEqual(names, set(JAWS) | set(PARALLELS))
 
         # All of the holes are clear, since the end mill alone is reported.
-        hits = [item for item in found if item.kind == "keep out"]
-        change = next(
+        hits: list[keepout.Violation] = [
+            item for item in found if item.kind == "keep out"
+        ]
+        change: int = next(
             line
             for line, command in enumerate(cnc.commands, 1)
             if str(command.get("T", "")) == "01"
@@ -533,21 +583,36 @@ class TestPrograms(unittest.TestCase):
         self.assertTrue(all(item.line > change for item in hits))
         self.assertTrue(all("T1 " in item.text for item in hits))
 
-        # Hand figures: each line's reach, and below which zone's top.
+        # Each bad line's zones, checked against hand figures.
         bad: dict[int, list[str]] = {item.line: [] for item in hits}
         for item in hits:
             bad[item.line].append(item.zone)
+        self.check_long_sides(cnc, change, bad)
+        self.check_short_ends(cnc, bad)
+        self.check_depths(cnc, change, bad)
+
+    def check_long_sides(
+        self, cnc: CNC, change: int, bad: dict[int, list[str]]
+    ) -> None:
+        """Check each bad line's reach, and below which zone's top.
+
+        Arguments:
+        * `cnc` (`CNC`): The grid plate's program.
+        * `change` (`int`): The line of the end mill's tool change.
+        * `bad` (`dict[int, list[str]]`): The zones each line enters.
+        """
         tracker: dict[str, float | None] = {"X": None, "Y": None, "Z": None}
         for line, command in enumerate(cnc.commands, 1):
-            old = dict(tracker)
+            old: dict[str, float | None] = dict(tracker)
             for letter in "XYZ":
                 if letter in command:
                     tracker[letter] = float(command[letter])
             if line <= change or old["X"] is None or line not in bad:
                 continue
-            low_z = min(known(old["Z"]), known(tracker["Z"]))
+            low_z: float = min(known(old["Z"]), known(tracker["Z"]))
             for zone in bad[line]:
                 self.assertLess(low_z, TOPS[zone], (line, zone))
+
             # The end mill's center is on or beyond a long side's path.
             self.assertGreater(
                 max(abs(known(old["Y"])), abs(known(tracker["Y"]))),
@@ -555,11 +620,17 @@ class TestPrograms(unittest.TestCase):
                 line,
             )
 
-        # The short ends are clear, at every depth.
-        tracker = {"X": None, "Y": None, "Z": None}
-        ends = 0
+    def check_short_ends(self, cnc: CNC, bad: dict[int, list[str]]) -> None:
+        """Check that the short ends are clear, at every depth.
+
+        Arguments:
+        * `cnc` (`CNC`): The grid plate's program.
+        * `bad` (`dict[int, list[str]]`): The zones each line enters.
+        """
+        tracker: dict[str, float | None] = {"X": None, "Y": None, "Z": None}
+        ends: int = 0
         for line, command in enumerate(cnc.commands, 1):
-            old = dict(tracker)
+            old: dict[str, float | None] = dict(tracker)
             for letter in "XYZ":
                 if letter in command:
                     tracker[letter] = float(command[letter])
@@ -573,8 +644,17 @@ class TestPrograms(unittest.TestCase):
                 self.assertNotIn(line, bad)
         self.assertGreater(ends, 0)
 
-        # The first pass is above every top, and the next is not.
-        depths = sorted(
+    def check_depths(
+        self, cnc: CNC, change: int, bad: dict[int, list[str]]
+    ) -> None:
+        """Check that the first pass is above every top, the next not.
+
+        Arguments:
+        * `cnc` (`CNC`): The grid plate's program.
+        * `change` (`int`): The line of the end mill's tool change.
+        * `bad` (`dict[int, list[str]]`): The zones each line enters.
+        """
+        depths: list[float] = sorted(
             {
                 float(command["Z"])
                 for command in cnc.commands[change:]
@@ -584,7 +664,7 @@ class TestPrograms(unittest.TestCase):
         )
         self.assertGreater(depths[0], -0.14)
         self.assertLess(depths[1], -0.14)
-        shallow = [
+        shallow: list[float] = [
             float(command["Z"])
             for line, command in enumerate(cnc.commands, 1)
             if line in bad and "Z" in command and command.get("G") == 1

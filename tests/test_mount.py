@@ -14,6 +14,7 @@ from scraftcam.shops import read
 from scraftcam.tooling import mount, tools
 from scraftcam.tooling.cutter_models import EXAMPLE_SHOP
 from scraftcam.tooling.shop_registries import use_shop
+from tests.solidcraft_checks import assert_apart
 
 # An extracted `solidcraft-cli` (as the demo uses) for the live test.
 HERE: Path = Path(__file__).resolve().parent.parent
@@ -330,11 +331,7 @@ class TestModel(unittest.TestCase):
             solidcraft = PyBind(transport)
             names = mount.FIRST_MOUNT.model(solidcraft)
             self.assertEqual(len(names), 1 + 12 + 2 + 1)
-            result = solidcraft.inspect.interference(bodies=names)
-            assert isinstance(result, dict)
-            self.assertEqual(result["checked"], len(names))
-            self.assertEqual(result["interferences"], [])
-            self.assertEqual(result["unchecked"], [])
+            assert_apart(self, solidcraft, names)
 
     def test_garage(self) -> None:
         """The table's volume is right; the turned vise lands in place."""
@@ -355,11 +352,7 @@ class TestModel(unittest.TestCase):
             self.assertAlmostEqual(x, 0.0)
             self.assertAlmostEqual(y, (7.875 - 0.5) * INCH)
             self.assertAlmostEqual(z, (2.64 + 1.735 / 2.0) * INCH)
-            result = solidcraft.inspect.interference(bodies=names)
-            assert isinstance(result, dict)
-            self.assertEqual(result["checked"], len(names))
-            self.assertEqual(result["interferences"], [])
-            self.assertEqual(result["unchecked"], [])
+            assert_apart(self, solidcraft, names)
 
     def test_grid_plate(self) -> None:
         """All of the holes are cut, and the plate sits on the table."""
@@ -440,26 +433,32 @@ class TestModel(unittest.TestCase):
         def square(
             name: str,
             half: float,
-            z_start: float,
-            z_end: float,
+            z: tuple[float, float],
+            *,
             children: Sequence[RoundedPolygon] = (),
             x: float = 0.0,
         ) -> RoundedPolygon:
-            corners = [
+            # The square's corners, and its Z from start to end.
+            corners: list[Corner] = [
                 Corner(x - half, -half),
                 Corner(x + half, -half),
                 Corner(x + half, half),
                 Corner(x - half, half),
             ]
-            return RoundedPolygon(name, corners, z_start, z_end, children)
+            return RoundedPolygon(name, corners, z[0], z[1], children)
 
         island = square(
-            "Island", 15.0, 5.0, 10.0, [Hole(0.0, 0.0, 10.0, 10.0, 0.0)]
+            "Island",
+            15.0,
+            (5.0, 10.0),
+            children=[Hole(0.0, 0.0, 10.0, 10.0, 0.0)],
         )
-        pocket = square("Pocket", 30.0, 10.0, 5.0, [island])
+        pocket = square("Pocket", 30.0, (10.0, 5.0), children=[island])
         through = Hole(40.0, 40.0, 10.0, 10.0, 0.0)
-        boss = square("Boss", 5.0, 10.0, 15.0, x=-40.0)
-        plate = square("Plate", 50.0, 0.0, 10.0, [pocket, through, boss])
+        boss = square("Boss", 5.0, (10.0, 15.0), x=-40.0)
+        plate = square(
+            "Plate", 50.0, (0.0, 10.0), children=[pocket, through, boss]
+        )
         program = shutil.which("solidcraft-cli") or str(CLI)
         with HeadlessTransport(program) as transport:
             solidcraft = PyBind(transport)

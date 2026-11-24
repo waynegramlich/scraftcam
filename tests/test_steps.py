@@ -6,6 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtTest import QTest
+
 from scraftcam import __version__
 from scraftcam.exposed import steps
 from scraftcam.exposed.exposed import ExposedError
@@ -170,9 +173,6 @@ class TestRecorder(unittest.TestCase):
 
     def test_record_then_replay(self) -> None:
         """A click, a drag and two buttons, recorded."""
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtTest import QTest
 
         # The user's gestures, as Qt events on a recorded editor.
         editor: OutlineEditor = editor_for(Recording("", "", "", ()))

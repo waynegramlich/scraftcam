@@ -14,6 +14,9 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
+
 from scraftcam.packages import PACKAGES_DIRECTORY
 
 # Look where `scraftcam.packages` puts the PDF packages.
@@ -138,10 +141,11 @@ def write_pdf(path: Path) -> None:
 class PdfTest(unittest.TestCase):
     """Tests of `Document`, `Page` and `catxtract`'s use of them."""
 
-    # pylint: disable=import-outside-toplevel
-
     def setUp(self) -> None:
         """Write the PDF and open it."""
+        # Imported here: without the PDF packages these tests are
+        # skipped, and the modules can not be imported.
+        # pylint: disable-next=import-outside-toplevel
         from scraftcam.catalog import catxtract, pdf
 
         self.catxtract = catxtract
@@ -235,15 +239,20 @@ class PdfTest(unittest.TestCase):
 class AppTest(unittest.TestCase):
     """Tests of `catxtract`'s window, drawn offscreen by Qt."""
 
-    # pylint: disable=import-outside-toplevel
-
     def setUp(self) -> None:
         """Write the PDF, and open it in a window."""
+        # Imported here: without the PDF packages these tests are
+        # skipped, and `catxtract` can not be imported; `qt_app` makes
+        # the `QApplication` only when a window test runs.
+        # pylint: disable=import-outside-toplevel
         from scraftcam.catalog import catxtract
         from tests import qt_app
 
+        # pylint: enable=import-outside-toplevel
+
         self.catxtract = catxtract
         self.qt_app = qt_app
+        # Removed when the test ends.
         # pylint: disable-next=consider-using-with
         directory: str = self.enterContext(tempfile.TemporaryDirectory())
         path: Path = Path(directory) / "test.pdf"
@@ -275,8 +284,6 @@ class AppTest(unittest.TestCase):
         * `start` (`tuple[float, float]`): Where the drag starts.
         * `end` (`tuple[float, float]`): Where it ends.
         """
-        from PySide6.QtCore import QPoint
-        from PySide6.QtTest import QTest
 
         zoom: float = self.app.zoom
         first: QPoint = QPoint(round(start[0] * zoom), round(start[1] * zoom))
@@ -287,7 +294,6 @@ class AppTest(unittest.TestCase):
 
     def test_draw_and_save(self) -> None:
         """A region dragged and made a title is saved on Quit."""
-        from PySide6.QtCore import Qt
 
         # The page starts with its suggestions; clear them.
         self.assertIn("Suggested", self.app.status.text())
@@ -315,7 +321,6 @@ class AppTest(unittest.TestCase):
 
     def test_click_and_ignore(self) -> None:
         """A click selects a region; the right button ignores it."""
-        from PySide6.QtCore import Qt
 
         # A region, then a click inside it elsewhere selects it.
         self.app.command("c")
@@ -338,7 +343,6 @@ class AppTest(unittest.TestCase):
             {key: b.isEnabled() for key, b in self.app.page_buttons.items()},
             {"P": False, "p": False, "n": False, "N": False},
         )
-        from PySide6.QtTest import QTest
 
         QTest.keyClicks(self.app.goto, "a1b234567")
         self.assertEqual(self.app.goto.text(), "12345")

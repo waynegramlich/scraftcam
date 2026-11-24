@@ -1,9 +1,5 @@
 """Tests for `geometry.py`: run `python3 -m unittest -v`."""
 
-# It takes many tests to cover this module's geometry, so it is longer
-# than `pylint` likes.
-# pylint: disable=too-many-lines
-
 import math
 import random
 import types

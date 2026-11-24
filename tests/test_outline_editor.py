@@ -1,13 +1,26 @@
 """Tests of `scraftcam.gui.outline_editor`, chunk 1 (offscreen)."""
 
 import math
+import shutil
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING
+from pathlib import Path
+
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QWheelEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import (
+    QApplication,
+    QGraphicsSceneMouseEvent,
+    QLineEdit,
+    QTableWidgetItem,
+    QToolButton,
+)
 
 from scraftcam.diagram import TEXT, Stroke, Weight
 from scraftcam.geometry import ArcSegment, LineSegment
-from scraftcam.gui import outline_editor
+from scraftcam.gui import outline_editor, theme
 from scraftcam.gui.dimensions import (
     ANGLE,
     DIAMETER,
@@ -19,9 +32,10 @@ from scraftcam.gui.dimensions import (
     Y_AXIS,
     Dimension,
     drawn_marks,
+    placement_problem,
     tip_on_origin,
 )
-from scraftcam.gui.hides import HIDE_Y, Hide
+from scraftcam.gui.hides import HIDE_Y, Hide, across, strip
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_diagram import fillet_arcs, outline_strokes
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor
@@ -29,13 +43,9 @@ from scraftcam.gui.outline_file import PLAIN, Hole, outline_text
 from scraftcam.gui.values import crossings
 from tests import qt_app
 
-# Only for the type: `PySide6` is on `sys.path` once `tests` is in.
-if TYPE_CHECKING:
-    from PySide6.QtWidgets import QTableWidgetItem
-
 
 # Function `cell()`:
-def cell(editor: OutlineEditor, row: int, column: int) -> "QTableWidgetItem":
+def cell(editor: OutlineEditor, row: int, column: int) -> QTableWidgetItem:
     """Return a letter's cell (`row` counts letters, past the fixed
     "No fillet" row; it must be there)."""
     item: QTableWidgetItem | None = editor.table.item(
@@ -58,20 +68,12 @@ class GridTest(unittest.TestCase):
 
     def test_snap(self) -> None:
         """A point goes to the nearest crossing."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        from PySide6.QtCore import (  # pylint: disable=import-outside-toplevel
-            QPointF,
-        )
 
         snapped: QPointF = outline_editor.snap(QPointF(1.26, -0.74), 0.5)
         self.assertEqual((snapped.x(), snapped.y()), (1.5, -0.5))
 
     def test_arrowhead(self) -> None:
         """An arrowhead's tip is the edge's end; none on a dot."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        from PySide6.QtCore import (  # pylint: disable=import-outside-toplevel
-            QPointF,
-        )
 
         path = outline_editor.arrowhead(QPointF(0, 0), QPointF(4, 0), 1.0)
         self.assertEqual(path.boundingRect().right(), 4.0)
@@ -135,10 +137,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_drag_snaps(self) -> None:
         """Moving a square snaps it and moves its corner."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        from PySide6.QtCore import (  # pylint: disable=import-outside-toplevel
-            QPointF,
-        )
 
         view = self.editor.view
         square = view.squares[0]
@@ -150,11 +148,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_zoom_and_keys(self) -> None:
         """The wheel zooms in and out, within limits; F fits; G grid."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtGui import QWheelEvent
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         view.fit()
@@ -199,9 +192,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """The point under the pointer stays there as the wheel zooms,
         wherever the pointer is (#439: Wayland gives Qt no cursor
         position, so the view keeps the point itself)."""
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtGui import QWheelEvent
 
         view = self.editor.view
         view.fit()
@@ -227,10 +217,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_snap_off(self) -> None:
         """With [Snap] off, a square goes exactly where it is put."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        from PySide6.QtCore import (  # pylint: disable=import-outside-toplevel
-            QPointF,
-        )
 
         self.editor.buttons["Snap"].click()
         self.assertFalse(self.editor.view.snap_on)
@@ -255,10 +241,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_selection(self) -> None:
         """Each click adds to the selection; empty space clears it."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPointF, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
 
@@ -343,8 +325,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_delete_after_drag(self) -> None:
         """A dimension dragged by its circle, then deleted, is gone
         from the scene's index too (a segmentation fault once)."""
-        from PySide6.QtCore import QPoint, Qt  # pylint: disable=C0415
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
 
         view = self.editor.view
         view.dimension_between(-1, 1)
@@ -442,8 +422,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_length(self) -> None:
         """A length runs beside its points, the circle moving it."""
-        from PySide6.QtCore import QPoint, QPointF, Qt  # pylint: disable=C0415
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
 
         view = self.editor.view
         view.dimension_between(0, 1)
@@ -475,8 +453,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_select_edge(self) -> None:
         """A click on an edge's circle selects the edge, lit; a drag
         does not; empty space clears it."""
-        from PySide6.QtCore import QPoint, Qt  # pylint: disable=C0415
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
 
         view = self.editor.view
         port = view.viewport()
@@ -495,7 +471,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_angle(self) -> None:
         """[Angle] between two edges: an arc, its letter in degrees;
         refused for too few edges or parallel ones."""
-        from PySide6.QtCore import QPointF  # pylint: disable=C0415
 
         view = self.editor.view
         button = self.editor.buttons["Dimension"]
@@ -594,8 +569,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """A click on an axis selects it; an angle from it to an edge:
         half a drill point (#59, #63, #65); the arc keeps its letter
         (#76)."""
-        from PySide6.QtCore import QPoint, QPointF, Qt  # pylint: disable=C0415
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
 
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (-1, 8)]
@@ -643,7 +616,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_revolve(self) -> None:
         """[Revolve]: refused left of the Y axis; on, it keeps drags at
         X >= 0; undone as one change, the button following (#32)."""
-        from PySide6.QtCore import QPointF  # pylint: disable=C0415
 
         view = self.editor.view
         button = self.editor.buttons["Revolve"]
@@ -668,7 +640,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """[Rotate Diagram]: a quarter turn clockwise per press, back
         after four; undone as one change; letters read upright and
         the zoom is the same whatever the turn (#300)."""
-        from PySide6.QtCore import QPointF  # pylint: disable=C0415
 
         def ratio(strokes: list[Stroke]) -> float:
             """Return the strokes' width over their height."""
@@ -762,7 +733,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_button_tabs(self) -> None:
         """The buttons sit in tabs, [Most Common] first; a button on two
         tabs does the same, and keys work whichever tab shows (#319)."""
-        from PySide6.QtWidgets import QToolButton  # pylint: disable=C0415
 
         tabs = self.editor.button_tabs
         titles: list[str] = [
@@ -795,8 +765,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_file(self) -> None:
         """An editor on a file rewrites it after each change, and reads
         back the same drawing (#90, #97)."""
-        import tempfile  # pylint: disable=C0415
-        from pathlib import Path  # pylint: disable=C0415
 
         with tempfile.TemporaryDirectory() as folder:
             path: Path = Path(folder) / "drill.outline.toml"
@@ -886,8 +854,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_fillets_tab(self) -> None:
         """[Fillets] shows "No fillet" and only the letters checked
         "Fillet", with [New Fillet Dimension] (#213, #214, #219)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        from PySide6.QtCore import Qt  # pylint: disable=C0415
 
         editor = self.editor
         hidden = editor.table.isRowHidden
@@ -1000,17 +966,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """On a copy of the example end mill, a corner nudged and
         dropped keeps its marks, and the outline its sizes; dragged
         off, the corner floats, and undo puts it back (#451)."""
-        import shutil  # pylint: disable=C0415
-        import tempfile  # pylint: disable=C0415
-        from pathlib import Path  # pylint: disable=C0415
-
-        from PySide6.QtWidgets import (  # pylint: disable=C0415
-            QGraphicsSceneMouseEvent,
-        )
-
-        from scraftcam.gui.dimensions import (  # pylint: disable=C0415
-            placement_problem,
-        )
 
         source: Path = Path("examples/shop/tools/end_mill.outline.toml")
         with tempfile.TemporaryDirectory() as folder:
@@ -1058,8 +1013,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_drag_diameter(self) -> None:
         """A diameter's circle dragged down moves its line down, and
         sideways its letter along (#456)."""
-        from PySide6.QtCore import QPointF, Qt  # pylint: disable=C0415
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
 
         view = self.editor.view
         view.snap_on = False
@@ -1161,8 +1114,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         table's current row) and refuses one in use, naming its uses;
         "Fillet" stays checked while it rounds a corner (#215, #225).
         """
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        from PySide6.QtCore import Qt  # pylint: disable=C0415
 
         editor = self.editor
         view = editor.view
@@ -1203,9 +1154,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """Pointing at a row lights its letter's dimensions and the
         corners it rounds; pointing at a corner makes its letter's row
         bold; a refused delete lights the uses (#224, #245)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QEvent
 
         editor = self.editor
         view = editor.view
@@ -1278,8 +1226,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_move_mark(self) -> None:
         """A `—` mark's circle drags its box (snapped, one change),
         saved as `moved`; a right angle has no circle (#317)."""
-        from PySide6.QtCore import QPointF, Qt  # pylint: disable=C0415
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
 
         view = self.editor.view
         view.marks_shown = True
@@ -1316,12 +1262,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """Shown, a mark repeating another is red, and one a drag
         breaks; a glyph clicked selects its mark, [Delete] removes it
         (#233, #241)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtGui import QColor
-        from PySide6.QtWidgets import QGraphicsSceneMouseEvent
-
-        from scraftcam.gui import theme
 
         editor = self.editor
         view = editor.view
@@ -1387,9 +1327,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_click_and_type(self) -> None:
         """One click on a Value cell edits it; what is typed sticks and
         fires no button's key (`n` of `in` is [Dimension]'s)."""
-        from PySide6.QtCore import Qt  # pylint: disable=C0415
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
-        from PySide6.QtWidgets import QApplication  # pylint: disable=C0415
 
         view = self.editor.view
         table = self.editor.table
@@ -1456,7 +1393,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """The table's values set the scale, chosen once, but never
         move a template's corners (#457); a bad value is named
         (#148, #154)."""
-        from PySide6.QtCore import QPointF  # pylint: disable=C0415
 
         editor = self.editor
         view = editor.view
@@ -1543,8 +1479,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """[Hide], then a wide drag over the shank: a strip hiding a
         stretch of height, shown in the overview; refused over a
         corner; undone as one change (#164, #165, #168)."""
-        from PySide6.QtCore import QPointF, Qt  # pylint: disable=C0415
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
 
         editor = self.editor
         view = editor.view
@@ -1584,18 +1518,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_strip_circles(self) -> None:
         """A strip's side circles resize it, its middle one moves it;
         not over a corner; only in the overview; one change (#173)."""
-        from PySide6.QtCore import (  # pylint: disable=C0415
-            QPoint,
-            QPointF,
-            QRectF,
-            Qt,
-        )
-        from PySide6.QtTest import QTest  # pylint: disable=C0415
-
-        from scraftcam.gui.hides import (  # pylint: disable=C0415
-            across,
-            strip,
-        )
 
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
@@ -1648,7 +1570,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_drag_across_axes(self) -> None:
         """A corner drags onto an axis and on across it; a dimension
         no longer holds it (#457)."""
-        from PySide6.QtCore import QPointF  # pylint: disable=C0415
 
         view = self.editor.view
         square = view.squares[0]
@@ -1668,7 +1589,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """Out of the overview, a strip's stretch is cut out: the piece
         past it drawn closer by the stretch less the gap; the view is
         for looking (#170, #171)."""
-        from PySide6.QtCore import QRectF  # pylint: disable=C0415
 
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 40), (0, 40)]
@@ -1784,10 +1704,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_drag_is_one_change(self) -> None:
         """A whole drag is one change; a click moving nothing is none."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         first: list[tuple[float, float]] = list(view.drawing.points)
@@ -1832,9 +1748,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_fillet_column(self) -> None:
         """The "Fillet" check box marks a fillet radius (#213)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import Qt
 
         editor = self.editor
         editor.buttons["New Letter"].click()
@@ -1856,10 +1769,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_live_typing(self) -> None:
         """Each keystroke in a cell is kept and checked at once."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtTest import QTest
-        from PySide6.QtWidgets import QLineEdit
 
         editor = self.editor
         editor.buttons["New Letter"].click()
@@ -1952,10 +1861,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_drag_dimension(self) -> None:
         """The middle circle moves the line across, its letter keeping
         its place along it (#469)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         view.add_dimension(Dimension("W", HORIZONTAL, 0, 1, -5.0))
@@ -1985,10 +1890,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_mirror_circles(self) -> None:
         """A revolved outline's mirrored half has circles that act on
         the real half (#474-#477)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         view.snap_on = False
@@ -2059,9 +1960,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         mirror images their corners' dimension; a mirror image and
         another corner vertical, or horizontal across the axis when
         wider than tall, from the mirrored one (#479)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPointF
 
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
@@ -2099,10 +1997,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """A diameter has a circle on each end, the mirrored side too;
         either dropped on a corner or its mirror image moves the
         diameter to that corner (#479)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         view.snap_on = False
@@ -2147,9 +2041,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """A dimension's end circles sit under it, so its arrowheads
         are drawn over them, and its band leaves a hole there, so a
         press reaches the circle (#483)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint
 
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (4.0, 0.0), (4.0, 3.0)]
@@ -2167,10 +2058,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_drag_letter(self) -> None:
         """A dimension's letter, dragged, slides along its line, past
         the arrowhead too; the line stays (#471)."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         view.add_dimension(Dimension("W", HORIZONTAL, 0, 1, -5.0))
@@ -2196,10 +2083,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """A dimension's end circle dropped on a corner moves that end
         there, as one change; dropped on nothing, it goes back (#470);
         a click on the line selects."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         view.add_dimension(Dimension("W", HORIZONTAL, 0, 1, -5.0))
@@ -2240,10 +2123,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_edge_handles(self) -> None:
         """A handle's drag pulls out a snapped corner; a click does not."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         self.assertEqual(len(view.handles), 3)
@@ -2289,10 +2168,6 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
     def test_pan(self) -> None:
         """Dragging empty space pans; the pointer is an arrow after."""
-        # (`PySide6` is on `sys.path` only once `tests` is imported.)
-        # pylint: disable=import-outside-toplevel
-        from PySide6.QtCore import QPoint, QPointF, Qt
-        from PySide6.QtTest import QTest
 
         view = self.editor.view
         empty: QPoint = view.mapFromScene(QPointF(3.0, 3.0))
@@ -2326,10 +2201,6 @@ class FitTest(unittest.TestCase):
 
     def test_fit_shows_dimensions(self) -> None:
         """Every dimension of the end mill is inside the view."""
-        # pylint: disable=import-outside-toplevel
-        from pathlib import Path
-
-        from PySide6.QtCore import QRectF
 
         source: Path = Path("examples/shop/tools/end_mill.outline.toml")
         editor: OutlineEditor = OutlineEditor(

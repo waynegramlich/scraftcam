@@ -287,7 +287,7 @@ def pdf_pages(pdf: Path) -> int:
     # The PDF libraries raise their own errors, of no common class.
     try:
         return len(Document(pdf))
-    except Exception as error:  # pylint: disable=broad-exception-caught
+    except Exception as error:
         raise ValueError(f"{pdf} can not be read as a PDF: {error}") from error
 
 

@@ -16,10 +16,6 @@ GUI toolkit, so it can be tested with no display:
   (`setup_warning()`, `setup_material()`, `setup_origin()`).
 """
 
-# Half of the module is docstrings, which the type hints and the
-# argument lists make long, so it passes 1000 lines.
-# pylint: disable=too-many-lines
-
 import itertools
 import math
 import queue
@@ -569,6 +565,7 @@ def next_tool_text(
 
 
 # Class `HMIStatus`:
+# Each attribute is one fact it holds; grouping them would not read better.
 @dataclass(slots=True)
 class HMIStatus:  # pylint: disable=too-many-instance-attributes
     """What the HMI shows of the machine, from one poll.
@@ -737,7 +734,7 @@ def next_intervention(
 
 # Function `tool_plan()`:
 # It takes what `next_tool_text()` does, and how many tools to show.
-# pylint: disable-next=too-many-arguments,too-many-locals
+# pylint: disable-next=too-many-arguments
 def tool_plan(
     lines: list[str],
     sums: list[float],
@@ -1368,6 +1365,7 @@ def origin_lines(point: Point, inches: bool) -> list[str]:
 
 
 # Class `View`:
+# A `Protocol` names only what is needed of it.
 class View(Protocol):  # pylint: disable=too-few-public-methods
     """What shows an assembly (`setup_view.SetupView`, or a fake).
 
@@ -1467,6 +1465,7 @@ class SetupDrawer:
                 self.view.keep_outs = True
                 self.view.hidden = set(self.hidden)
                 self.view.show(assembly)
+            # Any error is reported, not left to end the program.
             # pylint: disable-next=broad-exception-caught
             except Exception as error:  # noqa: BLE001
                 self.errors.put(f"Setup not drawn: {error}")

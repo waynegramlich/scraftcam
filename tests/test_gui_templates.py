@@ -43,6 +43,7 @@ class FollowUpTest(unittest.TestCase):
         """Copy the example shop; the router given its own value."""
         # `enterContext()` removes it after the test (pylint does not know).
         temporary: str = self.enterContext(
+            # Removed when the test ends.
             tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         )
         self.top: Path = Path(temporary).resolve() / "shop"
@@ -122,6 +123,7 @@ class VersionTest(unittest.TestCase):
         """Entering `vendor_version` fills in `vendor_triple`."""
         top: Path = Path(
             self.enterContext(
+                # Removed when the test ends.
                 tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
             )
         )

@@ -14,6 +14,7 @@ class TestOriginAxes(unittest.TestCase):
     def setUp(self) -> None:
         self.machine = hmi_machine.HMIMachine(True)
         self.hmi = make_hmi(self.machine)
+        # Removed when the test ends.
         # pylint: disable-next=consider-using-with
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)

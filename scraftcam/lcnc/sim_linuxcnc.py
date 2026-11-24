@@ -490,7 +490,7 @@ def _tell(
     for listener in listeners:
         try:
             call(listener)
-        except Exception as error:  # pylint: disable=broad-exception-caught
+        except Exception as error:
             raise SampleListenerFailed(
                 f"{type(listener).__name__} failed "
                 f"({type(error).__name__}: {error})"

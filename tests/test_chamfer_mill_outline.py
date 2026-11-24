@@ -10,10 +10,9 @@ volumes and boxes must agree.
 import unittest
 from pathlib import Path
 
-from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_file import Outline, outline_from_text
 from scraftcam.gui.outline_polygon import outline_revolved
-from scraftcam.gui.values import refresh_formulas
+from scraftcam.gui.values import set_letters
 from scraftcam.shops import read
 from scraftcam.solid import SolidRevolved
 from scraftcam.tooling.cutter_models import (
@@ -21,7 +20,7 @@ from scraftcam.tooling.cutter_models import (
     profile,
     shop_tools,
 )
-from tests.test_drill_outline import MM, turned
+from tests.test_drill_outline import MM, assert_same, turned
 
 # The kind's outline drawing.
 CHAMFER_MILL: Path = Path(__file__).resolve().parent.parent / (
@@ -59,11 +58,7 @@ def outline_chamfer_mill(tool: dict[str, object]) -> SolidRevolved:
     }
     values.setdefault("SD", values["D"])
     values.setdefault("TD", "0 in")
-    each: Letter
-    for each in outline.letters:
-        if each.letter in values:
-            each.default = values[each.letter]
-    refresh_formulas(outline.letters)
+    set_letters(outline.letters, values)
     return outline_revolved(outline, f"chamfer_mill_{tool['unique_id']}")
 
 
@@ -96,10 +91,7 @@ class TestChamferMillOutline(unittest.TestCase):
                         for r, z in profile("chamfer_mills", tool)
                     ]
                 )
-                for found, expected in zip(new, old, strict=True):
-                    self.assertAlmostEqual(
-                        found / expected, 1.0, places=6, msg=(new, old)
-                    )
+                assert_same(self, new, old)
 
 
 if __name__ == "__main__":

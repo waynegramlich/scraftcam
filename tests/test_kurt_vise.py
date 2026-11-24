@@ -7,6 +7,7 @@ from scraftcam.model import Length
 from scraftcam.pybind.scraftpybind import JSON, PyBind, connect
 from scraftcam.solid import Leaf, SolidAssembly
 from scraftcam.tooling.kurt_vise import kurt_dx6
+from tests.solidcraft_checks import totals
 
 # Whether a headless SolidCraft can be run.
 HAVE_SOLIDCRAFT: bool = shutil.which("solidcraft-cli") is not None
@@ -56,16 +57,11 @@ class TestKurtDX6(unittest.TestCase):
             properties: JSON = solidcraft.component.properties(
                 component="root"
             )
-        assert isinstance(properties, dict)
-        total: JSON = properties["total"]
-        assert isinstance(total, dict)
-        box: JSON = total["bbox"]
-        assert isinstance(box, dict)
-        low: JSON = box["min"]
-        high: JSON = box["max"]
-        assert isinstance(low, list) and isinstance(high, list)
+        low: list[float]
+        high: list[float]
+        _, low, high = totals(properties)
         self.assertEqual(
-            [round(float(str(v)) / 25.4, 4) for v in (*low, *high)],
+            [round(v / 25.4, 4) for v in (*low, *high)],
             [0.0, -3.695, 0.0, 16.86, 3.695, 4.61],
         )
 

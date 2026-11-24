@@ -28,6 +28,7 @@ JAW_PLATE_COLOR: str = "#9aa3ad"
 
 
 # Class `JawPlate`:
+# Each attribute is one fact it holds; grouping them would not read better.
 @dataclass(slots=True)
 class JawPlate(  # pylint: disable=too-many-instance-attributes
     SolidModel

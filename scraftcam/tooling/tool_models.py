@@ -16,9 +16,6 @@ python3 -m scraftcam.tooling.tool_models
 # past `pylint`'s limit on local variables.
 # pylint: disable=too-many-locals
 
-# Each kind of model adds its marks here, so it will keep growing.
-# pylint: disable=too-many-lines
-
 import ast
 import inspect
 import itertools
@@ -99,6 +96,7 @@ LETTER_SIZE: int = 18
 
 
 # Class `Dimension`:
+# Each attribute is one fact it holds; grouping them would not read better.
 @dataclass(frozen=True, slots=True)
 class Dimension:  # pylint: disable=too-many-instance-attributes
     """One dimension line on a sketch, in the sample's inches.

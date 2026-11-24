@@ -62,6 +62,7 @@ STARTS: frozenset[QEvent.Type] = frozenset(
 PLACES: int = 3
 
 
+# Its widgets and their state are its attributes, one each.
 class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
     """Writes an editor's gestures to a recording as they happen.
 
@@ -169,9 +170,7 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
                 )
         self.write()
 
-    def eventFilter(  # pylint: disable=invalid-name
-        self, watched: QObject, event: QEvent
-    ) -> bool:
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """File the waiting step as a new gesture starts; turn the
         drawing's left button press and release into a step.
 

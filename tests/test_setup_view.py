@@ -50,8 +50,8 @@ DEMO_STACK: Path = (
 )
 
 
-# The name `unittest` looks for.
-def setUpModule() -> None:  # pylint: disable=invalid-name
+# Function `setUpModule()`:
+def setUpModule() -> None:
     """Fill the name dictionaries from the example shop."""
     use_shop(read(EXAMPLE_SHOP))
 

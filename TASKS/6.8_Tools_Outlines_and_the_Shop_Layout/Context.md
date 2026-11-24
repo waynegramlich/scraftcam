@@ -12,6 +12,8 @@ Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
   one outline file per kind, each tool gives only its letter
   values); one table in the tool's panel (unifies #592/#594's two
   dimension views).
+  Begun: `gui/values.set_letters()` puts a tool's values into its
+  kind's letters and works out the formula letters (`T.gc~6.10`).
 * #615 the tree shows outline files (`gui/tree.py:482` hides them,
   "Until #S7").
 * From `T.tkis~6.7`: idea 1 began as `meta()` field metadata in
@@ -40,3 +42,11 @@ Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
 * #461: per-tool SVGs to scale, later (true proportions, a standard
   width, values on the dimensions).
 * `T.tfo~6.5` #453's `ball_end_mill` waits for this.
+
+## Steps (#638, proposed, not yet agreed)
+
+* #S1 shops from `~/.scraftcam/settings.toml`; the example shop into
+  the package (#433).  #S2 `tools/KIND/` for the Z setter
+  (303-3104).  #S3 the letters table as the tool `.toml`'s template
+  (#631).  #S4 the tree shows the files (#615).  #S5 the tool
+  panel's one table (after #586).  #S6 the rest of the example shop.

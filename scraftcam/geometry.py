@@ -19,10 +19,6 @@ that is handed to `RoundedPolygon.sketch()`, so it imports it only for
 type checking.
 """
 
-# Most of this module's lines are docstrings and comments, so it is
-# longer than `pylint` likes.
-# pylint: disable=too-many-lines
-
 import math
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
@@ -877,6 +873,7 @@ class RoundedPolygon:
           Scales the polygon's units to SolidCraft's millimeters.
         * `body` (`str`): The body to add to or cut from.
         """
+        # Another instance of this class, so its own private method.
         # pylint: disable=protected-access
         ends: dict[float, list[RoundedPolygon]] = {}
         child: RoundedPolygon
@@ -1041,6 +1038,7 @@ class RoundedPolygon:
           The ids of the curves drawn, in order: the outline's, then the
           children's.
         """
+        # Another instance of this class, so its own private method.
         # pylint: disable=protected-access
         curves: list[str] = self._draw_outline(solidcraft, mm_per_unit)
         child: RoundedPolygon

@@ -22,9 +22,6 @@ python3 -m scraftcam.shops markdown > Shops.md
 ```
 """
 
-# The schema (`KINDS`) is long, but reads best in one place.
-# pylint: disable=too-many-lines
-
 from __future__ import annotations
 
 import argparse

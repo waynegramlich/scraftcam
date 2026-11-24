@@ -27,9 +27,6 @@ the next start does not ask about them.  Only this show's SolidCraft's
 files are removed; their names hold its process ID.
 """
 
-# The show, GUI and headless, and its report, are one script.
-# pylint: disable=too-many-lines
-
 import argparse
 import getpass
 import json

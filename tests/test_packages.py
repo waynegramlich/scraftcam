@@ -41,6 +41,7 @@ class TestPackages(unittest.TestCase):
         # Temporary pins and packages directory (`enterContext()` cleans
         # it up, which `pylint` does not know).
         directory: tempfile.TemporaryDirectory[str] = (
+            # Removed when the test ends.
             tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         )
         self.top: Path = Path(self.enterContext(directory))

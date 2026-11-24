@@ -290,6 +290,7 @@ def make_handler(server: Server) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         """Passes each `POST /mcp` to the server."""
 
+        # `http.server` calls it by this name.
         def do_POST(self) -> None:  # pylint: disable=invalid-name
             """Answer one posted JSON-RPC message (the name is
             `http.server`'s)."""
@@ -318,13 +319,12 @@ def make_handler(server: Server) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(data)
 
+        # `http.server` calls it by this name.
         def do_GET(self) -> None:  # pylint: disable=invalid-name
             """Refuse the event stream: none is offered (#500)."""
             self.send_error(405)
 
-        def log_message(  # pylint: disable=arguments-differ
-            self, format: str, *args: object
-        ) -> None:
+        def log_message(self, format: str, *args: object) -> None:
             """Keep quiet: the GUI's terminal is the user's."""
             del format, args
 
