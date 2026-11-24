@@ -3,7 +3,9 @@
 Made 2026-11-22 from `T.tfo~6.5` #460; renamed from "Shop Directory
 Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
 (closed).  Issue numbers are shared by every task; the next is in
-`TASKS/Issue_Counter.md`.  Waits for `T.gc~6.10` (#634).
+`TASKS/Issue_Counter.md`.  `T.gc~6.10` closed 2026-11-24: next is
+#S1 (#680), then `T.sa~6.11`, then #S2 on.  The letters table is
+`gui/outline_letters.LettersTable` (for #631, #S6).
 
 ## Decided 2026-11-24
 

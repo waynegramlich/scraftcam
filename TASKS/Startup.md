@@ -11,8 +11,6 @@
 @6.5_Tools_from_Outlines/Details.md
 @6.8_Tools_Outlines_and_the_Shop_Layout/Details.md
 @6.8_Tools_Outlines_and_the_Shop_Layout/Context.md
-@6.10_GUI_Cleanup/Details.md
-@6.10_GUI_Cleanup/Context.md
 @6.11_Support_Assemblies/Details.md
 @6.11_Support_Assemblies/Context.md
 @7_MCP_Interface/Details.md

@@ -64,3 +64,9 @@ Printing McMaster-Carr pages to PDF, "Save Page As...", `cups-pdf`;
 catalogs under `~/.scraftcam/` or in the HMI; `catxtract` in a panel;
 marking the whole catalog; `files/` (now `pages/`);
 `index_first`/`index_last` (now `index_pages`).
+
+## From `T.gc~6.10` (closed 2026-11-24)
+
+* #623 deferred (the user): #606's in-panel prompts placed at the
+  exact part, and [Pages] tried with a real PDF, once more tools use
+  the catalog.
