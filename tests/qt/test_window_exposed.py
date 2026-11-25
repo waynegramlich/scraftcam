@@ -13,6 +13,7 @@ from scraftcam.exposed import client, exposed
 from scraftcam.exposed.exposed import ExposedError
 from scraftcam.gui import window, window_exposed
 from scraftcam.gui.app import App
+from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
 # What the module exposes, under the names a caller uses.
@@ -229,7 +230,7 @@ class RunTest(unittest.TestCase):
                 "-m",
                 "scraftcam.run",
                 "--headless",
-                "--shop=examples/shop",
+                f"--shop={EXAMPLE_SHOP}",
                 "--pages=/nowhere/catalog.toml",
             ],
             capture_output=True,

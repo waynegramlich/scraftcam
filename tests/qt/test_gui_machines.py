@@ -13,10 +13,11 @@ from scraftcam.gui.app import App
 from scraftcam.gui.machines import Due, MachineControl, Report, no_report
 from scraftcam.gui.views import Panel
 from scraftcam.gui.window import NewMachineDialog, Window
+from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
 # The example shop, and its `machines/` directory's item.
-SHOP: Path = Path("examples/shop")
+SHOP: Path = EXAMPLE_SHOP
 
 
 # Function `machines_node()`:

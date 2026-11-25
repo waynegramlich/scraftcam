@@ -19,6 +19,7 @@ from scraftcam.gui.outline_polygon import (
 from scraftcam.gui.values import letter_values, real_corners
 from scraftcam.model import Length
 from scraftcam.pybind.scraftpybind import JSON, PyBind, connect
+from scraftcam.shops import EXAMPLE_SHOP
 from scraftcam.solid import (
     Layer,
     RoundedPolygon,
@@ -28,7 +29,7 @@ from scraftcam.solid import (
 from tests.solidcraft_checks import totals
 
 # The example drill's outline file.
-DRILL: Path = Path("examples/shop/tools/drill.outline.toml")
+DRILL: Path = EXAMPLE_SHOP / "tools/drills/drill.outline.toml"
 
 # Whether a headless SolidCraft can be run.
 HAVE_SOLIDCRAFT: bool = shutil.which("solidcraft-cli") is not None

@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from scraftcam.gui import tree
+from scraftcam.shops import EXAMPLE_SHOP
 
 
 # Function `labels()`:
@@ -99,7 +100,7 @@ class ShopTreeTest(unittest.TestCase):
 
     def test_about(self) -> None:
         """Directories and items say what they are, for tooltips (#80)."""
-        shop: Path = Path(__file__).parents[2] / "examples" / "shop"
+        shop: Path = EXAMPLE_SHOP
         root: tree.Node = tree.shop_tree(shop / "shop.toml")
         about: dict[str, str] = {
             child.name: child.about for child in root.children

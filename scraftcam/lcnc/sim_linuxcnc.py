@@ -64,7 +64,7 @@ from typing import Protocol
 import linuxcnc  # type: ignore[import-not-found]
 
 from ..pybind.scraftpybind import SolidCraftError
-from ..shops import read, tool_table_text
+from ..shops import EXAMPLE_SHOP_FILE, read, tool_table_text
 from . import sim_solidcraft
 
 # How often to poll (seconds).
@@ -80,9 +80,7 @@ SPEED: float = 10.0
 MATERIAL: str = "6061 aluminum"
 
 # The shop and machine whose tools are loaded, by default.
-SHOP_FILE: Path = (
-    Path(__file__).resolve().parents[2] / "examples/shop/shop.toml"
-)
+SHOP_FILE: Path = EXAMPLE_SHOP_FILE
 MACHINE: str = "Shop mill"
 
 # The machine coordinates (inches) of the program's zero, by default:

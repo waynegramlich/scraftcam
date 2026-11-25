@@ -16,8 +16,8 @@ rest, `_Scanner` finds the line of every key, since no TOML library
 keeps line numbers once a file is parsed.
 
 ```
-python3 -m scraftcam.shops check examples/shop/shop.toml
-python3 -m scraftcam.shops json examples/shop/shop.toml
+python3 -m scraftcam.shops check scraftcam/example_shop/shop.toml
+python3 -m scraftcam.shops json scraftcam/example_shop/shop.toml
 python3 -m scraftcam.shops markdown > Shops.md
 ```
 """
@@ -477,6 +477,50 @@ TOOL_KINDS: tuple[str, ...] = (
 # (controller templates first), each
 # with the kinds of file it holds.
 SHOP_FILE: str = "shop.toml"
+
+# The example shop, the "Developers Shop" (`T.emsagc~5.2` #64), in the
+# package, so it ships with it (`T.toasl~6.8` #433, #438, #716): the
+# one place that says where it is.
+EXAMPLE_SHOP: Path = Path(__file__).resolve().parent / "example_shop"
+EXAMPLE_SHOP_FILE: Path = EXAMPLE_SHOP / SHOP_FILE
+
+# A shop in the package is read only, so that it ships as it is
+# (#683); a developer's checkout lets the GUI change it while this
+# file, which `.gitignore` and `.hgignore` keep out, is in the shop
+# (#717).
+PACKAGE: Path = Path(__file__).resolve().parent
+ALLOW_EDITS: str = ".allow_edits"
+
+
+# Function `is_read_only()`:
+def is_read_only(path: Path, *, package: Path = PACKAGE) -> bool:
+    """Return whether a shop's file (or directory) may not be changed.
+
+    A path in the package is read only (#683), unless it is in a
+    shop there holding `ALLOW_EDITS` (#717); everything else may be
+    changed.
+
+    Arguments:
+    * `path` (`Path`): A file or directory of a shop.
+    * `package` (`Path`):
+      The package's directory (tests give a scratch one).
+
+    Returns:
+    * (`bool`): True when the GUI must not change it.
+    """
+    where: Path = path.resolve()
+    top: Path = package.resolve()
+    if not where.is_relative_to(top):
+        return False
+    parent: Path
+    for parent in (where, *where.parents):
+        if parent == top:
+            break
+        if (parent / SHOP_FILE).is_file():
+            return not (parent / ALLOW_EDITS).exists()
+    return True
+
+
 SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("controllers", ("controller",)),
     ("tool_materials", ("tool_material",)),
@@ -487,15 +531,20 @@ SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("catalogs", ("catalog",)),
 )
 
-# Where a directory's items are, when not its own `*.toml` files: a
-# catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.c~6.3` #43).
+# Where a directory's items are, when not only its own `*.toml`
+# files: a catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.c~6.3`
+# #43); a tool may be in a directory of its kind, beside the kind's
+# outline file, as `tools/drills/` (`T.toasl~6.8` #711).
 CATALOG: str = "catalog.toml"
 
 # The outline editor's files (`T.oe~6.2` #S4), kept beside the
 # items in `tools/` and `tooling/`; not items themselves.
 OUTLINE_SUFFIX: str = ".outline.toml"
 CATALOG_PAGES: str = "pages"
-ITEM_PATTERNS: dict[str, str] = {"catalogs": f"*/*/{CATALOG}"}
+ITEM_PATTERNS: dict[str, tuple[str, ...]] = {
+    "catalogs": (f"*/*/{CATALOG}",),
+    "tools": ("*.toml", "*/*.toml"),
+}
 
 
 # Function `_tool_fields()`:
@@ -2042,6 +2091,8 @@ shop/
   machines/shop_mill.toml     a machine, with its tool table (`machine`)
   tool_materials/carbide.toml what tools are made of (`tool_material`)
   tools/1_4_in_end_mill.toml  a tool (`end_mill`, `drill`, ...)
+  tools/drills/              a kind's directory: its tools, beside
+    drill.outline.toml        the kind's outline (#711)
   tooling/grid_plate.toml     work holding (`grid_plate`)
   stock_materials/cutting_data.toml   how to cut (`materials`)
   stock_materials/6061_aluminum.toml  a material cut (`material`)
@@ -2059,7 +2110,7 @@ shop/
   name.  Every other table is written in place.
 * The reader fills in the shop's `machines`, `tools`, `tooling` and
   `materials` from the directories.
-* The example shop is `examples/shop/`.
+* The example shop is `scraftcam/example_shop/`.
 
 ### The First Line
 
@@ -2681,8 +2732,15 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
         kinds: tuple[str, ...]
         for directory, kinds in SHOP_DIRECTORIES:
             path: Path
-            pattern: str = ITEM_PATTERNS.get(directory, "*.toml")
-            for path in sorted((self.directory / directory).glob(pattern)):
+            patterns: tuple[str, ...] = ITEM_PATTERNS.get(
+                directory, ("*.toml",)
+            )
+            paths: list[Path] = sorted(
+                path
+                for pattern in patterns
+                for path in (self.directory / directory).glob(pattern)
+            )
+            for path in paths:
                 if path.name.endswith(OUTLINE_SUFFIX):
                     continue  # A drawing, not an item.
                 item: dict[str, object] | None = self.item(path, kinds)

@@ -38,7 +38,7 @@ from .pybind.scraftpybind import (
     PyBind,
     connect,
 )
-from .shops import ANGLE, LENGTH, measure, read
+from .shops import ANGLE, EXAMPLE_SHOP_FILE, LENGTH, measure, read
 from .tooling.cutter_models import MM_PER_INCH
 from .tooling.mount import (
     MachineViseLayer,
@@ -77,7 +77,7 @@ TOLERANCE: float = 1.0e-6
 
 # The shop whose tooling the JSON can name, chosen by `main()`
 # (`use_shop()`).
-SHOP: Path = Path(__file__).resolve().parents[1] / "examples/shop/shop.toml"
+SHOP: Path = EXAMPLE_SHOP_FILE
 
 
 # Class `Placement`:

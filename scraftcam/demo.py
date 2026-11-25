@@ -7,7 +7,7 @@ radius, with its top edges beveled (and the hole's rounded over).
 A roughing end mill clears the material, when the machine has one,
 and the end mill finishes the walls and floors.
 The machine and its tools come from the example shop
-(`examples/shop/`), and its tools are named, not numbered: the places
+(`scraftcam/example_shop/`), and its tools are named, not numbered: the places
 the end mill goes down are drilled first, with the largest drill
 smaller than it.  With a SolidCraft GUI's control port (`solidcraft --control
 PORT`) or `headless`, it also models the plate in SolidCraft:
@@ -45,16 +45,14 @@ from .pybind.scraftpybind import (
     Transport,
     connect_cli,
 )
-from .shops import cnc_machine, read
+from .shops import EXAMPLE_SHOP_FILE, cnc_machine, read
 from .tooling.shop_registries import use_shop
 
 # SolidCraft's sketch coordinates are millimeters.
 MM_PER_INCH: float = 25.4
 
 # The shop, the machine in it that cuts the plate, and the end mill.
-SHOP_FILE: Path = (
-    Path(__file__).resolve().parents[1] / "examples/shop/shop.toml"
-)
+SHOP_FILE: Path = EXAMPLE_SHOP_FILE
 MACHINE: str = "Shop mill"
 
 # The material the demonstration cuts, unless `--material` says.

@@ -205,7 +205,8 @@ class TestEndToEnd(unittest.TestCase):
         cls.port = free_port()
         cls.hmi = subprocess.Popen(
             [sys.executable, "-m", "scraftcam.run", "--headless",
-             "--shop", "examples/shop", "--hmi", "--mcp", str(cls.port)],
+             "--shop", str(shops.EXAMPLE_SHOP), "--hmi",
+             "--mcp", str(cls.port)],
             cwd=HERE,
         )  # fmt: skip
         end: float = time.monotonic() + STEP_TIME
@@ -374,7 +375,7 @@ class TestEndToEnd(unittest.TestCase):
             table = lcnc.stat("tool_table")["tool_table"]
             g5x = lcnc.stat("g5x_offset")["g5x_offset"][:3]
         tools = {tool["id"] for tool in table if tool["id"] > 0}
-        shop = shops.read(HERE / "examples/shop/shop.toml")
+        shop = shops.read(shops.EXAMPLE_SHOP_FILE)
         self.assertEqual(tools, set(shops.loaded_tools(shop, "Shop mill")))
         self.assertEqual([round(value, 4) for value in g5x], [4.0, 3.0, -6.0])
         self.assertEqual(self.shown()["speed"], "10x")

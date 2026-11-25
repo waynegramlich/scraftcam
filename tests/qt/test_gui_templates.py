@@ -11,10 +11,11 @@ from scraftcam.gui.app import App
 from scraftcam.gui.fields import read_item
 from scraftcam.gui.tree import FILE, Node
 from scraftcam.gui.views import Panel
+from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
 # The example shop, and the new `tool_change` the tests give LinuxCNC.
-SHOP: Path = Path("examples/shop")
+SHOP: Path = EXAMPLE_SHOP
 
 NEW: str = "T{number:02d} M6"
 

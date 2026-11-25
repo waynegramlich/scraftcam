@@ -12,6 +12,9 @@ placed in an assembly (`T.rps~6.6`):
   rotation about the child's own origin, then a translation), so
   assemblies nest.
 
+Every solid answers `solids()` and `leaves()` as an assembly does
+(#694): a plain part holds itself, one leaf at the origin.
+
 A `RoundedPolygon` here is immutable and planar: it has no Z, depth
 or children, which the solid that uses it supplies.  `flip()` and
 `rotate()` make new ones.  It is measured in millimeters, while its
@@ -209,6 +212,31 @@ class Solid:
         raise NotImplementedError(
             f"{type(self).__name__} does not say how to build {self.name}"
         )
+
+    # Method `Solid.solids()`:
+    def solids(self) -> "dict[str, Solid]":
+        """Return every solid in it, by name: a part holds only itself.
+
+        Every solid answers as an assembly does (#694), so a tool of
+        one part and a tool of many are walked alike;
+        `SolidAssembly` gives what it holds as well.
+
+        Returns:
+        * (`dict[str, Solid]`): The solids, in the order first met.
+        """
+        return {self.name: self}
+
+    # Method `Solid.leaves()`:
+    def leaves(self) -> "list[Leaf]":
+        """Return every part, flattened: a part is its own one leaf.
+
+        The leaf is at the origin, in the part's own color (#694);
+        `SolidAssembly` flattens what it holds instead.
+
+        Returns:
+        * (`list[Leaf]`): The parts, in order.
+        """
+        return [Leaf(self, Placement(), self.appearance, (self.name,))]
 
 
 # Class `SolidStep`:
@@ -999,11 +1027,12 @@ class Placed:
 # Class `Leaf`:
 @dataclass(frozen=True, slots=True)
 class Leaf:
-    """A part of an assembly, flattened: where it is and its color.
+    """A part of a solid, flattened: where it is and its color.
 
     Attributes:
     * `solid` (`Solid`): The part (never an assembly).
-    * `placement` (`Placement`): Where it is in the top assembly.
+    * `placement` (`Placement`):
+      Where it is in the top assembly (the origin for a plain part).
     * `appearance` (`Appearance | None`):
       Its color, or `None` for SolidCraft's default.
     * `path` (`tuple[str, ...]`):

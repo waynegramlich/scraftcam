@@ -14,17 +14,21 @@ from pathlib import Path
 from scraftcam.gui.outline_file import Outline, outline_from_text
 from scraftcam.gui.outline_polygon import outline_revolved
 from scraftcam.gui.values import set_letters
-from scraftcam.shops import DRILL_LETTERS, read
+from scraftcam.shops import (
+    DRILL_LETTERS,
+    EXAMPLE_SHOP,
+    EXAMPLE_SHOP_FILE,
+    read,
+)
 from scraftcam.solid import SolidRevolved
 from scraftcam.tooling.cutter_models import (
-    EXAMPLE_SHOP,
     profile,
     shop_tools,
 )
 
 # The kind's outline drawing.
 DRILL: Path = Path(__file__).resolve().parents[2] / (
-    "examples/shop/tools/drill.outline.toml"
+    EXAMPLE_SHOP / "tools/drills/drill.outline.toml"
 )
 
 # Millimeters per inch: `cutter_models` works in inches.
@@ -109,7 +113,7 @@ class TestDrillOutline(unittest.TestCase):
         """Volume, radius and length agree for each example drill."""
         drills: list[dict[str, object]] = [
             tool
-            for key, tool in shop_tools(read(EXAMPLE_SHOP))
+            for key, tool in shop_tools(read(EXAMPLE_SHOP_FILE))
             if key == "drills"
         ]
         self.assertGreaterEqual(len(drills), 2)

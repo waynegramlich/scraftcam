@@ -31,6 +31,8 @@ shop/
   machines/shop_mill.toml     a machine, with its tool table (`machine`)
   tool_materials/carbide.toml what tools are made of (`tool_material`)
   tools/1_4_in_end_mill.toml  a tool (`end_mill`, `drill`, ...)
+  tools/drills/              a kind's directory: its tools, beside
+    drill.outline.toml        the kind's outline (#711)
   tooling/grid_plate.toml     work holding (`grid_plate`)
   stock_materials/cutting_data.toml   how to cut (`materials`)
   stock_materials/6061_aluminum.toml  a material cut (`material`)
@@ -48,7 +50,7 @@ shop/
   name.  Every other table is written in place.
 * The reader fills in the shop's `machines`, `tools`, `tooling` and
   `materials` from the directories.
-* The example shop is `examples/shop/`.
+* The example shop is `scraftcam/example_shop/`.
 
 ### The First Line
 

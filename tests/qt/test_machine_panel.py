@@ -28,7 +28,7 @@ from tests.qt_app import make_hmi
 
 # The project's top, its example shop and its demo program.
 TOP: Path = Path(__file__).resolve().parents[2]
-SHOP_TOML: Path = TOP / "examples/shop/shop.toml"
+SHOP_TOML: Path = shops.EXAMPLE_SHOP_FILE
 DEMO: Path = TOP / "demo.ngc"
 
 # The constants that `FakeClient` answers with.

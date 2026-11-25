@@ -42,9 +42,9 @@ the operator with Set Origin:
 
 ```
 python3 -m scraftcam.lcnc.serve_linuxcnc &
-python3 -m scraftcam.run --shop examples/shop --program demo.ngc
+python3 -m scraftcam.run --shop scraftcam/example_shop --program demo.ngc
 # With no LinuxCNC:
-python3 -m scraftcam.run --shop examples/shop --program demo.ngc --dry-run
+python3 -m scraftcam.run --shop scraftcam/example_shop --program demo.ngc --dry-run
 # No window, for tests (driven over MCP, `hmi_exposed.py`):
 python3 -m scraftcam.run --headless --program demo.ngc --mcp 8765
 ```

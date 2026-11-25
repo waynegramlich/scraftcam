@@ -555,6 +555,32 @@ class TestSolidRoundedPolygon(unittest.TestCase):
 
 
 # Class `TestSolidAssembly`:
+class TestPlainSolid(unittest.TestCase):
+    """A plain solid answers as a one-part assembly does (#694)."""
+
+    def test_solids(self) -> None:
+        """A part holds only itself."""
+        plate: SolidRoundedPolygon = jaw()
+        self.assertEqual(plate.solids(), {"jaw": plate})
+
+    def test_leaves(self) -> None:
+        """A part is one leaf, at the origin, in its own color."""
+        red: Appearance = Appearance(1.0, 0.0, 0.0)
+        step: SolidStep = SolidStep("bit", Path("bit.step"), appearance=red)
+        leaves: list[Leaf] = step.leaves()
+        self.assertEqual(leaves, [Leaf(step, Placement(), red, ("bit",))])
+
+    def test_same_as_one_part_assembly(self) -> None:
+        """Its leaf matches the part's leaf in a one-part assembly."""
+        plate: SolidRoundedPolygon = jaw()
+        alone: Leaf = plate.leaves()[0]
+        held: Leaf = SolidAssembly("holder", (Placed(plate),)).leaves()[0]
+        self.assertEqual(
+            (alone.solid, alone.placement, alone.appearance),
+            (held.solid, held.placement, held.appearance),
+        )
+
+
 class TestSolidAssembly(unittest.TestCase):
     """Assemblies nest, flatten, and pass colors down."""
 

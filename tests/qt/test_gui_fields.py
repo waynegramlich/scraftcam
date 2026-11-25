@@ -12,15 +12,12 @@ from PySide6.QtWidgets import QLineEdit
 from scraftcam.gui import fields
 from scraftcam.gui.tree import FILE, Node
 from scraftcam.gui.views import Panel, bad_style
+from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
 # An example tool, copied before it is edited.
 TOOL: Path = (
-    Path(__file__).parents[2]
-    / "examples"
-    / "shop"
-    / "tools"
-    / "1_16_in_radius_carbide_corner_rounding_mill.toml"
+    EXAMPLE_SHOP / "tools" / "1_16_in_radius_carbide_corner_rounding_mill.toml"
 )
 
 

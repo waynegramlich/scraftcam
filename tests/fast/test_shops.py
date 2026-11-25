@@ -13,7 +13,7 @@ from scraftcam import shops
 KIND_MACHINE: str = 'kind = "machine"'
 
 # The example shop.
-EXAMPLES: Path = Path(__file__).parents[2] / "examples" / "shop"
+EXAMPLES: Path = shops.EXAMPLE_SHOP
 
 
 def lines_of(text: str) -> dict[shops.KeyPath, int]:
@@ -179,7 +179,7 @@ class TestReader(CopiedShop):
     END_MILL: str = "tools/1_4_in_2_flute_carbide_end_mill.toml"
     ROUTER_MILL: str = "tools/1_2_in_2_flute_carbide_end_mill.toml"
     BALL_MILL: str = "tools/1_4_in_2_flute_hss_ball_end_mill.toml"
-    DRILL: str = "tools/15_64_in_hss_jobber_drill.toml"
+    DRILL: str = "tools/drills/15_64_in_hss_jobber_drill.toml"
 
     def test_example(self) -> None:
         """The example reads, its directories filled in."""
@@ -193,6 +193,16 @@ class TestReader(CopiedShop):
             mill["tool_table"]["tools"]["4"], "15/64 in HSS jobber drill"
         )
         self.assertEqual(len(shop["tools"][0]["end_mills"]), 7)
+
+        # The drills are in their kind's directory, `tools/drills/`,
+        # beside `drill.outline.toml`, which is not an item (#711).
+        self.assertEqual(
+            [drill["name"] for drill in shop["tools"][0]["drills"]],
+            ["15/64 in HSS jobber drill", "1/8 in cobalt jobber drill"],
+        )
+        self.assertTrue(
+            (EXAMPLES / "tools/drills/drill.outline.toml").is_file()
+        )
         self.assertEqual(
             shop["tooling"][0]["grid_plates"][0]["name"], "Grid plate"
         )

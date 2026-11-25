@@ -17,7 +17,7 @@ from tests import qt_app
 from tests.qt.test_catalog_pdf import READY, write_pdf
 
 # The example shop.
-SHOP: Path = Path("examples/shop")
+SHOP: Path = shops.EXAMPLE_SHOP
 
 
 class IgnoreTest(unittest.TestCase):

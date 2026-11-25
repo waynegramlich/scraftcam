@@ -152,7 +152,7 @@ The code is the package `scraftcam/`:
   (a half profile turned, for round tools) and `SolidAssembly` (solids
   placed by position and quaternion, nested in SolidCraft's tree).
   `gui/outline_polygon.py` makes them from outline files.
-* `shops.py` (with `Shops.md` and `examples/shop/`): the shop
+* `shops.py` (with `Shops.md` and `scraftcam/example_shop/`): the shop
   description files, their reader (every problem reported at its file
   and line), and the example shop that the demonstration uses.
 * `home.py`: `~/.scraftcam/`, where `scraftcam` keeps everything it

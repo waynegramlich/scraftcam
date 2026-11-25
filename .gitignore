@@ -31,3 +31,5 @@ dist/
 scraftcam/pybind/examples/*.step
 # Files for the browser to read (snap Firefox cannot read dot directories).
 scratch/
+# Lets the GUI edit the example shop; never committed (T.toasl~6.8 #717).
+scraftcam/example_shop/.allow_edits

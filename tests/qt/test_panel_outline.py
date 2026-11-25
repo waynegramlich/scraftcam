@@ -11,10 +11,11 @@ from scraftcam.gui.outline_editor import Drawing, OutlineEditor
 from scraftcam.gui.outline_file import outline_text
 from scraftcam.gui.tree import FILE, Node
 from scraftcam.gui.views import Panel, outline_of
+from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
 # The example shop's tools, an end mill and its kind's outline.
-TOOLS: Path = Path(__file__).resolve().parents[2] / "examples/shop/tools"
+TOOLS: Path = EXAMPLE_SHOP / "tools"
 TOOL: str = "1_4_in_2_flute_carbide_end_mill.toml"
 OUTLINE: str = "end_mill.outline.toml"
 

@@ -42,7 +42,7 @@ is driven over `--mcp` (`hmi_exposed.py`).  Nothing closes while the
 machine runs, or its spindle or coolant is on (#56, #609):
 
 ```
-python3 -m scraftcam.run --shop examples/shop --program demo.ngc \
+python3 -m scraftcam.run --shop scraftcam/example_shop --program demo.ngc \
     --solidcraft 8080
 ```
 

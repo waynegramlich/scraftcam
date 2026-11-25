@@ -14,6 +14,7 @@ from scraftcam.gui.machines import Due, MachineControl
 from scraftcam.gui.theme import colors
 from scraftcam.gui.views import Panel, TreeWatcher
 from scraftcam.gui.window import EXIT, NewShopDialog, Window
+from scraftcam.shops import EXAMPLE_SHOP, EXAMPLE_SHOP_FILE
 from tests import qt_app
 
 
@@ -257,6 +258,37 @@ class WindowTest(unittest.TestCase):
                 model.say("later")
                 window.panels[0].edit_button.click()
                 self.assertEqual(model.latest().text, "later")
+
+    def test_read_only_shop(self) -> None:
+        """A read only shop: [Allow Changes] greyed, nothing new (#683)."""
+        model: App = App(EXAMPLE_SHOP_FILE, None)
+        window: Window = Window(model)
+        drill: Path = (
+            EXAMPLE_SHOP / "tools/drills/15_64_in_hss_jobber_drill.toml"
+        )
+        item = window.tree.item_at_path(drill)
+        assert item is not None
+
+        # Read only, whatever `.allow_edits` says in this checkout.
+        with (
+            mock.patch("scraftcam.gui.views.is_read_only", return_value=True),
+            mock.patch("scraftcam.gui.app.is_read_only", return_value=True),
+        ):
+            window.select_item(item)
+            panel: Panel = window.panels[0]
+            self.assertFalse(panel.edit_row.isHidden())
+            self.assertFalse(panel.editing_box.isEnabled())
+            self.assertFalse(panel.editing)
+            with self.assertRaises(ValueError):
+                model.new_machine("x", "mill", "linuxcnc")
+
+        # A shop that may be changed: [Allow Changes] works.
+        with mock.patch(
+            "scraftcam.gui.views.is_read_only", return_value=False
+        ):
+            window.select_item(item)
+            panel.set_editing(False)
+            self.assertTrue(panel.editing_box.isEnabled())
 
     def test_watcher(self) -> None:
         """A file added, broken or removed outside shows in the tree."""

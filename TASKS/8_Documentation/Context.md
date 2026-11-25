@@ -18,3 +18,9 @@ numbers are shared by every task; the next is in
   it lands.
 * `README.md` names `tests.test_*`: now `tests.GROUP.test_*`
   (`fast`, `qt`, `solidcraft`, `lcnc`; `T.gc~6.10` #622).
+* `T.toasl~6.8` (2026-11-24): the example shop is now
+  `scraftcam/example_shop/` (read only; `.allow_edits` for
+  developers, #717); `~/.scraftcam/settings.toml` (`settings.py`);
+  tools in a directory per kind (`tools/drills/`, #711).  Paths
+  are updated; describe the layout, [Copy Shop] and the settings
+  once #S1 is done.

@@ -66,6 +66,7 @@ from ..pybind.scraftpybind import JSON, PyBind, connect
 from ..shops import (
     ANGLE,
     CNC_KINDS,
+    EXAMPLE_SHOP_FILE,
     LENGTH,
     ShopError,
     check_tool,
@@ -147,9 +148,7 @@ FLUTE_LIFT: float = 0.01
 HELIX_POINTS_PER_TURN: int = 12
 
 # The example shop.
-EXAMPLE_SHOP: Path = (
-    Path(__file__).resolve().parents[2] / "examples/shop/shop.toml"
-)
+EXAMPLE_SHOP: Path = EXAMPLE_SHOP_FILE
 
 
 # Function `_size()`:

@@ -26,7 +26,13 @@ from types import ModuleType
 from typing import TYPE_CHECKING
 
 from ..packages import require
-from ..shops import KINDS, OUTLINE_SUFFIX, not_initialized, vendor_triple
+from ..shops import (
+    KINDS,
+    OUTLINE_SUFFIX,
+    is_read_only,
+    not_initialized,
+    vendor_triple,
+)
 from .app import App
 
 # Only for its type: loaded by name when an outline is shown.
@@ -747,6 +753,17 @@ class Panel(QFrame):
             and not self.machines
             and self.summary is None
             and edit_path(self.node) is not None
+        )
+        # A shop in the package is never changed (#683, #717).
+        locked: bool = self.node is not None and is_read_only(self.node.path)
+        if locked and self.editing:
+            self.set_editing(False)
+            return
+        self.editing_box.setEnabled(not locked)
+        self.editing_box.setToolTip(
+            "The example shop is read only: [Copy Shop] makes one of your own"
+            if locked
+            else "Let this item be changed, here or with [Edit TOML File]"
         )
         self.editing_box.blockSignals(True)
         self.editing_box.setChecked(self.editing)

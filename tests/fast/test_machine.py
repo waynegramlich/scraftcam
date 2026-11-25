@@ -4,13 +4,11 @@ import unittest
 from pathlib import Path
 
 from scraftcam.machine import Machine, ToolEntry
-from scraftcam.shops import cnc_machine, read
+from scraftcam.shops import EXAMPLE_SHOP_FILE, cnc_machine, read
 from tests.fast.test_gcode import machine
 
 # The example shop.
-SHOP_FILE: Path = (
-    Path(__file__).resolve().parents[2] / "examples/shop/shop.toml"
-)
+SHOP_FILE: Path = EXAMPLE_SHOP_FILE
 
 
 # Class `TestMachine`:

@@ -28,8 +28,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..shop_writer import item_text
-from ..shops import CATALOG, CATALOG_PAGES, FORMAT_VERSION, SHOP_FILE
+from ..shops import (
+    CATALOG,
+    CATALOG_PAGES,
+    FORMAT_VERSION,
+    SHOP_FILE,
+    is_read_only,
+)
 from .tree import DESIGN_LIMIT, Node, design_tree, shop_tree
+
+# Why a shop in the package is not changed (#683, #717).
+READ_ONLY: str = (
+    "the example shop is read only: [Copy Shop] makes one of your own"
+)
 
 # What the top line shows for a shop or a design that is missing.
 NONE_NAME: str = "(none)"
@@ -637,12 +648,14 @@ class App:  # pylint: disable=too-many-instance-attributes
         * (`Path`): The new machine's file.
 
         Raises:
-        * `ValueError`: With no shop, no such template, an answer not
-          allowed, or a machine there already.
+        * `ValueError`: With no shop, a read only one, no such
+          template, an answer not allowed, or a machine there already.
         * `OSError`: If it can not be written.
         """
         if self.shop is None:
             raise ValueError("there is no shop")
+        if is_read_only(self.shop):
+            raise ValueError(READ_ONLY)
         templates: dict[str, Path] = controller_templates(self.shop)
         if template not in templates:
             raise ValueError(f'no controller template "{template}"')
@@ -676,12 +689,14 @@ class App:  # pylint: disable=too-many-instance-attributes
         * (`Path`): The new `catalog.toml`.
 
         Raises:
-        * `ValueError`: With no shop, an empty answer, no such PDF, or
-          a catalog there already.
+        * `ValueError`: With no shop, a read only one, an empty
+          answer, no such PDF, or a catalog there already.
         * `OSError`: If it can not be written.
         """
         if self.shop is None:
             raise ValueError("there is no shop")
+        if is_read_only(self.shop):
+            raise ValueError(READ_ONLY)
         if not pdf.is_file():
             raise ValueError(f"{pdf} is not a file")
         text: str = new_catalog_text(vendor, edition, pdf.name, pages)

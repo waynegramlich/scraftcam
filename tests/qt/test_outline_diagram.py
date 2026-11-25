@@ -28,8 +28,9 @@ from scraftcam.gui.outline_file import (
     Outline,
     outline_from_text,
 )
+from scraftcam.shops import EXAMPLE_SHOP
 
-DRILL: Path = Path("examples/shop/tools/drill.outline.toml")
+DRILL: Path = EXAMPLE_SHOP / "tools/drills/drill.outline.toml"
 
 
 # Function `plain_drill()`:

@@ -13,10 +13,9 @@ from pathlib import Path
 from scraftcam.gui.outline_file import Outline, outline_from_text
 from scraftcam.gui.outline_polygon import outline_revolved
 from scraftcam.gui.values import set_letters
-from scraftcam.shops import read
+from scraftcam.shops import EXAMPLE_SHOP, EXAMPLE_SHOP_FILE, read
 from scraftcam.solid import SolidRevolved
 from scraftcam.tooling.cutter_models import (
-    EXAMPLE_SHOP,
     profile,
     shop_tools,
 )
@@ -24,7 +23,7 @@ from tests.qt.test_drill_outline import MM, assert_same, turned
 
 # The kind's outline drawing.
 CHAMFER_MILL: Path = Path(__file__).resolve().parents[2] / (
-    "examples/shop/tools/chamfer_mill.outline.toml"
+    EXAMPLE_SHOP / "tools/chamfer_mill.outline.toml"
 )
 
 # A chamfer mill's shop keys and the outline's letters (the shop
@@ -70,7 +69,7 @@ class TestChamferMillOutline(unittest.TestCase):
         """Volume, radius and length agree for each chamfer mill."""
         mills: list[dict[str, object]] = [
             tool
-            for key, tool in shop_tools(read(EXAMPLE_SHOP))
+            for key, tool in shop_tools(read(EXAMPLE_SHOP_FILE))
             if key == "chamfer_mills"
         ]
         self.assertGreaterEqual(len(mills), 1)
