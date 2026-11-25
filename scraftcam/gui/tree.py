@@ -34,6 +34,7 @@ from ..shops import (
     KINDS,
     OUTLINE_SUFFIX,
     SHOP_DIRECTORIES,
+    SHOP_FILE,
     tool_label,
     tool_order,
 )
@@ -52,6 +53,9 @@ DESIGN: str = "design"
 PYTHON: str = "python"
 PACKAGE: str = "package"
 ERROR: str = "error"
+# A kind's outline file, opened in the outline editor (`T.toasl~6.8`
+# #615, #730).
+OUTLINE: str = "outline"
 
 # Directories never shown.
 SKIPPED: tuple[str, ...] = ("__pycache__",)
@@ -65,8 +69,8 @@ class Node:  # pylint: disable=too-many-instance-attributes
 
     Attributes:
     * `name` (`str`): What the tree shows, before its kind.
-    * `kind` (`str`): `SHOP`, `DIRECTORY`, `FILE`, `DESIGN`,
-      `PYTHON`, `PACKAGE` or `ERROR`.
+    * `kind` (`str`): `SHOP`, `DIRECTORY`, `FILE`, `OUTLINE`,
+      `DESIGN`, `PYTHON`, `PACKAGE` or `ERROR`.
     * `path` (`Path`): Its file or directory.
     * `error` (`str`): Why it does not read cleanly, or "".
     * `children` (`list[Node]`): The items under it.
@@ -242,6 +246,43 @@ def entries(directory: Path) -> list[Path]:
     except OSError:
         return []
     return sorted(found, key=order)
+
+
+# Function `outline_node()`:
+def outline_node(path: Path) -> Node:
+    """Make a kind's outline file's item: "Drill outline" (#731).
+
+    It sorts first in its directory, before the kind's tools.
+
+    Arguments:
+    * `path` (`Path`): The `KIND.outline.toml`.
+
+    Returns:
+    * (`Node`): Its item.
+    """
+    kind: str = path.name.removesuffix(OUTLINE_SUFFIX)
+    node: Node = Node(kind, OUTLINE, path)
+    node.shown = f"{kind.replace('_', ' ').capitalize()} outline"
+    node.order = ("", 0.0)
+    return node
+
+
+# Function `shop_relative()`:
+def shop_relative(path: Path) -> str:
+    """Return a shop file's path from its shop's top, for tooltips.
+
+    Arguments:
+    * `path` (`Path`): A file or directory in a shop.
+
+    Returns:
+    * (`str`): Such as `tools/drills/drill.outline.toml`; the whole
+      path when no `shop.toml` is above it.
+    """
+    parent: Path
+    for parent in path.parents:
+        if (parent / SHOP_FILE).is_file():
+            return path.relative_to(parent).as_posix()
+    return str(path)
 
 
 # Function `toml_node()`:
@@ -428,7 +469,7 @@ def edit_path(node: Node) -> Path | None:
     * (`Path | None`): The file, or None when there is none to edit.
     """
     if node.kind in (DESIGN, PYTHON) or (
-        node.kind in (ERROR, SHOP, FILE) and node.path.is_file()
+        node.kind in (ERROR, SHOP, FILE, OUTLINE) and node.path.is_file()
     ):
         return node.path
     init: Path = node.path / "__init__.py"
@@ -477,11 +518,9 @@ def shop_children(directory: Path, skip: Path | None = None) -> list[Node]:
             branch.about = about_directory(path.name)
             branch.children = shop_children(path)
             children.append(branch)
-        elif (
-            path.suffix == ".toml"
-            and path != skip
-            and not path.name.endswith(OUTLINE_SUFFIX)  # Until #S7.
-        ):
+        elif path.name.endswith(OUTLINE_SUFFIX):
+            children.append(outline_node(path))
+        elif path.suffix == ".toml" and path != skip:
             children.append(toml_node(path))
 
     # Directories first (as `entries()` gives them), then the files by

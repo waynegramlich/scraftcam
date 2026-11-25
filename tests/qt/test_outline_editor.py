@@ -38,7 +38,7 @@ from scraftcam.gui.dimensions import (
 from scraftcam.gui.hides import HIDE_Y, Hide, across, strip
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_diagram import fillet_arcs, outline_strokes
-from scraftcam.gui.outline_editor import Drawing, OutlineEditor
+from scraftcam.gui.outline_editor import Drawing, OutlineEditor, drawing_from
 from scraftcam.gui.outline_file import PLAIN, Hole, outline_text
 from scraftcam.gui.values import crossings
 from scraftcam.shops import EXAMPLE_SHOP
@@ -1468,7 +1468,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.make_squares()
         self.assertEqual(view.covering(), {0})
         editor.show_message()
-        self.assertIn("hide strip covers", editor.status.text())
+        self.assertIn("hide strip hides a letter", editor.status.text())
         view.toggle_overview()
         self.assertFalse(view.grab().isNull())
         view.drawing.hides[0] = Hide(HIDE_Y, 1, 2, 4.0, 1.0)
@@ -1481,6 +1481,40 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.drawing.hides[0] = Hide(HIDE_Y, 1, 2, low, 1.0)
         self.assertLess(glyph.center().y(), low + 1.2)
         self.assertEqual(view.covering(), {0})
+
+        # A letter far beside the strip, in the stretch it hides, is
+        # hidden too: the strip cuts across the whole drawing (#742).
+        view.drawing.hides[0] = Hide(HIDE_Y, 1, 2, 1.0, 1.0)
+        view.drawing.dimensions[-1] = Dimension(
+            "L", VERTICAL, 1, 2, offset=40.0
+        )
+        view.make_squares()
+        beside = view.measures[-1].letter_box()
+        assert beside is not None
+        self.assertGreater(beside.left(), 30.0)
+        self.assertEqual(view.covering(), {0})
+
+    def test_cut_view_upright(self) -> None:
+        """An upright drill with strips across it draws in the working
+        view, zoomed in (#743: the end pieces overflowed the clip)."""
+        drill: Path = EXAMPLE_SHOP / "tools/drills/drill.outline.toml"
+        drawing: Drawing = drawing_from(drill)
+        self.assertTrue(drawing.hides)
+        editor: OutlineEditor = OutlineEditor(drawing)
+        self.addCleanup(editor.close)
+        editor.resize(900, 1500)
+        editor.show()
+        qt_app.process_events()
+        editor.view.fit()
+        qt_app.process_events()
+        image = editor.view.grab().toImage()
+        dark: int = sum(
+            1
+            for y in range(0, image.height(), 3)
+            for x in range(0, image.width(), 3)
+            if QColor(image.pixel(x, y)).lightness() < 60
+        )
+        self.assertGreater(dark, 100)
 
     def test_hide(self) -> None:
         """[Hide], then a wide drag over the shank: a strip hiding a

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64.8543mm" height="119.8819mm" viewBox="-22.8036 -73.2917 45.7583 84.5833">
+<rect x="-22.8036" y="-73.2917" width="45.7583" height="84.5833" class="paper" fill="white"/>
+<path d="M 0 0 L 5.2917 0 L 5.2917 -21.1667 L 5.2917 -63.5 L 0 -63.5 L 0 0" class="ink" fill="none" stroke="black" stroke-width="0.4233" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 0 L -5.2917 0" class="ink" fill="none" stroke="black" stroke-dasharray="2.1167 1.0583" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.2917 0 L -5.2917 -21.1667" class="ink" fill="none" stroke="black" stroke-dasharray="2.1167 1.0583" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.2917 -21.1667 L -5.2917 -63.5" class="ink" fill="none" stroke="black" stroke-dasharray="2.1167 1.0583" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.2917 -63.5 L 0 -63.5" class="ink" fill="none" stroke="black" stroke-dasharray="2.1167 1.0583" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.2917 1.0583 L -5.2917 7.0583" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2917 1.0583 L 5.2917 7.0583" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -9.525 6 L 12.0418 6" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.2917 6 L -7.4083 6.3528 L -7.4083 5.6472 L -5.2917 6" class="ink solid" fill="black" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2917 6 L 7.4083 5.6472 L 7.4083 6.3528 L 5.2917 6" class="ink solid" fill="black" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>D: Diameter = 1/2 in.  The cutting diameter, across the flutes.</title>
+<rect x="11.3866" y="2.825" width="5.6444" height="6.35" fill="none" pointer-events="all"/>
+<path d="M 13.5033 4.9417 L 13.5033 7.0583" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 13.5033 4.9417 L 14.2088 4.9417 L 14.5112 5.0425 L 14.7128 5.244 L 14.8136 5.4456 L 14.9144 5.748 L 14.9144 6.252 L 14.8136 6.5544 L 14.7128 6.756 L 14.5112 6.9575 L 14.2088 7.0583 L 13.5033 7.0583" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 6.35 0 L 17.0583 0" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.35 -21.1667 L 17.0583 -21.1667" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16 0 L 16 -8.4667" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16 -12.7 L 16 -21.1667" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16 0 L 15.6472 -2.1167 L 16.3528 -2.1167 L 16 0" class="ink solid" fill="black" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16 -21.1667 L 16.3528 -19.05 L 15.6472 -19.05 L 16 -21.1667" class="ink solid" fill="black" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>LOC: Length of cut = 1 in.  From the end to where the flutes stop.</title>
+<rect x="11.2627" y="-13.7583" width="9.5754" height="6.35" fill="none" pointer-events="all"/>
+<path d="M 13.3794 -11.6417 L 13.3794 -9.525" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 13.3794 -9.525 L 14.5889 -9.525" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 15.5968 -11.6417 L 15.3952 -11.5409 L 15.1937 -11.3393 L 15.0929 -11.1377 L 14.9921 -10.8353 L 14.9921 -10.3313 L 15.0929 -10.029 L 15.1937 -9.8274 L 15.3952 -9.6258 L 15.5968 -9.525 L 16 -9.525 L 16.2016 -9.6258 L 16.4032 -9.8274 L 16.504 -10.029 L 16.6048 -10.3313 L 16.6048 -10.8353 L 16.504 -11.1377 L 16.4032 -11.3393 L 16.2016 -11.5409 L 16 -11.6417 L 15.5968 -11.6417" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 18.7214 -11.1377 L 18.6206 -11.3393 L 18.419 -11.5409 L 18.2175 -11.6417 L 17.8143 -11.6417 L 17.6127 -11.5409 L 17.4111 -11.3393 L 17.3103 -11.1377 L 17.2095 -10.8353 L 17.2095 -10.3313 L 17.3103 -10.029 L 17.4111 -9.8274 L 17.6127 -9.6258 L 17.8143 -9.525 L 18.2175 -9.525 L 18.419 -9.6258 L 18.6206 -9.8274 L 18.7214 -10.029" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M -6.35 0 L -17.0583 0" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -6.35 -63.5 L -17.0583 -63.5" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -16 0 L -16 -34.8772" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -16 -39.1105 L -16 -63.5" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -16 0 L -16.3528 -2.1167 L -15.6472 -2.1167 L -16 0" class="ink solid" fill="black" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -16 -63.5 L -15.6472 -61.3833 L -16.3528 -61.3833 L -16 -63.5" class="ink solid" fill="black" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>OAL: Overall length = 3 in.  From the end to the top of the shank.</title>
+<rect x="-20.6869" y="-40.1689" width="9.5754" height="6.35" fill="none" pointer-events="all"/>
+<path d="M -17.9655 -38.0522 L -18.1671 -37.9514 L -18.3687 -37.7498 L -18.4694 -37.5482 L -18.5702 -37.2459 L -18.5702 -36.7419 L -18.4694 -36.4395 L -18.3687 -36.2379 L -18.1671 -36.0363 L -17.9655 -35.9355 L -17.5623 -35.9355 L -17.3607 -36.0363 L -17.1591 -36.2379 L -17.0583 -36.4395 L -16.9575 -36.7419 L -16.9575 -37.2459 L -17.0583 -37.5482 L -17.1591 -37.7498 L -17.3607 -37.9514 L -17.5623 -38.0522 L -17.9655 -38.0522" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -15.748 -38.0522 L -16.5544 -35.9355" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -15.748 -38.0522 L -14.9417 -35.9355" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -16.252 -36.6411 L -15.244 -36.6411" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -14.4377 -38.0522 L -14.4377 -35.9355" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -14.4377 -35.9355 L -13.2282 -35.9355" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M -5.2917 -64.5583 L -5.2917 -69.0583" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2917 -64.5583 L 5.2917 -69.0583" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.2917 -68 L -3.1246 -68" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.1246 -68 L 5.2917 -68" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -5.2917 -68 L -3.175 -68.3528 L -3.175 -67.6472 L -5.2917 -68" class="ink solid" fill="black" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.2917 -68 L 3.175 -67.6472 L 3.175 -68.3528 L 5.2917 -68" class="ink solid" fill="black" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>SD: Shank Diameter = 1/2 in.  The diameter of the the shank.</title>
+<rect x="-3.8806" y="-71.175" width="7.7611" height="6.35" fill="none" pointer-events="all"/>
+<path d="M -0.3528 -68.756 L -0.5544 -68.9575 L -0.8567 -69.0583 L -1.2599 -69.0583 L -1.5623 -68.9575 L -1.7639 -68.756 L -1.7639 -68.5544 L -1.6631 -68.3528 L -1.5623 -68.252 L -1.3607 -68.1512 L -0.756 -67.9496 L -0.5544 -67.8488 L -0.4536 -67.748 L -0.3528 -67.5464 L -0.3528 -67.244 L -0.5544 -67.0425 L -0.8567 -66.9417 L -1.2599 -66.9417 L -1.5623 -67.0425 L -1.7639 -67.244" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.3528 -69.0583 L 0.3528 -66.9417" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.3528 -69.0583 L 1.0583 -69.0583 L 1.3607 -68.9575 L 1.5623 -68.756 L 1.6631 -68.5544 L 1.7639 -68.252 L 1.7639 -67.748 L 1.6631 -67.4456 L 1.5623 -67.244 L 1.3607 -67.0425 L 1.0583 -66.9417 L 0.3528 -66.9417" class="ink" fill="none" stroke="black" stroke-width="0.2117" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

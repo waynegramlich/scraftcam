@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="40.9286mm" height="130mm" viewBox="-5.4783 -47.2609 17.795 56.5217">
+<rect x="-5.4783" y="-47.2609" width="17.795" height="56.5217" class="paper" fill="white"/>
+<path d="M 0 0 L 0.2609 0 L 1.6304 -1.3696 L 1.6304 -39.1304 L 0 -39.1304 L 0 0" class="ink" fill="none" stroke="black" stroke-width="0.2609" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 0 L -0.2609 0" class="ink" fill="none" stroke="black" stroke-dasharray="1.3043 0.6522" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.2609 0 L -1.6304 -1.3696" class="ink" fill="none" stroke="black" stroke-dasharray="1.3043 0.6522" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.6304 -1.3696 L -1.6304 -39.1304" class="ink" fill="none" stroke="black" stroke-dasharray="1.3043 0.6522" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.6304 -39.1304 L 0 -39.1304" class="ink" fill="none" stroke="black" stroke-dasharray="1.3043 0.6522" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.2609 0.6522 L -0.2609 3.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.2609 0.6522 L 0.2609 3.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -2.8696 3 L 1.5652 3" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.2609 3 L -1.5652 3.2174 L -1.5652 2.7826 L -0.2609 3" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.2609 3 L 1.5652 2.7826 L 1.5652 3.2174 L 0.2609 3" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>TD: Tip diameter = 0.020 in.  The flat across the tip (0 for a sharp point).</title>
+<rect x="0.9752" y="1.0435" width="4.6584" height="3.913" fill="none" pointer-events="all"/>
+<path d="M 2.7143 2.3478 L 2.7143 3.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 2.2795 2.3478 L 3.1491 2.3478" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.4596 2.3478 L 3.4596 3.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.4596 2.3478 L 3.8944 2.3478 L 4.0807 2.4099 L 4.205 2.5342 L 4.2671 2.6584 L 4.3292 2.8447 L 4.3292 3.1553 L 4.2671 3.3416 L 4.205 3.4658 L 4.0807 3.5901 L 3.8944 3.6522 L 3.4596 3.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M -1.6304 -0.7174 L -1.6304 6.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.6304 -0.7174 L 1.6304 6.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.6304 6 L -1.3043 6" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.3043 6 L 1.6304 6" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.6304 6 L -0.3261 5.7826 L -0.3261 6.2174 L -1.6304 6" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.6304 6 L 0.3261 6.2174 L 0.3261 5.7826 L 1.6304 6" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>D: Diameter = 1/8 in.  The chamfer&#x27;s widest diameter, where the cone meets the body.</title>
+<rect x="-1.7081" y="4.0435" width="3.4783" height="3.913" fill="none" pointer-events="all"/>
+<path d="M -0.4037 5.3478 L -0.4037 6.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.4037 5.3478 L 0.0311 5.3478 L 0.2174 5.4099 L 0.3416 5.5342 L 0.4037 5.6584 L 0.4658 5.8447 L 0.4658 6.1553 L 0.4037 6.3416 L 0.3416 6.4658 L 0.2174 6.5901 L 0.0311 6.6522 L -0.4037 6.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 3.5355 -3.2747 A 5 5 0 0 0 0 -4.7391" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.5355 -3.2747 L 2.4595 -4.0433 L 2.7669 -4.3507 L 3.5355 -3.2747" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 -4.7391 L 1.3043 -4.9565 L 1.3043 -4.5217 L 0 -4.7391" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>HA: Half angle = A / 2.  Half of the cone&#x27;s angle, from the axis, as drawn.</title>
+<rect x="0.1144" y="-7.5201" width="4.7826" height="3.913" fill="none" pointer-events="all"/>
+<path d="M 1.4188 -6.2158 L 1.4188 -4.9114" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 2.2883 -6.2158 L 2.2883 -4.9114" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.4188 -5.5946 L 2.2883 -5.5946" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.0958 -6.2158 L 2.5989 -4.9114" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.0958 -6.2158 L 3.5927 -4.9114" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 2.7852 -5.3462 L 3.4064 -5.3462" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 1.6304 -1.3696 L 3.9967 -3.7358" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.6304 -39.7826 L -1.6304 -44.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.6304 -39.7826 L 1.6304 -44.6522" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.6304 -44 L -1.9255 -44" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.9255 -44 L 1.6304 -44" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -1.6304 -44 L -0.3261 -44.2174 L -0.3261 -43.7826 L -1.6304 -44" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.6304 -44 L 0.3261 -43.7826 L 0.3261 -44.2174 L 1.6304 -44" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>SD: Shank diameter = 1/8 in.  The shank&#x27;s diameter (often the same as the diameter).</title>
+<rect x="-2.3913" y="-45.9565" width="4.7826" height="3.913" fill="none" pointer-events="all"/>
+<path d="M -0.2174 -44.4658 L -0.3416 -44.5901 L -0.528 -44.6522 L -0.7764 -44.6522 L -0.9627 -44.5901 L -1.087 -44.4658 L -1.087 -44.3416 L -1.0248 -44.2174 L -0.9627 -44.1553 L -0.8385 -44.0932 L -0.4658 -43.9689 L -0.3416 -43.9068 L -0.2795 -43.8447 L -0.2174 -43.7205 L -0.2174 -43.5342 L -0.3416 -43.4099 L -0.528 -43.3478 L -0.7764 -43.3478 L -0.9627 -43.4099 L -1.087 -43.5342" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.2174 -44.6522 L 0.2174 -43.3478" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.2174 -44.6522 L 0.6522 -44.6522 L 0.8385 -44.5901 L 0.9627 -44.4658 L 1.0248 -44.3416 L 1.087 -44.1553 L 1.087 -43.8447 L 1.0248 -43.6584 L 0.9627 -43.5342 L 0.8385 -43.4099 L 0.6522 -43.3478 L 0.2174 -43.3478" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 0.913 0 L 8.6522 0" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 2.2826 -39.1304 L 8.6522 -39.1304" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8 0 L 8 -18.2609" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8 -20.8696 L 8 -39.1304" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8 0 L 7.7826 -1.3043 L 8.2174 -1.3043 L 8 0" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8 -39.1304 L 8.2174 -37.8261 L 7.7826 -37.8261 L 8 -39.1304" class="ink solid" fill="black" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>OAL: Overall length = 1-1/2 in.  From the tip to the end of the shank.</title>
+<rect x="5.1118" y="-21.5217" width="5.9006" height="3.913" fill="none" pointer-events="all"/>
+<path d="M 6.7888 -20.2174 L 6.6646 -20.1553 L 6.5404 -20.0311 L 6.4783 -19.9068 L 6.4161 -19.7205 L 6.4161 -19.4099 L 6.4783 -19.2236 L 6.5404 -19.0994 L 6.6646 -18.9752 L 6.7888 -18.913 L 7.0373 -18.913 L 7.1615 -18.9752 L 7.2857 -19.0994 L 7.3478 -19.2236 L 7.4099 -19.4099 L 7.4099 -19.7205 L 7.3478 -19.9068 L 7.2857 -20.0311 L 7.1615 -20.1553 L 7.0373 -20.2174 L 6.7888 -20.2174" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.1553 -20.2174 L 7.6584 -18.913" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.1553 -20.2174 L 8.6522 -18.913" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 7.8447 -19.3478 L 8.4658 -19.3478" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.9627 -20.2174 L 8.9627 -18.913" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.9627 -18.913 L 9.7081 -18.913" class="ink" fill="none" stroke="black" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

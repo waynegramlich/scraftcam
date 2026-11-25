@@ -118,7 +118,7 @@ kind = "vertical"
 from = "origin"
 to = 2
 offset = 10.0
-along = 0.4551974386572427
+along = 0.92
 
 [[dimensions]]
 letter = "OAL"
@@ -126,4 +126,22 @@ kind = "vertical"
 from = "origin"
 to = 3
 offset = 16.0
-along = 0.46942235861528153
+along = 0.97
+
+[[hides]]
+axis = "y"
+below = 1
+above = 2
+low = 4.8073512190297425
+high = 5.920307933029633
+under = 7.192551984933616
+over = 5.195416606112994
+
+[[hides]]
+axis = "y"
+below = 2
+above = 3
+low = 3.045887916268491
+high = 3.9244818904554464
+under = 7.192551984933616
+over = 5.195416606112994

@@ -108,6 +108,15 @@ class TestOutlineExposed(unittest.TestCase):
             finally:
                 outline_exposed.SHOTS = kept
 
+    def test_resize(self) -> None:
+        """`resize` sizes the window and fits; silly sizes refused."""
+        exposed.call("editors", {})
+        handle: dict[str, object] = {"editor": "OutlineEditor 1"}
+        exposed.call("resize", {**handle, "width": 640, "height": 900})
+        self.assertEqual(self.editor.window().size().height(), 900)
+        with self.assertRaises(ExposedError):
+            exposed.call("resize", {**handle, "width": 10, "height": 900})
+
 
 if __name__ == "__main__":
     unittest.main()

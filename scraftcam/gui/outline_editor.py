@@ -30,6 +30,7 @@ The scene is in unitless drawing steps (letters give the real sizes,
 `--outline FILE`, `--tutorial FILE`, `--record [FILE]`.
 """
 
+import copy
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -143,10 +144,11 @@ from .outline_file import (  # noqa: E402
     outline_from_text,
     outline_text,
 )
-from .outline_letters import LettersTable  # noqa: E402
+from .outline_letters import LettersTable, ToolValues  # noqa: E402
 from .values import (  # noqa: E402
     crossings,
     placed_corners,
+    set_letters,
     values_cross,
 )
 
@@ -913,6 +915,76 @@ class OutlineItem(QGraphicsItem):
                         QPointF(*segment.start), QPointF(*segment.end), length
                     )
                 )
+
+
+# Function `tool_drawing()`:
+def tool_drawing(drawing: Drawing, values: dict[str, str]) -> Drawing:
+    """Return an outline drawn for one tool, in its true proportions.
+
+    The tool's values go into the letters, and the corners go where
+    they put them, at the outline's own scale, so a tool and its
+    kind's diagram are drawn alike (`T.toasl~6.8` #737a, #737b).  A
+    tool bigger than its kind's outline is shrunk into the same box
+    (#737c); a smaller one keeps its size.
+
+    Arguments:
+    * `drawing` (`Drawing`): The kind's outline (not changed).
+    * `values` (`dict[str, str]`): The tool's values, by letter.
+
+    Returns:
+    * (`Drawing`): A new drawing; the outline's corners when the
+      values can not be drawn.
+    """
+    # The outline's own scale, from its defaults.
+    scale: float = placed_corners(
+        drawing.points, drawing.letters, drawing.dimensions, drawing.scale
+    )[1]
+    tool: Drawing = copy.deepcopy(drawing)
+    set_letters(tool.letters, values)
+    points: list[tuple[float, float]] = placed_corners(
+        tool.points, tool.letters, tool.dimensions, scale
+    )[0]
+
+    # Into the outline's box, never bigger.
+    factor: float = 1.0
+    axis: int
+    for axis in (0, 1):
+        old: float = _extent(drawing.points, axis)
+        new: float = _extent(points, axis)
+        if new > old > 0.0:
+            factor = min(factor, old / new)
+    tool.points = [(x * factor, y * factor) for x, y in points]
+    tool.scale = scale * factor
+    return tool
+
+
+# Function `_extent()`:
+def _extent(points: list[tuple[float, float]], axis: int) -> float:
+    """Return how far the corners spread along one axis.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `axis` (`int`): 0 for X, 1 for Y.
+
+    Returns:
+    * (`float`): The spread; 0 for no corners.
+    """
+    coordinates: list[float] = [point[axis] for point in points]
+    return max(coordinates) - min(coordinates) if coordinates else 0.0
+
+
+# Function `tool_svg()`:
+def tool_svg(outline: Path, values: dict[str, str]) -> str:
+    """Return a tool's diagram: its kind's outline, drawn for it.
+
+    Arguments:
+    * `outline` (`Path`): The kind's `.outline.toml`.
+    * `values` (`dict[str, str]`): The tool's values, by letter.
+
+    Returns:
+    * (`str`): The `.svg`, as the outline's own is written.
+    """
+    return svg(outline_sheet(tool_drawing(drawing_from(outline), values)))
 
 
 # Function `svg_path()`:
@@ -3727,6 +3799,11 @@ class OutlineView(QGraphicsView):
             self.draw_grid(painter, exposed, pen)
         across_x: list[tuple[float, float, float]] = self.cut_offsets(HIDE_X)
         across_y: list[tuple[float, float, float]] = self.cut_offsets(HIDE_Y)
+
+        # The end pieces reach `FAR`: trimmed to what is drawn, or
+        # zoomed in they overflow Qt's clipping and draw nothing
+        # (`T.toasl~6.8` #743, an upright drill with strips across).
+        box: QRectF = self.scene().itemsBoundingRect().adjusted(-1, -1, 1, 1)
         left: float
         right: float
         dx: float
@@ -3737,7 +3814,9 @@ class OutlineView(QGraphicsView):
             for bottom, top, dy in across_y:
                 source: QRectF = QRectF(
                     left, bottom, right - left, top - bottom
-                )
+                ).intersected(box)
+                if source.isEmpty():
+                    continue
                 # Clipped to its piece: items reaching into a hidden
                 # stretch are cut there, not drawn on across the gap.
                 painter.save()
@@ -3941,9 +4020,11 @@ class OutlineView(QGraphicsView):
     # Method `OutlineView.covering()`:
     def covering(self) -> set[int]:
         """Return the hide strips that cover a dimension's letter (#182):
-        the working view would leave it out.  The user moves the strip;
-        letters are never moved for it.  Marks are not in the diagram
-        (#451), so a strip may cover them.
+        the working view would leave it out.  A strip cuts its stretch
+        out of the whole drawing, so a letter anywhere along that
+        stretch is covered, beside the outline too (`T.toasl~6.8`
+        #742).  The user moves the strip or the letter.  Marks are not
+        in the diagram (#451), so a strip may cover them.
 
         Returns:
         * (`set[int]`): The strips, by index.
@@ -3962,34 +4043,16 @@ class OutlineView(QGraphicsView):
             low: float
             high: float
             low, high = strip(self.drawing.points, hide)
-            near: float
-            far: float
-            near, far = across(self.drawing.points, hide)
-            # Any part of a letter under the strip counts (#322): its
-            # box overlaps the strip both along and across.
+            # Any part of a letter in the stretch counts (#322, #742):
+            # its box overlaps the strip along it, wherever across.
             letter: QRectF
             for letter in boxes:
-                ends: tuple[float, float, float, float] = (
-                    (
-                        letter.top(),
-                        letter.bottom(),
-                        letter.left(),
-                        letter.right(),
-                    )
+                ends: tuple[float, float] = (
+                    (letter.top(), letter.bottom())
                     if hide.axis == HIDE_Y
-                    else (
-                        letter.left(),
-                        letter.right(),
-                        letter.top(),
-                        letter.bottom(),
-                    )
+                    else (letter.left(), letter.right())
                 )
-                if (
-                    ends[0] < high
-                    and ends[1] > low
-                    and ends[2] <= far
-                    and ends[3] >= near
-                ):
+                if ends[0] < high and ends[1] > low:
                     found.add(index)
         return found
 
@@ -4131,6 +4194,8 @@ class OutlineEditor(QWidget):
     * `read_only` (`bool`): True while the outline may not be changed
       ([Allow Changes] unchecked in its panel, #590): the view still
       zooms, pans and chooses.
+    * `tool_values` (`bool`): True while it shows one tool's values
+      (`show_tool()`), so the outline is never saved.
     * `splitter` (`QSplitter`): The drawing over the table.
     * `status` (`QLabel`): The last refusal, under the button tabs.
     * `letters` (`LettersTable`): The letters' table, its tabs and
@@ -4154,6 +4219,7 @@ class OutlineEditor(QWidget):
         self.drawing: Drawing = Drawing() if drawing is None else drawing
         self.path: Path | None = path
         self.read_only: bool = False
+        self.tool_values: bool = False
         self.saved: str = file_text(path)
         self.setWindowTitle(
             "Outline Editor" if path is None else f"Outline Editor: {path}"
@@ -4351,6 +4417,35 @@ class OutlineEditor(QWidget):
         self.view.toggle_revolve()
         self.button_actions["Revolve"].setChecked(self.view.drawing.revolve)
 
+    # Method `OutlineEditor.show_tool()`:
+    def show_tool(self, tool: ToolValues) -> None:
+        """Show one tool of the outline's kind: its values drawn and in
+        the table beside the defaults (`T.toasl~6.8` #735, #736).
+
+        The outline itself is never changed or saved from here; only
+        the tool's values may be typed in, into the tool's file.
+
+        Arguments:
+        * `tool` (`ToolValues`): The tool's values, and how to write
+          them.
+        """
+        self.tool_values = True
+        template: Drawing = copy.deepcopy(self.drawing)
+
+        # Function `redraw()`:
+        def redraw() -> None:
+            """Draw the outline for the tool's values as they are now."""
+            drawn: Drawing = tool_drawing(template, tool.values)
+            self.drawing.letters[:] = drawn.letters
+            self.drawing.points[:] = drawn.points
+            self.drawing.scale = drawn.scale
+            self.view.follow()
+
+        tool.redraw = redraw
+        redraw()
+        self.set_read_only(True)
+        self.letters.show_tool(tool)
+
     # Method `OutlineEditor.set_read_only()`:
     def set_read_only(self, read_only: bool) -> None:
         """Refuse every change to the outline, or allow them (#590).
@@ -4380,8 +4475,10 @@ class OutlineEditor(QWidget):
         view saves again when the mouse button comes up), and its
         diagram beside it (`svg_path()`, #248), written too when
         missing."""
-        if self.path is None or QApplication.mouseButtons() != (
-            Qt.MouseButton.NoButton
+        if (
+            self.path is None
+            or self.tool_values
+            or QApplication.mouseButtons() != Qt.MouseButton.NoButton
         ):
             return
         text: str = outline_text(self.drawing)
@@ -4420,8 +4517,8 @@ class OutlineEditor(QWidget):
         problem: str = self.view.message or (
             "Edges cross (drawn red): move a corner to uncross them."
             if crossings(self.view.drawing.points)
-            else "A hide strip covers a letter or mark (red in the "
-            "Overview): move the strip."
+            else "A hide strip hides a letter (red in the Overview): "
+            "move the strip or the letter."
             if self.view.covering()
             else ""
         )

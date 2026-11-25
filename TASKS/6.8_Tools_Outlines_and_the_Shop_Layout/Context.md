@@ -11,9 +11,13 @@ done (the example shop in the package, read only, `settings.py`),
 #S1 done (`c26ec49`); `--show-demo` the user's to try.  #S3 done
 2026-11-24: the drill, end mill and chamfer mill are in kind
 directories, their outlines' `key`s and letters are their tools'
-fields, each tool checked against its own shop's outline.  Next:
-#S5 (the tree shows the files, #615), then #S6 (the tool panel's
-one table), #S7; and `T.tfo~6.5` reopens for the other round tools
+fields, each tool checked against its own shop's outline.  #S5
+done (outline files in the tree).  #S6 done 2026-11-24 (the one
+table, tools drawn and `.svg`d in true proportions, the drill's
+hide strips, #739, #742, #743).  Next: #S7 (the rest of the example
+shop: `stock/materials/`, `tools/materials/`, the four loose tool
+files, `shank_drill`), then #726's declaration file (or a task of
+its own); and `T.tfo~6.5` reopens for the other round tools
 (#690, #727).
 Round tool bits only for now.  The user has
 `scraftcam/example_shop/.allow_edits` (the GUI may edit the example
@@ -232,6 +236,97 @@ Order: #694, #S2, #S1, #S3, #S5, #S6, #S7 (#S4 dropped, #678).
   the example shop's own outlines would be checked by the reader
   but not listed in `Shops.md` or the schemas (none has one yet).
   #S3 done.
+* #S3 committed (`eafdb79`).  #S4 was dropped (#678); #S5's open
+  questions (Claude): #730 what clicking an outline file shows;
+  #731 its label and place in its kind's directory; #732 the other
+  files (`.svg`, pages, `.step`); #733 tools by label or by file
+  name.
+* Decided (the user): #730 an outline file opens in the outline
+  editor (read only rules as a tool's [Outline] tab); #731 first in
+  its kind's directory, labelled "Drill outline"; #732 `.svg` and
+  hidden files hidden, pages and `.step` deferred.  #733 (the user:
+  both?): Claude proposes a second tree column, the file name.
+  #734: `T.sa~6.11` is Open but waiting; suspend it?
+* #734 done: `T.sa~6.11` Suspended (the user: every tool bit
+  first, then the vise and the Z setter, which are assemblies).
+  #733 (the user): no file column; clicking an item shows what it
+  is.  Claude: at most the file's name as the panel title's tooltip.
+* #733 (the user): the tooltip is the path from the shop's top.
+  #S5 done 2026-11-24: `tree.OUTLINE` items (`outline_node()`,
+  first in their directory, "Drill outline"); clicking one opens
+  its editor in front (`Panel.show_outline_of()`), read only as a
+  tool's [Outline]; [Edit TOML File] edits it; the panel title's
+  tooltip is `tree.shop_relative()`.  `.svg` stay hidden.  Next #S6
+  (the tool panel's one table).
+* #S6 questions before coding (Claude): #735 where the one table
+  is (the [Outline] tab's letters table with a "This tool" column,
+  the letter rows leaving [Fields]); #736 what a tool's value edit
+  writes (the tool's `.toml`, never the outline); #737 the drawing
+  at the tool's own values (`values.set_letters()`).
+* Decided (the user): #735 the [Outline] tab's letters table gets
+  Default and This tool columns; the letter rows leave [Fields].
+  #736 a tool's value edits only its `.toml`.  #737 (the user):
+  pictures in the right proportions for the tool's sizes, scaled
+  to fit, each generated `.svg` about the size of the others (#461).
+  Claude's proposal: #737a the tab draws at the tool's values (the
+  corners are solved from the letters, `values.py:340`); #737b a
+  generated `TOOL.svg` beside each tool's `.toml`, fitted into the
+  same box as its kind's `.svg`, hidden in the tree, committed
+  (#458); #737c fit inside a box (width and height), so long tools
+  are not thin slivers.
+* Decided (the user): #737a agreed; #737b the outline's and each
+  tool's `.svg` at the same basic scale; #737c agreed; hide strips
+  later (none now).  Claude's correction: the editor keeps corners
+  as drawn (#457, `OutlineView.apply_values()`), so true proportions
+  need the corners placed at `values.real_corners()`.
+* #S6 chunk 1 done 2026-11-24: `outline_letters.ToolValues` and
+  `LettersTable.show_tool()` (columns Letter, Name, Default, This
+  tool; only This tool typed in, while [Allow Changes]);
+  `OutlineEditor.show_tool()` (never saves the outline,
+  `tool_values`); `Panel.show_tool_values()` writes the tool's file,
+  measured as the default (#723a); the letter rows (`short`) leave
+  [Fields].  Tests: `test_panel_outline` (`test_tool_table`; the
+  recordings replay in the outline's own panel).  Chunk 2: true
+  proportions (#737a) and the per-tool `.svg` (#737b, #737c).
+* #S6 chunk 2 (part) 2026-11-24: `outline_editor.tool_drawing()`
+  (the outline's own scale, `values.placed_corners()`, shrunk into
+  the outline's box only when bigger) and `tool_svg()`; the [Outline]
+  tab draws the tool so (`ToolValues.redraw`); the panel writes
+  `TOOL.svg` with the tool's file; `python3 -m scraftcam.gui.tool_svgs
+  [SHOP]` writes a shop's (10 in the example shop).  Found: #738
+  true proportions make drills slivers (1/8 in drill 2 x 44 units)
+  under labels sized for the stubby outline; #739 the drill's own
+  `.outline.svg` has two corners the tool diagrams lack; to look
+  into before the chunk is done.
+* #739 found: `drill.outline.svg` was stale since `e37ea82` (the
+  outline was rewritten without the editor, which alone rewrites a
+  `.svg`); rewritten.  `tests/qt/test_example_svgs.py` now checks
+  every outline's and tool's `.svg` (`shank_drill`, the user's
+  drawing in progress, left out; its `.svg` is stale too).
+* #738 (the user): hide zones are the answer.  The drill outline has
+  none (taken out in `e37ea82` while the editor was debugged), so
+  it and its tools are true-proportion slivers.  Open: #740 who
+  draws the drill's hide zones; #741 where a hide zone goes on a
+  tool of another length.
+* #740 done 2026-11-24 over MCP: `outline_exposed.resize()` added
+  (a headless window was too small to point at the drill); two
+  hide strips laid with [Hide] and `drag` (flutes y 6-38, shank y
+  47-60, narrow enough to clear the letters); FL and OAL `along`
+  moved by hand into visible stretches (0.92, 0.97; letters can not
+  be dragged over MCP yet, #559), the `.svg` rewritten.  #741: the
+  strips follow the corners; on the 1/8 in drill they still fit.
+  #742 (Claude): the editor flags a strip over a letter only when
+  it reaches across to it; a letter inside the hidden stretch
+  beside it is cut out unflagged.  FL sits on its arrow (the
+  user's to nudge).
+* #742 fixed 2026-11-24 (`OutlineView.covering()`: along the strip
+  only; the message says "hides a letter ... move the strip or the
+  letter"; `test_hide_covers` has a letter 40 steps aside).  #743
+  found while checking it over MCP and fixed: the working view drew
+  nothing for an upright outline with `HIDE_Y` strips, zoomed in;
+  the end pieces (`FAR` = 1e9) overflowed Qt's clip; `draw_cut()`
+  trims each piece to `itemsBoundingRect()` (`test_cut_view_upright`).
+  Why the lying-down shank drill (`HIDE_X`) drew fine is not known.
 * #S2 the drill: `examples/shop/tools/drills/` with
   `drill.outline.toml`, its `.svg` and one `.toml` per drill.
 * #S1 #433/#437.1/#438: the example shop into the package, read

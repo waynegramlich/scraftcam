@@ -29,7 +29,9 @@ from ..packages import require
 from ..shops import (
     KINDS,
     OUTLINE_SUFFIX,
+    UNITS,
     is_read_only,
+    measurement_problem,
     not_initialized,
     vendor_triple,
 )
@@ -56,6 +58,7 @@ from .machines import (
     is_machines_directory,
     machine_item,
 )
+from .outline_letters import ToolValues
 from .templates import (
     FollowUp,
     FollowUpView,
@@ -69,11 +72,13 @@ from .tree import (
     ERROR,
     EXPLANATIONS,
     FILE,
+    OUTLINE,
     PACKAGE,
     SHOP,
     Node,
     docstring,
     edit_path,
+    shop_relative,
 )
 
 # `PySide6` lives in `~/.scraftcam/packages/`, so it is put on
@@ -665,7 +670,14 @@ class Panel(QFrame):
         * `editing` (`bool`): True to let them be edited.
         """
         self.editing = editing
-        if self.outline is not None:
+        tool: ToolValues | None = (
+            None if self.outline is None else self.outline.letters.tool
+        )
+        if tool is not None and self.outline is not None:
+            # A tool's values may be typed in; its outline, never.
+            tool.editing = editing
+            self.outline.letters.show_rows()
+        elif self.outline is not None:
             self.outline.set_read_only(not editing)
         row: Row
         for row in self.rows:
@@ -915,9 +927,87 @@ class Panel(QFrame):
             return
         editor: OutlineEditor = editors.OutlineEditor(drawing, path=path)
         editor.set_read_only(not self.editing)
+        if self.node is not None and self.node.kind != OUTLINE:
+            self.show_tool_values(editor)
         exposed.EDITORS.add(editor)
         self.outline = editor
         self.tabs.addTab(editor, "Outline")
+
+    def show_tool_values(self, editor: "OutlineEditor") -> None:
+        """Show this tool's values in its kind's outline (#735, #736).
+
+        Arguments:
+        * `editor` (`OutlineEditor`): The kind's outline, in the
+          [Outline] tab; it shows the tool's values beside the
+          defaults, and writes only the tool's file.
+        """
+        defaults: dict[str, str] = {
+            letter.letter: letter.default
+            for letter in editor.drawing.letters
+            if not letter.formula
+        }
+
+        # Function `check()`:
+        def check(letter: str, text: str) -> str:
+            """Say what is wrong with a value, as its default measures."""
+            form: str = next(
+                (
+                    each
+                    for each in ("length", "angle")
+                    if not measurement_problem(
+                        defaults.get(letter), UNITS[each]
+                    )
+                ),
+                "length",
+            )
+            return measurement_problem(text.strip(), UNITS[form])
+
+        # Function `save()`:
+        def save(letter: str, text: str) -> str:
+            """Write one letter's value into the tool's file."""
+            problem: str = check(letter, text)
+            if problem or self.node is None:
+                return problem
+            changed: dict[str, object] = dict(self.item)
+            changed[letter] = text.strip()
+            self.written = write_item(self.node.path, changed)
+            self.item = changed
+            self.show_missing()
+
+            # Its diagram beside it, drawn for it (#737b).
+            values[letter] = text.strip()
+            if self.outline_path is not None:
+                editors: ModuleType = importlib.import_module(
+                    f"{__package__}.outline_editor"
+                )
+                self.node.path.with_suffix(".svg").write_text(
+                    editors.tool_svg(self.outline_path, values),
+                    encoding="utf-8",
+                )
+            return ""
+
+        values: dict[str, str] = {
+            letter: str(self.item[letter])
+            for letter in defaults
+            if letter in self.item
+        }
+        tool: ToolValues = ToolValues(values, defaults, save, check)
+        tool.editing = self.editing
+        editor.show_tool(tool)
+
+    def show_outline_of(self, node: Node) -> None:
+        """Show an item's outline: its kind's, or itself, in front.
+
+        Arguments:
+        * `node` (`Node`): The item; a kind's outline file (#730)
+          opens in front, a tool shows its kind's in [Outline].
+        """
+        if node.kind != OUTLINE:
+            self.show_outline(outline_of(node.path, self.item))
+            return
+        self.show_outline(node.path)
+        if self.outline is not None:
+            self.tabs.setCurrentWidget(self.outline)
 
     def show_pages(self, pages: QWidget) -> None:
         """Show a catalog's pages in the [Pages] tab (#600).
@@ -1031,8 +1121,10 @@ class Panel(QFrame):
             self.show_own(self.summary, "Machines")
             return
 
-        # The title, and the text.
+        # The title, its tooltip the file's place in the shop (#733),
+        # and the text.
         self.title.setText(node.label())
+        self.title.setToolTip(shop_relative(node.path))
         self.title.setStyleSheet(
             f"color: {colors().problem}" if node.kind == ERROR else ""
         )
@@ -1046,8 +1138,12 @@ class Panel(QFrame):
         if node.kind in (SHOP, FILE) and node.path.suffix == ".toml":
             self.item = read_item(node.path)[0]
             self.rows = rows(self.item, units)
+
+            # A tool's letters are in its [Outline] tab's table (#735).
+            if outline_of(node.path, self.item) is not None:
+                self.rows = [row for row in self.rows if not row.schema.short]
         self._show_edit_row()
-        self.show_outline(outline_of(node.path, self.item))
+        self.show_outline_of(node)
         self.show_sketches(sketches(self.item) if self.rows else [])
         if not self.rows:
             self.fields.hide()

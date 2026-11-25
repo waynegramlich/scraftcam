@@ -115,6 +115,30 @@ class ShopTreeTest(unittest.TestCase):
         self.assertIn("Aluminum", grid.about)
 
 
+class OutlineItemTest(unittest.TestCase):
+    """A kind's outline file is an item, first in its directory."""
+
+    def test_outline_items(self) -> None:
+        """Listed first, by its kind; `.svg` hidden (#615, #731, #732)."""
+        drills: list[tree.Node] = tree.shop_children(
+            EXAMPLE_SHOP / "tools" / "drills"
+        )
+        self.assertEqual(
+            [node.label() for node in drills],
+            [
+                "Drill outline",
+                "Drill (1/8in cobalt)",
+                "Drill (15/64in HSS)",
+            ],
+        )
+        self.assertEqual(drills[0].kind, tree.OUTLINE)
+        self.assertEqual(tree.edit_path(drills[0]), drills[0].path)
+        self.assertEqual(
+            tree.shop_relative(drills[0].path),
+            "tools/drills/drill.outline.toml",
+        )
+
+
 class DesignTreeTest(unittest.TestCase):
     """Tests of `design_tree()` and `docstring()`."""
 

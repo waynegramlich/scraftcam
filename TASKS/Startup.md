@@ -12,7 +12,6 @@
 @6.8_Tools_Outlines_and_the_Shop_Layout/Details.md
 @6.8_Tools_Outlines_and_the_Shop_Layout/Context.md
 @6.11_Support_Assemblies/Details.md
-@6.11_Support_Assemblies/Context.md
 @7_MCP_Interface/Details.md
 @7_MCP_Interface/Context.md
 @8_Documentation/Details.md

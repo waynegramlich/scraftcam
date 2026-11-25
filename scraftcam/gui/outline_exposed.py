@@ -393,6 +393,20 @@ def button(editor: str, word: str) -> str:
     return state(editor)
 
 
+@exposed.changes
+def resize(editor: str, width: int, height: int) -> str:
+    """Make {editor}'s window `width` by `height` pixels, then fit
+    the drawing to it (a headless window starts small, too small to
+    point at a long, thin outline's parts; `T.toasl~6.8` #740)."""
+    shown: OutlineEditor = _editor(editor)
+    if not 200 <= width <= 4000 or not 200 <= height <= 4000:
+        raise ExposedError("width and height go from 200 to 4000 pixels")
+    shown.window().resize(width, height)
+    QTest.qWait(1)
+    shown.view.fit()
+    return state(editor)
+
+
 @exposed.reads
 def screenshot(editor: str, name: str = "") -> str:
     """Take a picture of {editor}."""

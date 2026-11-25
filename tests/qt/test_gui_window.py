@@ -315,6 +315,27 @@ class WindowTest(unittest.TestCase):
             self.assertEqual(model.latest().text == READ_ONLY_OUTLINE, locked)
             window.close()
 
+    def test_outline_item(self) -> None:
+        """A kind's outline in the tree opens its editor (#730, #733)."""
+        model: App = App(EXAMPLE_SHOP_FILE, None)
+        window: Window = Window(model)
+        outline: Path = EXAMPLE_SHOP / "tools/drills/drill.outline.toml"
+        item = window.tree.item_at_path(outline)
+        assert item is not None
+        with mock.patch("scraftcam.gui.views.is_read_only", return_value=True):
+            window.select_item(item)
+            panel: Panel = window.panels[0]
+            self.assertEqual(panel.title.text(), "Drill outline")
+            self.assertEqual(
+                panel.title.toolTip(), "tools/drills/drill.outline.toml"
+            )
+            editor = panel.outline
+            assert editor is not None
+            self.assertIs(panel.tabs.currentWidget(), editor)
+            self.assertTrue(editor.read_only)
+            self.assertFalse(panel.editing_box.isEnabled())
+        window.close()
+
     def test_watcher(self) -> None:
         """A file added, broken or removed outside shows in the tree."""
         with tempfile.TemporaryDirectory() as temporary:

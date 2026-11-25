@@ -27,3 +27,8 @@ numbers are shared by every task; the next is in
 * `T.toasl~6.8` #S3: tools are in kind directories (`tools/drills/`,
   `end_mills/`, `chamfer_mills/`), written by their outline's
   letters (`key = ...` in the outline); describe for shop owners.
+* `T.toasl~6.8` #S6: each tool's `.svg` beside its `.toml` (true
+  proportions, the outline's scale); `python3 -m
+  scraftcam.gui.tool_svgs [SHOP]` rewrites a shop's; the outline
+  editor's MCP `resize`; a tool's [Outline] tab table (Default /
+  This tool).

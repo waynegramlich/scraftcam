@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from scraftcam.packages import require
@@ -86,6 +86,49 @@ COLUMNS: tuple[tuple[str, str], ...] = (
     ("Fillet", "fillet"),  # A check box: a fillet radius (#213).
     ("Help", "help"),
 )
+
+# The table in a tool's panel (`T.toasl~6.8` #735): the outline's
+# default beside this tool's value, which alone may be typed in.
+TOOL_COLUMNS: tuple[str, ...] = ("Letter", "Name", "Default", "This tool")
+TOOL_VALUE: int = 3
+
+
+# Function `_nothing()`:
+def _nothing() -> None:
+    """Do nothing: a `ToolValues` not shown yet draws nothing."""
+
+
+# Class `ToolValues`:
+@dataclass(slots=True)
+class ToolValues:
+    """A tool's own values for its kind's letters (#735, #736).
+
+    Attributes:
+    * `values` (`dict[str, str]`): This tool's values, by letter.
+    * `defaults` (`dict[str, str]`): The outline's defaults, by
+      letter.
+    * `save` (`Callable[[str, str], str]`): Writes one letter's value
+      into the tool's file (never the outline), giving the problem
+      ("" when written).
+    * `check` (`Callable[[str, str], str]`): The problem with a value
+      as it is typed, or "".
+    * `editing` (`bool`): True while the tool may be changed.
+    * `redraw` (`Callable[[], None]`): Draws the outline for the
+      values as they are now (the editor's, `show_tool()`).
+
+    Constructor:
+    * `ToolValues(values, defaults, save, check)`
+    """
+
+    # Constructor arguments:
+    values: dict[str, str] = field(init=True)
+    defaults: dict[str, str] = field(init=True)
+    save: Callable[[str, str], str] = field(init=True)
+    check: Callable[[str, str], str] = field(init=True)
+
+    # Remaining attributes (alphabetized):
+    editing: bool = field(init=False, default=False)
+    redraw: Callable[[], None] = field(init=False, default=_nothing)
 
 
 # Class `LiveDelegate`:
@@ -178,6 +221,8 @@ class LettersTable(QWidget):
     * `renaming` (`dict[int, str]`): By table row, a letter's last good
       name while its name is being typed and is not good yet: the
       name its uses still carry (`T.tfo~6.5` #441).
+    * `tool` (`ToolValues | None`): In a tool's panel, its own values,
+      shown beside the defaults (#735); `None` for an outline.
     """
 
     # Method `LettersTable.__init__()`:
@@ -206,6 +251,7 @@ class LettersTable(QWidget):
         self.show_message: Callable[[], None] = show_message
         self.arm: Callable[[str | None], None] = arm
         self.read_only: bool = False
+        self.tool: ToolValues | None = None
         self.table: QTableWidget = QTableWidget(0, len(COLUMNS))
         self.problems: QLabel = QLabel("")
         self.renaming: dict[int, str] = {}
@@ -343,7 +389,9 @@ class LettersTable(QWidget):
     def show_rows(self) -> None:
         """Show every letter in [Dimensions], only the fillet radii in
         [Fillets], with [New Fillet Dimension] there (#213, #214)."""
-        fillets: bool = self.tabs.currentIndex() == FILLETS_TAB
+        fillets: bool = (
+            self.tool is None and self.tabs.currentIndex() == FILLETS_TAB
+        )
         self.table.setRowHidden(0, not fillets)
         index: int
         letter: Letter
@@ -357,9 +405,12 @@ class LettersTable(QWidget):
         triggers: type[QAbstractItemView.EditTrigger] = (
             QAbstractItemView.EditTrigger
         )
+        locked: bool = (
+            not self.tool.editing if self.tool is not None else self.read_only
+        )
         self.table.setEditTriggers(
             triggers.NoEditTriggers
-            if self.read_only
+            if locked
             else triggers.DoubleClicked | triggers.EditKeyPressed
             if fillets
             else triggers.CurrentChanged
@@ -391,6 +442,9 @@ class LettersTable(QWidget):
         No cell is left current: one would be edited at once (a click
         edits), taking the keys the buttons answer to.
         """
+        if self.tool is not None:
+            self.fill_tool_table(self.tool)
+            return
         self.table.blockSignals(True)
         self.renaming.clear()
         self.table.setRowCount(LETTER_ROW + len(self.drawing.letters))
@@ -414,6 +468,57 @@ class LettersTable(QWidget):
         self.light_armed()
         self.view.setFocus()
         self.check_letters()
+
+    # Method `LettersTable.show_tool()`:
+    def show_tool(self, tool: ToolValues) -> None:
+        """Show a tool's own values beside the defaults (#735).
+
+        Arguments:
+        * `tool` (`ToolValues`): The tool's values, and how to write
+          them.
+        """
+        self.tool = tool
+        self.tabs.hide()
+        self.table.setColumnCount(len(TOOL_COLUMNS))
+        self.table.setHorizontalHeaderLabels(list(TOOL_COLUMNS))
+        self.fill_table()
+
+    # Method `LettersTable.fill_tool_table()`:
+    def fill_tool_table(self, tool: ToolValues) -> None:
+        """Show each letter: its name, its default, this tool's value.
+
+        Only a value given (not a formula's) may be typed in, and only
+        while the tool may be changed.
+
+        Arguments:
+        * `tool` (`ToolValues`): The tool's values.
+        """
+        self.table.blockSignals(True)
+        self.table.setRowCount(LETTER_ROW + len(self.drawing.letters))
+        self.table.setRowHidden(0, True)
+        index: int
+        letter: Letter
+        for index, letter in enumerate(self.drawing.letters):
+            texts: tuple[str, ...] = (
+                letter.letter,
+                letter.name,
+                f"= {letter.formula}"
+                if letter.formula
+                else tool.defaults.get(letter.letter, ""),
+                letter.default
+                if letter.formula
+                else tool.values.get(letter.letter, ""),
+            )
+            column: int
+            text: str
+            for column, text in enumerate(texts):
+                item: QTableWidgetItem = QTableWidgetItem(text)
+                if column != TOOL_VALUE or letter.formula:
+                    item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                self.table.setItem(LETTER_ROW + index, column, item)
+        self.table.setCurrentCell(-1, -1)
+        self.table.blockSignals(False)
+        self.show_rows()
 
     # Method `LettersTable.cell()`:
     @staticmethod
@@ -462,6 +567,9 @@ class LettersTable(QWidget):
         """
         if item.row() < LETTER_ROW:
             return
+        if self.tool is not None:
+            self.tool_edited(self.tool, item)
+            return
         if COLUMNS[item.column()][1] == "fillet":
             letter: Letter = self.drawing.letters[item.row() - LETTER_ROW]
             checked: bool = item.checkState() == Qt.CheckState.Checked
@@ -483,6 +591,26 @@ class LettersTable(QWidget):
             self.save()
         else:
             self.keep(item.row(), item.column(), item.text())
+
+    # Method `LettersTable.tool_edited()`:
+    def tool_edited(self, tool: ToolValues, item: QTableWidgetItem) -> None:
+        """Write a tool's finished value into its file (#736), then
+        draw and show it, or say why not.
+
+        Arguments:
+        * `tool` (`ToolValues`): The tool's values.
+        * `item` (`QTableWidgetItem`): The cell.
+        """
+        if item.column() != TOOL_VALUE:
+            return
+        letter: Letter = self.drawing.letters[item.row() - LETTER_ROW]
+        text: str = item.text().strip()
+        problem: str = tool.save(letter.letter, text)
+        if not problem:
+            tool.values[letter.letter] = text
+            tool.redraw()
+        self.fill_table()
+        self.problems.setText(problem)
 
     # Method `LettersTable.delete()`:
     def delete(self) -> None:
@@ -565,6 +693,12 @@ class LettersTable(QWidget):
         * `column` (`int`): The cell's column (see `COLUMNS`).
         * `text` (`str`): The cell's text so far.
         """
+        if self.tool is not None:
+            letter_of: Letter = self.drawing.letters[row - LETTER_ROW]
+            cell: QTableWidgetItem | None = self.table.item(row, column)
+            if cell is not None:
+                cell.setToolTip(self.tool.check(letter_of.letter, text))
+            return
         attribute: str = COLUMNS[column][1]
         letter: Letter = self.drawing.letters[row - LETTER_ROW]
         kept: str = text.strip()
