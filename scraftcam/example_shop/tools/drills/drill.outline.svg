@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="51.5769mm" height="63.6796mm" viewBox="-13.5742 -31.8927 36.6244 45.2184">
-<rect x="-13.5742" y="-31.8927" width="36.6244" height="45.2184" class="paper" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="54.3935mm" height="63.6796mm" viewBox="-13.5742 -31.8927 38.6244 45.2184">
+<rect x="-13.5742" y="-31.8927" width="38.6244" height="45.2184" class="paper" fill="white"/>
 <path d="M 0 0 L 1.9971 -1.2 L 1.9971 -6.0074" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M 0 -6.0074 L 0 0" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M 1.9971 -10.2679 L 1.9971 -16.1882 L 1.9971 -19.2341" class="ink" fill="none" stroke="black" stroke-width="0.4261" stroke-linecap="round" stroke-linejoin="round"/>
@@ -54,30 +54,30 @@
 <path d="M 10.4565 -13.7384 L 10.4565 -11.6081" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M 10.4565 -11.6081 L 11.6738 -11.6081" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
-<path d="M 1.0651 0 L 17.0651 0" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 3.0623 -27.4191 L 17.0651 -27.4191" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 16 0 L 16 -6.0074" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 16 -10.2679 L 16 -19.2341" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 16 -27.6322 L 16 -27.4191" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 16 0 L 15.645 -2.1303 L 16.355 -2.1303 L 16 0" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 16 -27.4191 L 16.355 -25.2889 L 15.645 -25.2889 L 16 -27.4191" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.0651 0 L 19.0651 0" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.0623 -27.4191 L 19.0651 -27.4191" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 18 0 L 18 -6.0074" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 18 -10.2679 L 18 -19.2341" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 18 -27.6322 L 18 -27.4191" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 18 0 L 17.645 -2.1303 L 18.355 -2.1303 L 18 0" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 18 -27.4191 L 18.355 -25.2889 L 17.645 -25.2889 L 18 -27.4191" class="ink solid" fill="black" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 <g>
 <title>OAL: Overall length = 4 in.  From the point&#x27;s tip to the end of the shank.</title>
-<rect x="11.283" y="-28.6973" width="9.637" height="6.3908" fill="none" pointer-events="all"/>
-<path d="M 14.0219 -26.567 L 13.819 -26.4656 L 13.6161 -26.2627 L 13.5147 -26.0598 L 13.4132 -25.7555 L 13.4132 -25.2483 L 13.5147 -24.944 L 13.6161 -24.7411 L 13.819 -24.5382 L 14.0219 -24.4368 L 14.4277 -24.4368 L 14.6305 -24.5382 L 14.8334 -24.7411 L 14.9349 -24.944 L 15.0363 -25.2483 L 15.0363 -25.7555 L 14.9349 -26.0598 L 14.8334 -26.2627 L 14.6305 -26.4656 L 14.4277 -26.567 L 14.0219 -26.567" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 16.2536 -26.567 L 15.4421 -24.4368" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 16.2536 -26.567 L 17.0651 -24.4368" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 15.7464 -25.1468 L 16.7608 -25.1468" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 17.5723 -26.567 L 17.5723 -24.4368" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 17.5723 -24.4368 L 18.7896 -24.4368" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="13.283" y="-28.6973" width="9.637" height="6.3908" fill="none" pointer-events="all"/>
+<path d="M 16.0219 -26.567 L 15.819 -26.4656 L 15.6161 -26.2627 L 15.5147 -26.0598 L 15.4132 -25.7555 L 15.4132 -25.2483 L 15.5147 -24.944 L 15.6161 -24.7411 L 15.819 -24.5382 L 16.0219 -24.4368 L 16.4277 -24.4368 L 16.6305 -24.5382 L 16.8334 -24.7411 L 16.9349 -24.944 L 17.0363 -25.2483 L 17.0363 -25.7555 L 16.9349 -26.0598 L 16.8334 -26.2627 L 16.6305 -26.4656 L 16.4277 -26.567 L 16.0219 -26.567" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 18.2536 -26.567 L 17.4421 -24.4368" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 18.2536 -26.567 L 19.0651 -24.4368" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 17.7464 -25.1468 L 18.7608 -25.1468" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 19.5723 -26.567 L 19.5723 -24.4368" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 19.5723 -24.4368 L 20.7896 -24.4368" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 <path d="M -1.9971 -6.0074 L -2.1303 -6.0074 L -0.7101 -7.2855 L 0.7101 -4.7292 L 2.1303 -6.0074 L 1.9971 -6.0074" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M -1.9971 -10.2679 L -2.1303 -10.2679 L -0.7101 -11.5461 L 0.7101 -8.9897 L 2.1303 -10.2679 L 1.9971 -10.2679" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M -1.9971 -19.2341 L -2.1303 -19.2341 L -0.7101 -20.5123 L 0.7101 -17.9559 L 2.1303 -19.2341 L 1.9971 -19.2341" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M -1.9971 -23.4947 L -2.1303 -23.4947 L -0.7101 -24.7728 L 0.7101 -22.2165 L 2.1303 -23.4947 L 1.9971 -23.4947" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M 8.0828 -6.0074 L 8.5621 -6.2433 L 9.0414 -6.277 L 9.5207 -6.1759 L 10 -6.0074 L 10.4793 -5.8388 L 10.9586 -5.7377 L 11.4379 -5.7714 L 11.9172 -6.0074" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 14.0828 -6.0074 L 14.5621 -6.2433 L 15.0414 -6.277 L 15.5207 -6.1759 L 16 -6.0074 L 16.4793 -5.8388 L 16.9586 -5.7377 L 17.4379 -5.7714 L 17.9172 -6.0074" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16.0828 -6.0074 L 16.5621 -6.2433 L 17.0414 -6.277 L 17.5207 -6.1759 L 18 -6.0074 L 18.4793 -5.8388 L 18.9586 -5.7377 L 19.4379 -5.7714 L 19.9172 -6.0074" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M 8.0828 -10.2679 L 8.5621 -10.5038 L 9.0414 -10.5375 L 9.5207 -10.4364 L 10 -10.2679 L 10.4793 -10.0994 L 10.9586 -9.9983 L 11.4379 -10.032 L 11.9172 -10.2679" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 14.0828 -10.2679 L 14.5621 -10.5038 L 15.0414 -10.5375 L 15.5207 -10.4364 L 16 -10.2679 L 16.4793 -10.0994 L 16.9586 -9.9983 L 17.4379 -10.032 L 17.9172 -10.2679" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 14.0828 -19.2341 L 14.5621 -19.47 L 15.0414 -19.5037 L 15.5207 -19.4026 L 16 -19.2341 L 16.4793 -19.0656 L 16.9586 -18.9645 L 17.4379 -18.9982 L 17.9172 -19.2341" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16.0828 -10.2679 L 16.5621 -10.5038 L 17.0414 -10.5375 L 17.5207 -10.4364 L 18 -10.2679 L 18.4793 -10.0994 L 18.9586 -9.9983 L 19.4379 -10.032 L 19.9172 -10.2679" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16.0828 -19.2341 L 16.5621 -19.47 L 17.0414 -19.5037 L 17.5207 -19.4026 L 18 -19.2341 L 18.4793 -19.0656 L 18.9586 -18.9645 L 19.4379 -18.9982 L 19.9172 -19.2341" class="ink" fill="none" stroke="black" stroke-width="0.213" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

@@ -125,7 +125,7 @@ letter = "OAL"
 kind = "vertical"
 from = "origin"
 to = 3
-offset = 16.0
+offset = 18.0
 along = 0.97
 
 [[hides]]
