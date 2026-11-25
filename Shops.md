@@ -29,13 +29,15 @@ shop/
   shop.toml                the shop (`shop`)
   controllers/linuxcnc.toml   a controller template (`controller`)
   machines/shop_mill.toml     a machine, with its tool table (`machine`)
-  tool_materials/carbide.toml what tools are made of (`tool_material`)
   tools/countersink.toml      a tool of a kind with no outline
   tools/drills/              a kind's directory: its tools, beside
     drill.outline.toml        the kind's outline (#711)
-  tooling/grid_plate.toml     work holding (`grid_plate`)
-  stock_materials/cutting_data.toml   how to cut (`materials`)
-  stock_materials/6061_aluminum.toml  a material cut (`material`)
+  tools/materials/carbide.toml  what tools are made of
+                              (`tool_material`; no outline, so no
+                              tools, #745)
+  tooling/grid_plates/grid_plate.toml  work holding (`grid_plate`)
+  stock/materials/cutting_data.toml   how to cut (`materials`)
+  stock/materials/6061_aluminum.toml  a material cut (`material`)
 ```
 
 * `scraftcam` names the directories; the files in them are named
@@ -202,11 +204,12 @@ has a `name` even when it is not a file of its own.
 |                  |                       |          | cuts, and how to      |
 |                  |                       |          | drill and mill them:  |
 |                  |                       |          | the files in          |
-|                  |                       |          | `stock_materials/`.   |
+|                  |                       |          | `stock/materials/`.   |
 | `tool_materials` | list of               | no       | What its tools are    |
 |                  | `tool_material`       |          | made of, and how fast |
 |                  |                       |          | each cuts: the files  |
-|                  |                       |          | in `tool_materials/`. |
+|                  |                       |          | in                    |
+|                  |                       |          | `tools/materials/`.   |
 | `catalogs`       | list of `catalog`     | no       | The vendors' catalogs |
 |                  |                       |          | the shop's products   |
 |                  |                       |          | come from: the files  |
@@ -1251,7 +1254,7 @@ its own.
 | `materials`   | list of `material`     | no       | The materials, each in  |
 |               |                        |          | a group: in a shop, the |
 |               |                        |          | files in                |
-|               |                        |          | `stock_materials/`      |
+|               |                        |          | `stock/materials/`      |
 |               |                        |          | (other than this one).  |
 
 ```toml

@@ -6,9 +6,10 @@ python3 -m scraftcam.gui.tool_svgs [SHOP_DIR]
 ```
 
 For every kind's directory in the shop's `tools/` that holds an
-outline (`drills/drill.outline.toml`), each tool there gets a `.svg`
-beside its `.toml`: the outline drawn for the tool's values, in its
-true proportions, at the outline's own scale (`tool_svg()`).  The
+outline (`drills/drill.outline.toml`), each tool there of that kind
+(`kind_tools()`) gets a `.svg` beside its `.toml`: the outline drawn
+for the tool's values, in its true proportions, at the outline's own
+scale (`tool_svg()`).  The
 panel writes one when a tool's value is typed in; this writes them
 all, as after an outline changes.  A shop that may not be changed
 (the example shop, but for `.allow_edits`) is refused.  With no
@@ -43,6 +44,33 @@ def tool_values(tool: Path, outline: Path) -> dict[str, str]:
     return {name: str(item[name]) for name in names if name in item}
 
 
+# Function `kind_tools()`:
+def kind_tools(outline: Path) -> list[Path]:
+    """Return the tools beside an outline that are of its kind.
+
+    A directory may hold more than one outline, as `tools/drills/`
+    holds the drill's and the shank drill's (`T.toasl~6.8` #747).
+
+    Arguments:
+    * `outline` (`Path`): A kind's `KIND.outline.toml`.
+
+    Returns:
+    * (`list[Path]`): The `.toml` files beside it whose `kind` is
+      `KIND`, sorted.
+    """
+    kind: str = outline.name.removesuffix(OUTLINE_SUFFIX)
+    tools: list[Path] = []
+    tool: Path
+    for tool in sorted(outline.parent.glob("*.toml")):
+        if tool.name.endswith(OUTLINE_SUFFIX):
+            continue
+        with tool.open("rb") as file:
+            item: dict[str, object] = tomllib.load(file)
+        if item.get("kind") == kind:
+            tools.append(tool)
+    return tools
+
+
 # Function `write_svgs()`:
 def write_svgs(shop: Path) -> list[Path]:
     """Write every tool's diagram that is missing or out of date.
@@ -62,9 +90,7 @@ def write_svgs(shop: Path) -> list[Path]:
     outline: Path
     for outline in sorted((shop / "tools").glob(f"*/*{OUTLINE_SUFFIX}")):
         tool: Path
-        for tool in sorted(outline.parent.glob("*.toml")):
-            if tool.name.endswith(OUTLINE_SUFFIX):
-                continue
+        for tool in kind_tools(outline):
             text: str = tool_svg(outline, tool_values(tool, outline))
             picture: Path = tool.with_suffix(".svg")
             if not picture.is_file() or (

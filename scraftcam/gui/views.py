@@ -195,7 +195,8 @@ def item_text(node: Node) -> str:
             return f"{node.path}: can not be read: {error}"
     if node.kind == DIRECTORY:
         return EXPLANATIONS.get(
-            node.path.name, f"{node.path}\n{len(node.children)} items."
+            shop_relative(node.path),
+            f"{node.path}\n{len(node.children)} items.",
         )
     if node.kind == PACKAGE and not (node.path / "__init__.py").is_file():
         return f"{node.path}"
@@ -947,8 +948,8 @@ class Panel(QFrame):
             if not letter.formula
         }
 
-        # Function `check()`:
-        def check(letter: str, text: str) -> str:
+        # Function `value_problem()`:
+        def value_problem(letter: str, text: str) -> str:
             """Say what is wrong with a value, as its default measures."""
             form: str = next(
                 (
@@ -965,7 +966,7 @@ class Panel(QFrame):
         # Function `save()`:
         def save(letter: str, text: str) -> str:
             """Write one letter's value into the tool's file."""
-            problem: str = check(letter, text)
+            problem: str = value_problem(letter, text)
             if problem or self.node is None:
                 return problem
             changed: dict[str, object] = dict(self.item)
@@ -991,7 +992,7 @@ class Panel(QFrame):
             for letter in defaults
             if letter in self.item
         }
-        tool: ToolValues = ToolValues(values, defaults, save, check)
+        tool: ToolValues = ToolValues(values, defaults, save, value_problem)
         tool.editing = self.editing
         editor.show_tool(tool)
 

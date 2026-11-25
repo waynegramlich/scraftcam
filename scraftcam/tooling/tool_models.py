@@ -3141,7 +3141,7 @@ def grid_plate_section() -> str:
         "    ModelCache().insert(PyBind(transport), plate)\n"
     )
     toml: str = (
-        (shops.EXAMPLE_SHOP / "tooling/grid_plate.toml")
+        (shops.EXAMPLE_SHOP / "tooling/grid_plates/grid_plate.toml")
         .read_text(encoding="utf-8")
         .split("\n", 1)[1]
     )
@@ -3169,7 +3169,8 @@ def grid_plate_section() -> str:
         f"{markdown_table(rows)}\n\n"
         f"Not a size:\n\n{others}\n\n"
         "A shop describes each grid plate in a file in its `tooling/`\n"
-        "(`Shops.md`), as `scraftcam/example_shop/tooling/grid_plate.toml`\n"
+        "(`Shops.md`), as\n"
+        "`scraftcam/example_shop/tooling/grid_plates/grid_plate.toml`\n"
         "describes `tools.GRID_PLATE`:\n\n"
         f"```toml\n{toml}```\n\n"
         "Or it is made in Python, in millimeters:\n\n"

@@ -215,6 +215,28 @@ class TestReader(CopiedShop):
         )
         self.assertEqual(shop["units"], "in")
 
+        # The layout of #S7: `tools/materials/` has no outline, so
+        # holds no tools (#745); the shank drill's outline is beside
+        # the drill's (#747); the grid plate is in `grid_plates/`.
+        self.assertTrue((EXAMPLES / "tools/materials/hss.toml").is_file())
+        self.assertFalse(
+            shops.kind_directory(
+                EXAMPLES / "tools/materials", EXAMPLES / "tools"
+            )
+        )
+        self.assertTrue(
+            shops.kind_directory(EXAMPLES / "tools/drills", EXAMPLES / "tools")
+        )
+        self.assertTrue(
+            (EXAMPLES / "tools/drills/shank_drill.outline.toml").is_file()
+        )
+        self.assertTrue(
+            (EXAMPLES / "stock/materials/cutting_data.toml").is_file()
+        )
+        self.assertTrue(
+            (EXAMPLES / "tooling/grid_plates/grid_plate.toml").is_file()
+        )
+
     def test_syntax_error(self) -> None:
         """A TOML syntax error gives its file, line and column."""
         self.change(self.MILL, 'machine = "mill"', "machine = mill")

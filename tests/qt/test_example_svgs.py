@@ -4,7 +4,7 @@ An outline's `.svg` is rewritten only when the outline editor saves,
 so an outline file changed any other way leaves it stale (found
 2026-11-24, `T.toasl~6.8` #739); each tool's `.svg` follows its
 file and its kind's outline (#737b).  `shank_drill.outline.toml`, a
-drawing in progress, is left out.
+drawing in progress, is left out (`IN_PROGRESS`).
 """
 
 import unittest
@@ -13,12 +13,17 @@ from pathlib import Path
 from scraftcam.diagram import svg
 from scraftcam.gui.outline_diagram import outline_sheet
 from scraftcam.gui.outline_editor import drawing_from, svg_path, tool_svg
-from scraftcam.gui.tool_svgs import tool_values
+from scraftcam.gui.tool_svgs import kind_tools, tool_values
 from scraftcam.shops import EXAMPLE_SHOP, OUTLINE_SUFFIX
 
-# The kinds' directories, each with its outline.
+# The user's drawings in progress, whose `.svg` may be stale.
+IN_PROGRESS: tuple[str, ...] = ("shank_drill.outline.toml",)
+
+# The kinds' outlines, in their directories.
 OUTLINES: list[Path] = sorted(
-    (EXAMPLE_SHOP / "tools").glob(f"*/*{OUTLINE_SUFFIX}")
+    outline
+    for outline in (EXAMPLE_SHOP / "tools").glob(f"*/*{OUTLINE_SUFFIX}")
+    if outline.name not in IN_PROGRESS
 )
 
 
@@ -42,9 +47,7 @@ class ExampleSvgsTest(unittest.TestCase):
         outline: Path
         for outline in OUTLINES:
             tool: Path
-            for tool in sorted(outline.parent.glob("*.toml")):
-                if tool.name.endswith(OUTLINE_SUFFIX):
-                    continue
+            for tool in kind_tools(outline):
                 with self.subTest(tool=tool.name):
                     self.assertEqual(
                         tool.with_suffix(".svg").read_text(encoding="utf-8"),

@@ -553,10 +553,10 @@ def is_read_only(path: Path, *, package: Path = PACKAGE) -> bool:
 
 SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("controllers", ("controller",)),
-    ("tool_materials", ("tool_material",)),
+    ("tools/materials", ("tool_material",)),
     ("tools", TOOL_KINDS),
     ("tooling", ("grid_plate",)),
-    ("stock_materials", ("materials", "material")),
+    ("stock/materials", ("materials", "material")),
     ("machines", ("machine",)),
     ("catalogs", ("catalog",)),
 )
@@ -564,7 +564,9 @@ SHOP_DIRECTORIES: tuple[tuple[str, tuple[str, ...]], ...] = (
 # Where a directory's items are, when not only its own `*.toml`
 # files: a catalog is `catalogs/VENDOR/EDITION/catalog.toml` (`T.c~6.3`
 # #43); a tool may be in a directory of its kind, beside the kind's
-# outline file, as `tools/drills/` (`T.toasl~6.8` #711).
+# outline file, as `tools/drills/` (`T.toasl~6.8` #711); a
+# directory under `tools/` with no outline file, such as
+# `tools/materials/`, holds no tools (#745).
 CATALOG: str = "catalog.toml"
 
 # The outline editor's files (`T.oe~6.2` #S4), kept beside the
@@ -577,9 +579,31 @@ DRILL_LETTERS: dict[str, str] = outline_keys("drill")
 END_MILL_LETTERS: dict[str, str] = outline_keys("end_mill")
 CHAMFER_MILL_LETTERS: dict[str, str] = outline_keys("chamfer_mill")
 CATALOG_PAGES: str = "pages"
+
+
+# Function `kind_directory()`:
+def kind_directory(directory: Path, top: Path) -> bool:
+    """Say whether a directory under `tools/` holds tools.
+
+    `tools/` itself does (its loose tools wait for outlines, #727),
+    and so does a directory holding a kind's outline file, as
+    `tools/drills/`; one without, as `tools/materials/`, does not
+    (#745).
+
+    Arguments:
+    * `directory` (`Path`): `tools/` or a directory in it.
+    * `top` (`Path`): The shop's `tools/`.
+
+    Returns:
+    * (`bool`): True when its `.toml` files are tools.
+    """
+    return directory == top or any(directory.glob(f"*{OUTLINE_SUFFIX}"))
+
+
 ITEM_PATTERNS: dict[str, tuple[str, ...]] = {
     "catalogs": (f"*/*/{CATALOG}",),
     "tools": ("*.toml", "*/*.toml"),
+    "tooling": ("*.toml", "*/*.toml"),
 }
 
 
@@ -844,14 +868,14 @@ KINDS: dict[str, TableKind] = {
                     "materials",
                     "table",
                     "The materials it cuts, and how to drill and mill "
-                    "them: the files in `stock_materials/`.",
+                    "them: the files in `stock/materials/`.",
                     of="materials",
                 ),
                 TableField(
                     "tool_materials",
                     "list",
                     "What its tools are made of, and how fast each cuts: "
-                    "the files in `tool_materials/`.",
+                    "the files in `tools/materials/`.",
                     of="tool_material",
                 ),
                 TableField(
@@ -1843,7 +1867,7 @@ tooling_close_diameter = "0.196 in"
                     "materials",
                     "list",
                     "The materials, each in a group: in a shop, the "
-                    "files in `stock_materials/` (other than this one).",
+                    "files in `stock/materials/` (other than this one).",
                     of="material",
                 ),
             ),
@@ -2130,13 +2154,15 @@ shop/
   shop.toml                the shop (`shop`)
   controllers/linuxcnc.toml   a controller template (`controller`)
   machines/shop_mill.toml     a machine, with its tool table (`machine`)
-  tool_materials/carbide.toml what tools are made of (`tool_material`)
   tools/countersink.toml      a tool of a kind with no outline
   tools/drills/              a kind's directory: its tools, beside
     drill.outline.toml        the kind's outline (#711)
-  tooling/grid_plate.toml     work holding (`grid_plate`)
-  stock_materials/cutting_data.toml   how to cut (`materials`)
-  stock_materials/6061_aluminum.toml  a material cut (`material`)
+  tools/materials/carbide.toml  what tools are made of
+                              (`tool_material`; no outline, so no
+                              tools, #745)
+  tooling/grid_plates/grid_plate.toml  work holding (`grid_plate`)
+  stock/materials/cutting_data.toml   how to cut (`materials`)
+  stock/materials/6061_aluminum.toml  a material cut (`material`)
 ```
 
 * `scraftcam` names the directories; the files in them are named
@@ -2784,6 +2810,10 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
             for path in paths:
                 if path.name.endswith(OUTLINE_SUFFIX):
                     continue  # A drawing, not an item.
+                if directory == "tools" and not kind_directory(
+                    path.parent, self.directory / directory
+                ):
+                    continue  # Such as `tools/materials/`.
                 item: dict[str, object] | None = self.item(path, kinds)
                 if item is not None:
                     found.setdefault(str(item["kind"]), []).append(item)
@@ -4232,7 +4262,7 @@ def tool_cutting(
         raise ValueError(
             f'"{tool["name"]}" needs a `cutting."{found["name"]}"` '
             "entry (its `rpm` and `feed`), or its material in "
-            "`tool_materials/`"
+            "`tools/materials/`"
         )
     group: dict[str, Any] = next(
         entry

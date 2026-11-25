@@ -375,7 +375,7 @@ EXPLANATIONS: dict[str, str] = {
         "it is made of, and where it is kept.\n\n"
         "scraftcam chooses tools for a job from this list, so a tool "
         "that is not here is never used.  Speeds and feeds come from "
-        "`stock_materials/` and `tool_materials/`, unless a tool gives "
+        "`stock/materials/` and `tools/materials/`, unless a tool gives "
         "its own."
     ),
     "tooling": (
@@ -384,13 +384,17 @@ EXPLANATIONS: dict[str, str] = {
         "piece.  scraftcam uses their sizes to set the part up and to "
         "keep the tool out of them."
     ),
-    "stock_materials": (
+    "stock": (
+        "The stock parts are cut from: its materials today, its "
+        "shapes and sizes to come."
+    ),
+    "stock/materials": (
         "The materials parts are made from (for example 6061 "
         "aluminum), with the cutting data for each: how fast a tool "
         "may cut it.  scraftcam works out each tool's spindle speed "
         "and feed from these."
     ),
-    "tool_materials": (
+    "tools/materials": (
         "What the tools are made of (for example HSS or carbide), "
         "and how much faster than HSS each may cut.  A tool names "
         "its material; the speed it cuts at is scaled by it."
@@ -399,29 +403,49 @@ EXPLANATIONS: dict[str, str] = {
 
 
 # Function `about_directory()`:
-def about_directory(name: str) -> str:
+def about_directory(path: Path) -> str:
     """Return what a shop directory holds, for its tooltip (#80).
 
-    From the shop's own key that names it (`tools`: "The tools on
-    hand, ..."), else the first kind it holds.
+    The first of: the shop's own key that names it (`tools`: "The
+    tools on hand, ..."); the first kind `SHOP_DIRECTORIES` gives it;
+    the kind of an outline file in it, as `tools/drills/`; the kind
+    of the directory above, as `tooling/grid_plates/`; its
+    `EXPLANATIONS` (`stock/`) (#749).
 
     Arguments:
-    * `name` (`str`): The directory's name.
+    * `path` (`Path`): The directory.
 
     Returns:
-    * (`str`): What it holds, wrapped; "" for one the shop does not
-      name.
+    * (`str`): What it holds, wrapped; "" for one none of these
+      names.
     """
+    name: str = shop_relative(path)
     for schema in KINDS["shop"].fields:
         if f"files in `{name}/`" in schema.meaning:
             return _wrapped([schema.meaning])
-    kinds: tuple[str, ...] = next(
-        (held for directory, held in SHOP_DIRECTORIES if directory == name),
-        (),
-    )
-    return (
-        _wrapped([_first_sentence(KINDS[kinds[0]].summary)]) if kinds else ""
-    )
+    held: dict[str, tuple[str, ...]] = dict(SHOP_DIRECTORIES)
+    kinds: tuple[str, ...] = held.get(name, ())
+    if kinds:
+        return _wrapped([_first_sentence(KINDS[kinds[0]].summary)])
+
+    # A kind's directory: its tools, beside its outline.
+    outline: Path
+    for outline in sorted(path.glob(f"*{OUTLINE_SUFFIX}")):
+        kind: str = outline.name.removesuffix(OUTLINE_SUFFIX)
+        if kind in KINDS:
+            return _wrapped(
+                [
+                    _first_sentence(KINDS[kind].summary),
+                    f"One file per tool, beside {outline.name}.",
+                ]
+            )
+
+    # A directory of one kind's items, as `tooling/grid_plates/`.
+    above: tuple[str, ...] = held.get(name.rpartition("/")[0], ())
+    if len(above) == 1:
+        return _wrapped([_first_sentence(KINDS[above[0]].summary)])
+    explained: str = EXPLANATIONS.get(name, "")
+    return _wrapped([_first_sentence(explained)]) if explained else ""
 
 
 # Function `_first_sentence()`:
@@ -515,7 +539,7 @@ def shop_children(directory: Path, skip: Path | None = None) -> list[Node]:
             continue
         if path.is_dir():
             branch: Node = Node(path.name, DIRECTORY, path)
-            branch.about = about_directory(path.name)
+            branch.about = about_directory(path)
             branch.children = shop_children(path)
             children.append(branch)
         elif path.name.endswith(OUTLINE_SUFFIX):

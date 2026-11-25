@@ -7,7 +7,7 @@ notes = """\
   The materials the shop cuts, and how to drill them; the drilling data \
   is from the user's `drill_rules.txt`, the feed factors Claude's \
   guesses.  How fast each tool material cuts, as a share of HSS's, is \
-  in `tool_materials/`."""
+  in `tools/materials/`."""
 
 [end_milling]
 plunge_factor = "50 %"

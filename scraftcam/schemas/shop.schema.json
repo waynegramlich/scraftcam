@@ -108,7 +108,7 @@
           }
         },
         "materials": {
-          "description": "The materials it cuts, and how to drill and mill them: the files in `stock_materials/`.",
+          "description": "The materials it cuts, and how to drill and mill them: the files in `stock/materials/`.",
           "anyOf": [
             {
               "$ref": "#/$defs/materials"
@@ -119,7 +119,7 @@
           ]
         },
         "tool_materials": {
-          "description": "What its tools are made of, and how fast each cuts: the files in `tool_materials/`.",
+          "description": "What its tools are made of, and how fast each cuts: the files in `tools/materials/`.",
           "type": "array",
           "items": {
             "anyOf": [
@@ -2256,7 +2256,7 @@
           }
         },
         "materials": {
-          "description": "The materials, each in a group: in a shop, the files in `stock_materials/` (other than this one).",
+          "description": "The materials, each in a group: in a shop, the files in `stock/materials/` (other than this one).",
           "type": "array",
           "items": {
             "anyOf": [

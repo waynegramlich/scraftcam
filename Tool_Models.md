@@ -1524,7 +1524,8 @@ Not a size:
 * `width`: Its size along Y, from the grid.
 
 A shop describes each grid plate in a file in its `tooling/`
-(`Shops.md`), as `scraftcam/example_shop/tooling/grid_plate.toml`
+(`Shops.md`), as
+`scraftcam/example_shop/tooling/grid_plates/grid_plate.toml`
 describes `tools.GRID_PLATE`:
 
 ```toml

@@ -108,9 +108,25 @@ class ShopTreeTest(unittest.TestCase):
         self.assertIn("The tools on hand", about["tools"])
         self.assertIn("controller", about["controllers"])
         self.assertNotIn("`", about["tools"])
-        grid: tree.Node = next(
+        plates: tree.Node = next(
             child for child in root.children if child.name == "tooling"
         ).children[0]
+        self.assertEqual(plates.name, "grid_plates")
+        self.assertIn("A grid plate", plates.about)
+
+        # A kind's directory, `stock/` and the materials (#749).
+        tools: tree.Node = next(
+            child for child in root.children if child.name == "tools"
+        )
+        under: dict[str, str] = {
+            child.name: child.about for child in tools.children
+        }
+        self.assertIn("A twist drill", under["drills"])
+        self.assertIn("drill.outline.toml", under["drills"])
+        self.assertIn("An end mill", under["end_mills"])
+        self.assertIn("What its tools are made of", under["materials"])
+        self.assertIn("The stock parts are cut from", about["stock"])
+        grid: tree.Node = plates.children[0]
         self.assertIn("A grid plate", grid.about)
         self.assertIn("Aluminum", grid.about)
 
@@ -127,6 +143,7 @@ class OutlineItemTest(unittest.TestCase):
             [node.label() for node in drills],
             [
                 "Drill outline",
+                "Shank drill outline",
                 "Drill (1/8in cobalt)",
                 "Drill (15/64in HSS)",
             ],
