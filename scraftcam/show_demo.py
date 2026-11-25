@@ -47,6 +47,7 @@ from scraftcam.exposed import client
 from scraftcam.lcnc.lcnc_client import PORT as LINUXCNC_PORT
 from scraftcam.lcnc.lcnc_client import BridgeClient, BridgeError
 from scraftcam.pybind.scraftpybind import PyBind, connect
+from scraftcam.shops import EXAMPLE_SHOP_FILE
 
 # Where everything is.
 PROJECT: Path = Path(__file__).resolve().parent.parent
@@ -58,7 +59,7 @@ WORK: Path = Path.home() / ".cache" / "scraftcam" / "show"
 SOLIDCRAFT_DATA: Path = Path.home() / ".local" / "share" / "solidcraft"
 
 # The shop the demonstration is made in.
-SHOP: Path = PROJECT / "examples" / "shop" / "shop.toml"
+SHOP: Path = EXAMPLE_SHOP_FILE
 
 # The `distrobox` box that LinuxCNC is in.
 BOX: str = "lcnc"
@@ -657,13 +658,23 @@ class DemoShow:  # pylint: disable=too-many-public-methods
         self.start(
             "hmi",
             [sys.executable, "-m", "scraftcam.run",
-             "--shop", str(SHOP),
              "--program", str(self.program),
              "--mcp", str(port),
              "--solidcraft", str(self.options.solidcraft_port),
              *(["--headless"] if self.options.headless else [])],
         )  # fmt: skip
         self.wait_for_port("hmi", port)
+
+        # The example shop, not remembered; the HMI then starts in it
+        # (`T.toasl~6.8` #718).
+        client.tool(
+            port,
+            "call",
+            {
+                "name": "open_shop",
+                "arguments": {"shop": str(SHOP), "remember": False},
+            },
+        )
 
         # Handles are given out when first listed (#507), then the
         # HMI is driven over MCP (`T.og~6.9` #604).

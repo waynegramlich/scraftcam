@@ -11,9 +11,11 @@ from unittest import mock
 from scraftcam import run
 from scraftcam.gui.app import App
 from scraftcam.gui.machines import Due, MachineControl
+from scraftcam.gui.outline_panel import READ_ONLY_OUTLINE, OutlinePanel
 from scraftcam.gui.theme import colors
 from scraftcam.gui.views import Panel, TreeWatcher
-from scraftcam.gui.window import EXIT, NewShopDialog, Window
+from scraftcam.gui.window import EXIT, CopyShopDialog, Window
+from scraftcam.settings import Settings, settings_file, write_settings
 from scraftcam.shops import EXAMPLE_SHOP, EXAMPLE_SHOP_FILE
 from tests import qt_app
 
@@ -140,37 +142,6 @@ class WindowTest(unittest.TestCase):
         top.close()
         self.assertFalse(top.isVisible())
 
-    def test_new_shop(self) -> None:
-        """[New Shop] while there is none; the dialog makes one."""
-        with tempfile.TemporaryDirectory() as temporary:
-            (Path(temporary) / ".git").mkdir()
-            model: App = App(None, None)
-            top: Window = Window(model)
-            self.assertFalse(top.buttons["New Shop"].isHidden())
-            dialog: NewShopDialog = NewShopDialog(top, model)
-            self.assertTrue(dialog.kinds["cnc_mill"].isChecked())
-            self.assertFalse(dialog.make_button.isEnabled())
-            dialog.directory.setText(str(Path(temporary) / "shop"))
-            dialog.name.setText("Garage")
-            self.assertTrue(dialog.make_button.isEnabled())
-            dialog.units.setCurrentText("Metric (mm)")
-            dialog.kinds["3d_printer"].setChecked(True)
-            dialog.make_button.click()
-            self.assertIn("Garage", top.windowTitle())
-            self.assertTrue(top.buttons["New Shop"].isHidden())
-            self.assertTrue(top.new_shop_row.isHidden())
-            text: str = (Path(temporary) / "shop" / "shop.toml").read_text()
-            self.assertIn('machine_kinds = ["cnc_mill", "3d_printer"]', text)
-            self.assertIn('units = "mm"', text)
-
-            # Again, over the shop just made: refused, said in red.
-            again: NewShopDialog = NewShopDialog(top, model)
-            again.directory.setText(str(Path(temporary) / "shop"))
-            again.name.setText("Other")
-            again.make_button.click()
-            self.assertTrue(model.latest().problem)
-            self.assertIn("already exists", model.latest().text)
-
     def test_select(self) -> None:
         """A clicked item shows in the current panel; red for errors."""
         with tempfile.TemporaryDirectory() as temporary:
@@ -290,6 +261,60 @@ class WindowTest(unittest.TestCase):
             panel.set_editing(False)
             self.assertTrue(panel.editing_box.isEnabled())
 
+    def test_copy_shop(self) -> None:
+        """[Copy Shop]: red until the place is right, then copied."""
+        with tempfile.TemporaryDirectory() as temporary:
+            top: Path = Path(temporary)
+            model: App = App(EXAMPLE_SHOP_FILE, None)
+            model.settings = settings_file(top)
+            window: Window = Window(model)
+            self.assertFalse(window.copy_shop_row.isHidden())
+            dialog: CopyShopDialog = CopyShopDialog(window, model)
+
+            # No name, then a bad one: [Copy] grey, saying why.
+            dialog.directory.setEditText(str(top / "shops"))
+            self.assertFalse(dialog.copy_button.isEnabled())
+            dialog.name.setText("my/shop")
+            self.assertIn("letters", dialog.problem.text())
+            dialog.name.setText("mine")
+            self.assertEqual(dialog.problem.text(), "")
+
+            # [Copy]: the copy is shown, and offered next time.
+            dialog.copy_button.click()
+            self.assertEqual(model.shop_title, "mine")
+            self.assertTrue((top / "shops/mine/shop.toml").is_file())
+            again: CopyShopDialog = CopyShopDialog(window, model)
+            self.assertEqual(
+                again.directory.itemText(0), str((top / "shops").resolve())
+            )
+            again.directory.setEditText(str(top / "shops"))
+            again.name.setText("mine")
+            self.assertIn("not empty", again.problem.text())
+
+    def test_outline_read_only(self) -> None:
+        """`--outline` on an outline in the package: read only (#683)."""
+        drill: Path = EXAMPLE_SHOP / "tools/drills/drill.outline.toml"
+        locked: bool
+        for locked in (True, False):
+            model: App = App(None, None)
+            window: Window = Window(model)
+            opener: OutlinePanel = OutlinePanel(
+                drill, None, None, speech=False, headless=True
+            )
+            with mock.patch(
+                "scraftcam.gui.outline_panel.is_read_only",
+                return_value=locked,
+            ):
+                self.assertIsNone(opener.open(window))
+            editor = window.panels[0].outline
+            assert editor is not None
+            self.assertEqual(editor.read_only, locked)
+            self.assertEqual(
+                "read only" in window.panels[0].title.text(), locked
+            )
+            self.assertEqual(model.latest().text == READ_ONLY_OUTLINE, locked)
+            window.close()
+
     def test_watcher(self) -> None:
         """A file added, broken or removed outside shows in the tree."""
         with tempfile.TemporaryDirectory() as temporary:
@@ -315,24 +340,24 @@ class WindowTest(unittest.TestCase):
 
 
 class RunTest(unittest.TestCase):
-    """Tests of `run.shop_file()`."""
+    """Tests of `run.start_file()`."""
 
-    def test_shop_file(self) -> None:
-        """`--shop` as a file or a directory; else found from here."""
+    def test_start_file(self) -> None:
+        """The last shop in the settings, else the example shop (#704)."""
         with tempfile.TemporaryDirectory() as temporary:
             top: Path = Path(temporary)
             shop: Path = top / "shop.toml"
-            self.assertIsNone(run.shop_file(str(top)))
             shop.write_text('name = "Home"\n')
-            self.assertEqual(run.shop_file(str(top)), shop.resolve())
-            self.assertEqual(run.shop_file(str(shop)), shop.resolve())
-            (top / "sub").mkdir()
-            here: str = os.getcwd()
-            os.chdir(top / "sub")
-            try:
-                self.assertEqual(run.shop_file(""), shop.resolve())
-            finally:
-                os.chdir(here)
+
+            # A scratch home's settings; never a search up (#693).
+            settings: Path = settings_file(top)
+            with mock.patch("scraftcam.run.settings_file") as where:
+                where.return_value = settings
+                self.assertEqual(run.start_file(), EXAMPLE_SHOP_FILE)
+                write_settings(Settings((), top), settings)
+                self.assertEqual(run.start_file(), shop)
+                settings.write_text("last_shop = [")
+                self.assertEqual(run.start_file(), EXAMPLE_SHOP_FILE)
 
 
 if __name__ == "__main__":

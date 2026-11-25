@@ -8,9 +8,10 @@ Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
 
 **Where we are (2026-11-24 evening):** #694 and #S2 done; #S1 half
 done (the example shop in the package, read only, `settings.py`),
-committed to `git` by the user.  Next, the rest of #S1: the GUI
-starts from `settings.start_shop()`, [Copy Shop] (#709, #710),
-`open_shop()` over MCP and no `--shop` (#705, #707).  Then #S3.
+#S1 done 2026-11-24 (`git` after `023dfc7`): `open_shop()`, no
+`--shop` (#718), [Copy Shop] (#709); `--show-demo` the user's to
+try.  Next #S3 (a kind's letters table as its tools' template,
+#631).
 Round tool bits only for now.  The user has
 `scraftcam/example_shop/.allow_edits` (the GUI may edit the example
 shop in this checkout).  Undecided, for later: #706 is gone (#711);
@@ -153,6 +154,36 @@ Order: #694, #S2, #S1, #S3, #S5, #S6, #S7 (#S4 dropped, #678).
   Left for #S1: the GUI starting from `settings.start_shop()`,
   [Copy Shop] (#709, #710; leaves `.allow_edits` out), `open_shop()`
   over MCP, no `--shop` (#705), the outline editor's own save.
+* Done 2026-11-24 (after the `git` commit): `App.open_shop()` and
+  `open_shop` over MCP (remembers `last_shop` in `App.settings`,
+  `None` in tests); `run.shop_file("")` gives
+  `settings.start_shop()`; `find_shop()` (the search up) gone.
+  `show_demo.SHOP` pointed at the old `examples/shop`: fixed.
+* #718 (Claude): dropping `--shop` costs something.  `show_demo`,
+  `test_machine_panel` (`--program`) and the LinuxCNC suite need
+  the example shop at start, whatever the user's `last_shop`; a
+  scratch `HOME` loses `~/.scraftcam/` (model cache, Whisper
+  models).  Proposed: `open_shop(shop, remember=False)` over MCP,
+  and `--program` waits for it.
+* #718.2 (the user): test through MCP.  Done 2026-11-24: no
+  `--shop` (`run.start_file()`); `open_shop(shop, remember=False)`;
+  driven over `--mcp`, a `--program`/`--hmi` machine waits in
+  `window.WAITING` for the first `open_shop`.  `show_demo`,
+  `exposed/client.py start --gui SHOP` (stops the GUI when the shop
+  is refused), `test_machine_panel` and the LinuxCNC suite call it.
+  Not run yet: the LinuxCNC suite (`tests/lcnc/`) and `--show-demo`.
+* Done 2026-11-24: [Copy Shop] (#709, #710): `App.copy_shop()`,
+  `app.copy_problem()`, `window.CopyShopDialog` (in a panel, red
+  problem, [Copy] grey), `copy_shop` over MCP; the copy leaves out
+  `.allow_edits`, takes its name, adds its directory to
+  `shop_directories`, becomes `last_shop`.  [New Shop] is gone
+  (`NewShopDialog`, `App.new_shop()`, `create_shop()`,
+  `new_shop_text()`, `MACHINE_KINDS`, `TEMPLATES`).  #719 (the
+  user): `scraftcam/templates/` deleted (only `create_shop()` read
+  it).  `--outline` on a package outline opens read only
+  (`outline_panel.READ_ONLY_OUTLINE`).
+* The LinuxCNC suite passes with `open_shop` (10 tests, 136 s,
+  2026-11-24).  `--show-demo` is the user's to try.  #S1 is done.
 * #S2 the drill: `examples/shop/tools/drills/` with
   `drill.outline.toml`, its `.svg` and one `.toml` per drill.
 * #S1 #433/#437.1/#438: the example shop into the package, read

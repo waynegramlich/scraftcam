@@ -2,14 +2,16 @@
 """Start the `scraftcam` GUI (`T.g~6`).
 
 ```
-python3 -m scraftcam.run [--shop=SHOP] [--mcp=PORT]
-./scraftcam/run.py [--shop=SHOP] [--mcp=PORT]
+python3 -m scraftcam.run [--mcp=PORT]
+./scraftcam/run.py [--mcp=PORT]
 ```
 
-`SHOP` is a shop's `shop.toml` or its directory; with none, the first
-`shop.toml` in the current directory or one of its parents is used
-(#83).  With `--headless`, Qt draws offscreen, so no display is
-needed.  With `--mcp PORT`, the GUI serves MCP on that port of
+It shows the shop shown last (`~/.scraftcam/settings.toml`), else
+the example shop; another is chosen in the GUI, or over MCP with
+`open_shop`, which a test or the demo calls with `remember=False`
+(`T.toasl~6.8` #704, #705, #718).  With `--headless`, Qt draws
+offscreen, so no display is needed.  With `--mcp PORT`, the GUI
+serves MCP on that port of
 127.0.0.1 (`gui/window_exposed.py`; `scraftcam.exposed.client`
 drives it):
 
@@ -42,9 +44,11 @@ is driven over `--mcp` (`hmi_exposed.py`).  Nothing closes while the
 machine runs, or its spindle or coolant is on (#56, #609):
 
 ```
-python3 -m scraftcam.run --shop scraftcam/example_shop --program demo.ngc \
-    --solidcraft 8080
+python3 -m scraftcam.run --program demo.ngc --solidcraft 8080
 ```
+
+Driven over `--mcp`, the machine waits for the first `open_shop`,
+then starts in that shop (#718).
 
 `--show-demo` (`show_demo.py`) brings up LinuxCNC, SolidCraft and
 this GUI for the demo, and `--drive-editor` (`drive_editor.py`)
@@ -63,7 +67,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scraftcam.gui import prompt, window
-from scraftcam.gui.app import App, find_shop
+from scraftcam.gui.app import App
 from scraftcam.gui.machines import Due, MachineControl, Report
 from scraftcam.gui.outline_panel import (
     NEW_OUTLINE,
@@ -71,27 +75,31 @@ from scraftcam.gui.outline_panel import (
     OutlinePanel,
 )
 from scraftcam.lcnc.lcnc_client import PORT as LINUXCNC_PORT
-from scraftcam.shops import SHOP_FILE
+from scraftcam.settings import (
+    SettingsError,
+    read_settings,
+    settings_file,
+    start_shop,
+)
+from scraftcam.shops import EXAMPLE_SHOP_FILE
 
 # pylint: enable=wrong-import-position
 
 
-# Function `shop_file()`:
-def shop_file(shop: str) -> Path | None:
-    """Find the shop's `shop.toml` from `--shop`, or from here (#83).
+# Function `start_file()`:
+def start_file() -> Path:
+    """Return the `shop.toml` the GUI starts with (`T.toasl~6.8` #704).
 
-    Arguments:
-    * `shop` (`str`): `--shop`: a file, a directory, or "".
+    The shop shown last, else the example shop; a settings file that
+    can not be read gives the example shop too.
 
     Returns:
-    * (`Path | None`): The `shop.toml`, or None when there is none.
+    * (`Path`): The `shop.toml`.
     """
-    if not shop:
-        return find_shop(Path.cwd())
-    path: Path = Path(shop)
-    if path.is_dir():
-        path = path / SHOP_FILE
-    return path.resolve() if path.is_file() else None
+    try:
+        return start_shop(read_settings(settings_file()))
+    except SettingsError:
+        return EXAMPLE_SHOP_FILE
 
 
 # Function `main()`:
@@ -124,7 +132,6 @@ def main(arguments: list[str]) -> int:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         prog="scraftcam", description="The scraftcam GUI."
     )
-    parser.add_argument("--shop", default="", help="shop.toml or its dir")
     parser.add_argument(
         "--headless", action="store_true", help="draw offscreen"
     )
@@ -208,12 +215,12 @@ def main(arguments: list[str]) -> int:
         options.headless,
     )
 
-    # The model, and a shop that was named but is not there.
-    model: App = App(shop_file(options.shop), None)
-    if options.shop and model.shop is None:
-        model.say(f"No {SHOP_FILE} at {options.shop}.", problem=True)
+    # The shop shown last, else the example shop (#704); another is
+    # chosen in the GUI, or over MCP (`open_shop`, #705).
+    model: App = App(start_file(), None)
     model.program = options.program or ""
     model.keep_layout = not options.headless
+    model.settings = settings_file()
 
     # Qt, then the first window, until the last one closes.
     return window.run(

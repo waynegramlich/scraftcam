@@ -5,9 +5,9 @@ changes, so two windows showing the same thing always agree
 (`T.g~6` #3).  Keeping Qt out of it lets the tests run with
 no display.  It holds:
 
-* The shop: the `shop.toml` named with `--shop`, or else the first one
-  found in the current directory or one of its parents (#83), and the
-  shop's name (#100).
+* The shop: the one shown last (`~/.scraftcam/settings.toml`), else
+  the example shop, or one opened with `open_shop()` (`T.toasl~6.8`
+  #704, #705), and the shop's name (#100).
 * The design: a Python file, or a package directory, and its name.
 * The machines running, which decide when [Stop All] shows (#2) and
   when a window may not close (#67).
@@ -20,6 +20,7 @@ With no shop, a new one can be made from a few answers (#97, #98,
 `new_shop_text()` writes with the shop writer (`shop_writer.py`).
 """
 
+import json
 import re
 import shutil
 import tomllib
@@ -27,8 +28,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..settings import Settings, read_settings, write_settings
 from ..shop_writer import item_text
 from ..shops import (
+    ALLOW_EDITS,
     CATALOG,
     CATALOG_PAGES,
     FORMAT_VERSION,
@@ -42,35 +45,13 @@ READ_ONLY: str = (
     "the example shop is read only: [Copy Shop] makes one of your own"
 )
 
+# A copied shop's name, which is its directory's too (#710).
+COPY_NAME: re.Pattern[str] = re.compile(r"[A-Za-z0-9_.-]+")
+
 # What the top line shows for a shop or a design that is missing.
 NONE_NAME: str = "(none)"
 
-# The units a shop may prefer, and how the GUI names them.
-UNITS: tuple[str, ...] = ("in", "mm")
-UNIT_LABELS: dict[str, str] = {"in": "Imperial (in)", "mm": "Metric (mm)"}
-
-# The kinds of machines a new shop is asked about (#104, #118): each
-# kind's key (one of `shops.SHOP_MACHINE_KINDS`), its label, and
-# whether `scraftcam` can drive it yet.
-# Computer controlled machines first; then manual ones, for the prep
-# work before a CNC job, their keys starting with `MANUAL_PREFIX`.
-MACHINE_KINDS: tuple[tuple[str, str, bool], ...] = (
-    ("cnc_mill", "CNC mill", True),
-    ("cnc_router", "CNC router", False),
-    ("cnc_lathe", "CNC lathe", False),
-    ("laser_cutter", "Laser cutter", False),
-    ("3d_printer", "3D printer", False),
-    ("manual_mill", "Manual mill", False),
-    ("manual_lathe", "Manual lathe", False),
-    ("manual_drill_press", "Manual drill press", False),
-    ("manual_bandsaw", "Manual bandsaw", False),
-)
-
-MANUAL_PREFIX: str = "manual_"
-
-# The controller templates `scraftcam` ships, which a new shop gets a
-# copy of in its `controllers/` (#141).
-TEMPLATES: Path = Path(__file__).parent.parent / "templates" / "controllers"
+# A shop's controller templates (#141).
 CONTROLLERS: str = "controllers"
 
 # The kinds of machine [New Machine] makes (#141), and each one's axes;
@@ -82,9 +63,6 @@ NEW_AXES: dict[str, tuple[str, ...]] = {
 }
 MACHINES: str = "machines"
 CATALOGS: str = "catalogs"
-
-# The directory a new shop is offered in, under the current one.
-NEW_SHOP_DIRECTORY: str = "shop"
 
 # The version control systems the GUI suggests (#99), and the
 # directory each keeps at the top of a repository.
@@ -119,25 +97,6 @@ class Message:
     # Constructor arguments:
     text: str = field(init=True)
     problem: bool = field(init=True)
-
-
-# Function `find_shop()`:
-def find_shop(start: Path) -> Path | None:
-    """Find the shop for a directory, as `git` finds its repository.
-
-    Arguments:
-    * `start` (`Path`):
-      The directory to look in first; then each of its parents.
-
-    Returns:
-    * (`Path | None`): The first `shop.toml` found, or None.
-    """
-    directory: Path
-    for directory in (start.resolve(), *start.resolve().parents):
-        candidate: Path = directory / SHOP_FILE
-        if candidate.is_file():
-            return candidate
-    return None
 
 
 # Function `shop_name()`:
@@ -336,81 +295,43 @@ def new_catalog_text(vendor: str, edition: str, pdf: str, pages: int) -> str:
     )
 
 
-# Function `new_shop_text()`:
-def new_shop_text(name: str, units: str, machines: list[str]) -> str:
-    """Write a new shop's `shop.toml`.
+# Function `copy_problem()`:
+def copy_problem(directory: str, name: str) -> str:
+    """Say what is wrong with where [Copy Shop] would put a copy (#710).
+
+    The copy goes in `directory/name`, which must be empty or not
+    there yet, and makeable.
 
     Arguments:
-    * `name` (`str`): The shop's name (not empty).
-    * `units` (`str`): The units it prefers, one of `UNITS`.
-    * `machines` (`list[str]`): The keys of its kinds of machines,
-      from `MACHINE_KINDS`.
+    * `directory` (`str`): The directory that holds shops (`~` is
+      the home directory).
+    * `name` (`str`): The copy's name, also its directory's.
 
     Returns:
-    * (`str`): The file's text.
-
-    Raises:
-    * `ValueError`: If an answer is not one of those allowed.
+    * (`str`): The problem, or "" when there is none.
     """
-    # Every answer must be one of those allowed.
+    # The name: one directory's name; then a directory.
     if not name.strip():
-        raise ValueError("the shop needs a name")
-    if units not in UNITS:
-        raise ValueError(f"units must be one of {', '.join(UNITS)}")
-    kinds: list[str] = [kind for kind, _label, _ready in MACHINE_KINDS]
-    unknown: list[str] = [kind for kind in machines if kind not in kinds]
-    if unknown:
-        raise ValueError(f"unknown kinds of machines: {', '.join(unknown)}")
+        return "the copy needs a name"
+    if not COPY_NAME.fullmatch(name) or not directory.strip():
+        return (
+            "the copy needs a directory"
+            if COPY_NAME.fullmatch(name)
+            else "a name of letters, digits, `_`, `-` and `.`"
+        )
 
-    # The shop file, as the GUI writes every shop file; the kinds in
-    # their order.
-    return item_text(
-        {
-            "name": " ".join(name.split()),
-            "kind": "shop",
-            "language": "English",
-            "version": FORMAT_VERSION,
-            "units": units,
-            "machine_kinds": [kind for kind in kinds if kind in machines],
-        }
-    )
-
-
-# Function `create_shop()`:
-def create_shop(
-    directory: Path, name: str, units: str, machines: list[str]
-) -> Path:
-    """Make a new shop: its directory, its `shop.toml`, and a copy of
-    each controller template `scraftcam` ships, in `controllers/`
-    (#141).
-
-    Arguments:
-    * `directory` (`Path`): The shop's directory (made if needed).
-    * `name` (`str`): The shop's name.
-    * `units` (`str`): The units it prefers, one of `UNITS`.
-    * `machines` (`list[str]`): The keys of its kinds of machines.
-
-    Returns:
-    * (`Path`): The new `shop.toml`.
-
-    Raises:
-    * `ValueError`: If an answer is not allowed, or the directory
-      already has a `shop.toml`.
-    * `OSError`: If the directory or the file can not be made.
-    """
-    text: str = new_shop_text(name, units, machines)
-    shop: Path = directory / SHOP_FILE
-    if shop.exists():
-        raise ValueError(f"{shop} already exists")
-    directory.mkdir(parents=True, exist_ok=True)
-    shop.write_text(text, encoding="utf-8")
-    controllers: Path = directory / CONTROLLERS
-    controllers.mkdir(exist_ok=True)
-    template: Path
-    for template in sorted(TEMPLATES.glob("*.toml")):
-        if not (controllers / template.name).exists():
-            shutil.copyfile(template, controllers / template.name)
-    return shop.resolve()
+    # The place: empty or not there, and under something makeable.
+    target: Path = Path(directory).expanduser() / name
+    if target.is_file():
+        return f"{target} is a file"
+    if target.is_dir() and any(target.iterdir()):
+        return f"{target} is not empty"
+    above: Path = target
+    while not above.exists():
+        above = above.parent
+    if not above.is_dir():
+        return f"{above} is not a directory"
+    return ""
 
 
 # Function `controller_templates()`:
@@ -517,6 +438,9 @@ class App:  # pylint: disable=too-many-instance-attributes
     * `messages` (`list[Message]`): Every message, oldest first.
     * `program` (`str`): The NC program run (`--program`), or "".
     * `running` (`set[str]`): The names of the machines running.
+    * `settings` (`Path | None`): The settings file that
+      `open_shop()` remembers the shop in (#704); `None` (a test's)
+      remembers nothing.
     * `shop_title` (`str`): The shop's name, or `NONE_NAME`.
     * `editor_hinted` (`bool`): True once the hint about `VISUAL` and
       `EDITOR` has been given (once a session, #124).
@@ -546,6 +470,7 @@ class App:  # pylint: disable=too-many-instance-attributes
     messages: list[Message] = field(init=False, default_factory=list)
     program: str = field(init=False, default="")
     running: set[str] = field(init=False, default_factory=set)
+    settings: Path | None = field(init=False, default=None)
     shop_title: str = field(init=False, default=NONE_NAME)
 
     # The trees (alphabetized):
@@ -588,6 +513,106 @@ class App:  # pylint: disable=too-many-instance-attributes
         else:
             self.changed()
 
+    def open_shop(self, shop: Path, *, remember: bool = True) -> Path:
+        """Show another shop, and remember it as the last (#704).
+
+        Arguments:
+        * `shop` (`Path`): Its directory or its `shop.toml`.
+        * `remember` (`bool`): False to leave the settings alone (a
+          test's or the demo's, #718).
+
+        Returns:
+        * (`Path`): Its `shop.toml`.
+
+        Raises:
+        * `ValueError`: If it has no `shop.toml`.
+        * `SettingsError`: If the settings file can not be read.
+        * `OSError`: If the settings file can not be written.
+        """
+        # The shop's file.
+        file: Path = shop / SHOP_FILE if shop.is_dir() else shop
+        if file.name != SHOP_FILE or not file.is_file():
+            raise ValueError(f"no {SHOP_FILE} at {shop}")
+        self.use_shop(file)
+
+        # Remembered for the next start, unless it is a test's model.
+        if remember and self.settings is not None:
+            old: Settings = read_settings(self.settings)
+            write_settings(
+                Settings(old.shop_directories, file.parent.resolve()),
+                self.settings,
+            )
+        return file.resolve()
+
+    def copy_shop(self, directory: Path, name: str) -> Path:
+        """Copy the shop shown to `directory/name`, and show the copy.
+
+        [Copy Shop] (#709, #710): the copy leaves `.allow_edits` out
+        (#717), takes `name` as its name, adds `directory` to the
+        settings' shop directories, and is remembered as the last.
+
+        Arguments:
+        * `directory` (`Path`): A directory that holds shops.
+        * `name` (`str`): The copy's name, also its directory's.
+
+        Returns:
+        * (`Path`): The copy's `shop.toml`.
+
+        Raises:
+        * `ValueError`: With no shop, or a problem (`copy_problem()`).
+        * `SettingsError`: If the settings file can not be read.
+        * `OSError`: If it can not be written.
+        """
+        if self.shop is None:
+            raise ValueError("there is no shop to copy")
+        problem: str = copy_problem(str(directory), name)
+        if problem:
+            raise ValueError(problem)
+
+        # The copy, named (its first `name =` line), never unlocked.
+        holder: Path = directory.expanduser().resolve()
+        target: Path = holder / name
+        if target.is_dir():
+            target.rmdir()  # Empty: `copy_problem()` said so.
+        shutil.copytree(
+            self.shop.parent,
+            target,
+            ignore=shutil.ignore_patterns(ALLOW_EDITS),
+        )
+        file: Path = target / SHOP_FILE
+        text: str = file.read_text(encoding="utf-8")
+        file.write_text(
+            re.sub(
+                r"^name = .*$",
+                f"name = {json.dumps(name)}",
+                text,
+                count=1,
+                flags=re.MULTILINE,
+            ),
+            encoding="utf-8",
+        )
+
+        # Its directory among the shop directories, then shown.
+        if self.settings is not None:
+            old: Settings = read_settings(self.settings)
+            if holder not in old.shop_directories:
+                write_settings(
+                    Settings((*old.shop_directories, holder), old.last_shop),
+                    self.settings,
+                )
+        self.open_shop(file)
+        self.say(
+            " ".join(
+                part
+                for part in (
+                    f"Copied to {target}.",
+                    version_control_hint(target),
+                )
+                if part
+            )
+        )
+        return file
+
     def reload_tree(self) -> None:
         """Read the shop's and the design's trees again."""
         # The shop's.
@@ -608,33 +633,6 @@ class App:  # pylint: disable=too-many-instance-attributes
                 )
         self.tree_version += 1
         self.changed()
-
-    def new_shop(
-        self, directory: Path, name: str, units: str, machines: list[str]
-    ) -> Path:
-        """Make a new shop, and show it.
-
-        Arguments:
-        * `directory` (`Path`): The shop's directory (made if needed).
-        * `name` (`str`): The shop's name.
-        * `units` (`str`): The units it prefers, one of `UNITS`.
-        * `machines` (`list[str]`): The keys of its kinds of machines.
-
-        Returns:
-        * (`Path`): The new `shop.toml`.
-
-        Raises:
-        * `ValueError`: If an answer is not allowed, or the shop is
-          there already.
-        * `OSError`: If it can not be written.
-        """
-        shop: Path = create_shop(directory, name, units, machines)
-        self.created.add(str(shop))
-        self.created.update(
-            str(path) for path in (shop.parent / CONTROLLERS).glob("*.toml")
-        )
-        self.use_shop(shop, f"Created {shop}.")
-        return shop
 
     def new_machine(self, name: str, kind: str, template: str) -> Path:
         """Make a new machine from a controller template, and show it.

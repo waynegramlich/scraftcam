@@ -1,29 +1,23 @@
 """Tests of `scraftcam.gui.app`."""
 
+import shutil
 import tempfile
-import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from scraftcam import shops
 from scraftcam.gui import app
+from scraftcam.settings import (
+    Settings,
+    read_settings,
+    settings_file,
+    start_shop,
+)
 
 
 class FindShopTest(unittest.TestCase):
-    """Tests of `find_shop()`, `shop_name()` and `design_name()`."""
-
-    def test_found_here_or_above(self) -> None:
-        """`shop.toml` is found in the directory or a parent, or not."""
-        with tempfile.TemporaryDirectory() as temporary:
-            top: Path = Path(temporary)
-            below: Path = top / "a" / "b"
-            below.mkdir(parents=True)
-            self.assertIsNone(app.find_shop(below))
-            shop: Path = top / "a" / "shop.toml"
-            shop.write_text('name = "Home"\n')
-            self.assertEqual(app.find_shop(below), shop.resolve())
-            self.assertEqual(app.find_shop(top / "a"), shop.resolve())
+    """Tests of `shop_name()` and `design_name()`."""
 
     def test_names(self) -> None:
         """A shop's `name`, else its directory; a design's file name."""
@@ -117,77 +111,61 @@ class AppTest(unittest.TestCase):
         self.assertEqual(model.close_refusal({"shop mill"}), "")
 
 
-class NewShopTest(unittest.TestCase):
-    """Tests of `new_shop_text()`, `create_shop()` and `App.new_shop()`."""
+class CopyShopTest(unittest.TestCase):
+    """[Copy Shop]: where a copy may go, and the copy (#709, #710)."""
 
-    def test_text(self) -> None:
-        """The answers as TOML, which `tomllib` reads back."""
-        text: str = app.new_shop_text(
-            ' My  "big" shop ', "mm", ["manual_lathe", "cnc_mill"]
-        )
-        self.assertEqual(
-            tomllib.loads(text),
-            {
-                "name": 'My "big" shop',
-                "kind": "shop",
-                "language": "English",
-                "version": shops.FORMAT_VERSION,
-                "units": "mm",
-                "machine_kinds": ["cnc_mill", "manual_lathe"],
-            },
-        )
-
-        # The shop reader takes it, and knows every kind asked about.
+    def test_problems(self) -> None:
+        """Names and places refused, and one allowed."""
         with tempfile.TemporaryDirectory() as temporary:
-            (Path(temporary) / "shop.toml").write_text(text)
-            self.assertEqual(shops.read(Path(temporary))["units"], "mm")
-        self.assertEqual(
-            [kind for kind, _label, _ready in app.MACHINE_KINDS],
-            list(shops.SHOP_MACHINE_KINDS),
-        )
-        bad: tuple[tuple[str, str, list[str]], ...] = (
-            (" ", "in", []),
-            ("A", "ft", []),
-            ("A", "in", ["loom"]),
-        )
-        name: str
-        units: str
-        machines: list[str]
-        for name, units, machines in bad:
-            with self.assertRaises(ValueError):
-                app.new_shop_text(name, units, machines)
-
-    def test_new_shop(self) -> None:
-        """A new shop is made and shown; never over an old one."""
-        with tempfile.TemporaryDirectory() as temporary:
-            directory: Path = Path(temporary) / "shop"
-            model: app.App = app.App(None, None)
-            heard: list[str] = []
-
-            def redraw() -> None:
-                heard.append(model.title())
-
-            model.listen(redraw)
-            with mock.patch("shutil.which", return_value="/usr/bin/git"):
-                shop: Path = model.new_shop(directory, "Home", "in", [])
-            self.assertEqual(shop, (directory / "shop.toml").resolve())
-            self.assertEqual(heard[-1], "scraftcam: Home ((none))")
-            self.assertTrue(model.latest().text.startswith("Created "))
-            self.assertIn("`git init`", model.latest().text)
-
-            # The shipped LinuxCNC template, copied in; both open with
-            # editing enabled (#140, #141).
-            template: Path = directory / "controllers" / "linuxcnc.toml"
-            self.assertTrue(template.is_file())
-            self.assertIn(str(template.resolve()), model.created)
-            self.assertIn(str(shop), model.created)
-            self.assertIsNotNone(model.shop_root)
-            assert model.shop_root is not None
-            self.assertFalse(
-                [n.error for n in model.shop_root.children if n.error]
+            top: Path = Path(temporary)
+            (top / "full").mkdir()
+            (top / "full" / "x").write_text("")
+            (top / "file").write_text("")
+            (top / "empty").mkdir()
+            self.assertIn("name", app.copy_problem(str(top), ""))
+            self.assertIn("letters", app.copy_problem(str(top), "a/b"))
+            self.assertIn("directory", app.copy_problem("", "mine"))
+            self.assertIn("not empty", app.copy_problem(str(top), "full"))
+            self.assertIn("a file", app.copy_problem(str(top), "file"))
+            self.assertIn(
+                "not a directory", app.copy_problem(str(top / "file"), "a")
             )
+            self.assertEqual(app.copy_problem(str(top), "empty"), "")
+            self.assertEqual(app.copy_problem(str(top / "new"), "mine"), "")
+
+    def test_copy(self) -> None:
+        """The example shop copied: named, unlocked, found, shown."""
+        with tempfile.TemporaryDirectory() as temporary:
+            top: Path = Path(temporary)
+            model: app.App = app.App(shops.EXAMPLE_SHOP_FILE, None)
+            model.settings = settings_file(top)
+            with mock.patch.object(
+                shutil, "copytree", wraps=shutil.copytree
+            ) as copying:
+                copied: Path = model.copy_shop(top / "shops", "mine")
+            self.assertEqual(copied, (top / "shops/mine/shop.toml").resolve())
+            self.assertEqual(model.shop_title, "mine")
+            self.assertIn("Copied to", model.messages[-1].text)
+            ignore = copying.call_args_list[0].kwargs["ignore"]
+            self.assertEqual(
+                ignore(".", [shops.ALLOW_EDITS, "shop.toml"]),
+                {shops.ALLOW_EDITS},
+            )
+            self.assertFalse(shops.is_read_only(copied))
+            self.assertTrue(
+                (copied.parent / "tools/drills/drill.outline.toml").is_file()
+            )
+
+            # Remembered: its directory, and as the last shop.
+            remembered: Settings = read_settings(model.settings)
+            self.assertEqual(
+                remembered.shop_directories, ((top / "shops").resolve(),)
+            )
+            self.assertEqual(start_shop(remembered), copied)
+
+            # Not twice to one place.
             with self.assertRaises(ValueError):
-                model.new_shop(directory, "Again", "in", [])
+                model.copy_shop(top / "shops", "mine")
 
 
 if __name__ == "__main__":

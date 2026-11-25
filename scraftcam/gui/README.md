@@ -9,16 +9,15 @@ So far: the top line (step 1) and the tree (step 2).
 From the repository's top directory:
 
 ```
-python3 -m scraftcam.run [--shop=SHOP] [--design=DESIGN] [--mcp=PORT]
+python3 -m scraftcam.run [--mcp=PORT]
 ```
 
 or, from anywhere (not on Windows), `scraftcam/run.py` with the same
 arguments.
 
-* `--shop`: the shop's `shop.toml`, or its directory.  With none, the
-  first `shop.toml` in the current directory or one of its parents is
-  used, as `git` finds its repository.
-* `--design`: the design, a Python file or a package directory.
+* The shop shown is the one shown last (`~/.scraftcam/settings.toml`),
+  else the example shop (`scraftcam/example_shop/`, read only);
+  another is opened in the GUI, or over MCP with `open_shop`.
 * `--mcp`: serve MCP on that port of 127.0.0.1 (see below); none by
   default.
 * `--headless`: Qt draws offscreen, so no display is needed (tests).
@@ -47,7 +46,7 @@ From the top down:
     controls a running machine will not close ("Stop the shop mill
     first").
 * **The action rows**: what can be done to the item selected:
-  "No shop yet: [New Shop]", and [Edit] (below).
+  "This shop: [Copy Shop]", [New Machine], [New Catalog].
 * **The tree** on the left, then **the panels**, side by side; drag
   the splitters between them.
 
@@ -86,24 +85,17 @@ For a Python file, or a file with a problem, [Edit] opens it in:
 3. the desktop's default editor, with a reminder (once a session)
    that `VISUAL` and `EDITOR` exist.
 
-## A New Shop
+## Your Own Shop
 
-With no shop, [New Shop] (which also opens by itself when the GUI
-starts) asks:
-
-* the directory (`shop/` under the current directory by default),
-* the shop's name, with [Create] beside it (grey until there is a
-  name; Enter presses it),
-* its units: Imperial (in) or Metric (mm),
-* which machines it has: computer controlled ones, then manual ones
-  used for prep work (only the CNC mill can be driven so far).  More
-  than one machine of a kind is entered later, with the shop's
-  machines.
-
-[Create] writes the directory's `shop.toml`; it never writes over an
-existing one.  The shop is yours: keep it under version control.  When
-it is not in a `git` or `hg` repository, the top line suggests one
-(or says to install `git` or `hg`).
+The GUI starts on the shop shown last (`~/.scraftcam/settings.toml`),
+else the example shop, which is read only (`scraftcam/example_shop/`;
+a developer's checkout may hold `.allow_edits` to change it).
+[Copy Shop] copies the shop shown: it asks, in the panel, for the
+copy's name and the directory that holds it (one of the settings'
+`shop_directories`, or one typed; red until the place is empty or
+can be made).  The copy is yours: keep it under version control.
+When it is not in a `git` or `hg` repository, the top line suggests
+one (or says to install `git` or `hg`).
 
 ## MCP
 
@@ -124,7 +116,8 @@ The functions (`window_exposed.py`; a window is numbered from 0):
 | --- | --- | --- |
 | `status` | none | What the windows show. |
 | `top_button` | `label`, `window_number` | Presses a top line or action row button, as a person would; refused if it is hidden. |
-| `new_shop` | `directory`, `name`, `units`, `machines` | Makes a shop, as [New Shop] would. |
+| `open_shop` | `shop`, `remember` | Shows a shop; `remember=False` leaves the settings alone (tests, the demo). |
+| `copy_shop` | `directory`, `name` | Copies the shop shown, as [Copy Shop] does. |
 | `tree` | `window_number` | The tree's labels, nested. |
 | `select` | `path`, `window_number` | Clicks the item for a file or directory; answers what the current panel shows. |
 | `quit_all` | none | Closes every window, unless one refuses. |

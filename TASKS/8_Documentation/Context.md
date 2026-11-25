@@ -22,5 +22,5 @@ numbers are shared by every task; the next is in
   `scraftcam/example_shop/` (read only; `.allow_edits` for
   developers, #717); `~/.scraftcam/settings.toml` (`settings.py`);
   tools in a directory per kind (`tools/drills/`, #711).  Paths
-  are updated; describe the layout, [Copy Shop] and the settings
-  once #S1 is done.
+  are updated; `scraftcam/gui/README.md` has [Copy Shop] and the
+  settings (#S1 done); `README.md`'s "Trying It" still to check.

@@ -15,6 +15,7 @@ from scraftcam.exposed import exposed
 from scraftcam.exposed.exposed import ExposedError
 from scraftcam.gui import window
 from scraftcam.gui.app import App, Message
+from scraftcam.gui.machines import MachineControl
 from scraftcam.gui.views import Panel, entry_text
 from scraftcam.packages import require
 
@@ -120,34 +121,60 @@ def top_button(label: str, window_number: int = 0) -> str:
     return f"pressed {label}"
 
 
-# Function `new_shop()`:
+# Function `open_shop()`:
 @exposed.changes
-def new_shop(
-    directory: str, name: str, units: str, machines: list[str]
-) -> str:
-    """Make the shop `name` in `directory`, as [New Shop] would.
+def open_shop(shop: str, remember: bool = True) -> str:
+    """Show the shop at `shop` (its directory or its `shop.toml`).
+
+    It is remembered as the shop shown last, for the next start
+    (`T.toasl~6.8` #704, #705), unless `remember` is false (a test's
+    or the demo's, #718).  The first window's machine (`--program`,
+    `--hmi`), waiting for a shop, then starts in it.
 
     Arguments:
-    * `directory` (`str`): Where the shop goes.
-    * `name` (`str`): The shop's name.
-    * `units` (`str`): Its units (a key of `app.UNITS`).
-    * `machines` (`list[str]`): The kinds of machine it has (keys of
-      `app.MACHINE_KINDS`).
+    * `shop` (`str`): The shop's directory or its `shop.toml`.
+    * `remember` (`bool`): False to leave the settings alone.
 
     Returns:
-    * (`str`): The new `shop.toml`'s path.
+    * (`str`): Its `shop.toml`'s path.
 
     Raises:
-    * `ExposedError`: If an answer is not allowed, or it can not be
-      written.
+    * `ExposedError`: If it has no `shop.toml`, or the settings can
+      not be read or written.
     """
     try:
-        shop: Path = _model().new_shop(
-            Path(directory), name, units, list(machines)
-        )
+        file: Path = _model().open_shop(Path(shop), remember=remember)
     except (ValueError, OSError) as error:
         raise ExposedError(str(error)) from error
-    return str(shop)
+
+    # The machine that waited for a shop (#718).
+    if window.WAITING:
+        control: MachineControl | None = window.WAITING.pop()("")
+        if control is not None:
+            _window(0).connect_machine(control)
+    return str(file)
+
+
+# Function `copy_shop()`:
+@exposed.changes
+def copy_shop(directory: str, name: str) -> str:
+    """Copy the shop shown to `directory/name`, as [Copy Shop] does.
+
+    Arguments:
+    * `directory` (`str`): A directory that holds shops.
+    * `name` (`str`): The copy's name, also its directory's.
+
+    Returns:
+    * (`str`): The copy's `shop.toml`.
+
+    Raises:
+    * `ExposedError`: If it can not be copied there, and why.
+    """
+    try:
+        file: Path = _model().copy_shop(Path(directory), name)
+    except (ValueError, OSError) as error:
+        raise ExposedError(str(error)) from error
+    return str(file)
 
 
 # Function `tree()`:

@@ -1,6 +1,7 @@
 """Tests of `scraftcam.gui.window_exposed` and `scraftcam.run --mcp`."""
 
 import json
+import shutil
 import socket
 import subprocess
 import sys
@@ -13,6 +14,12 @@ from scraftcam.exposed import client, exposed
 from scraftcam.exposed.exposed import ExposedError
 from scraftcam.gui import window, window_exposed
 from scraftcam.gui.app import App
+from scraftcam.settings import (
+    Settings,
+    read_settings,
+    settings_file,
+    start_shop,
+)
 from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
@@ -20,7 +27,8 @@ from tests import qt_app
 NAMES: tuple[str, ...] = (
     "status",
     "top_button",
-    "new_shop",
+    "open_shop",
+    "copy_shop",
     "tree",
     "select",
     "panel_tab",
@@ -78,7 +86,7 @@ class ExposedTest(unittest.TestCase):
                         "+ Panel",
                         "New Window",
                         "Exit",
-                        "New Shop",
+                        "Copy Shop",
                     ],
                     "tree": True,
                     "panels": 1,
@@ -122,31 +130,54 @@ class ExposedTest(unittest.TestCase):
         assert isinstance(opened, dict)
         self.assertIn("Mill is not connected", str(opened["message"]))
 
-    def test_new_shop_tree_select(self) -> None:
-        """`new_shop` makes a shop; `tree` lists it; `select` clicks."""
+    def test_open_shop(self) -> None:
+        """`open_shop` shows a shop and remembers it (#704, #707)."""
         with tempfile.TemporaryDirectory() as temporary:
-            # A shop, and one refused for a bad machine kind.
+            home: Path = Path(temporary)
+            self.model.settings = settings_file(home)
+            mine: Path = home / "shops" / "mine"
+            mine.mkdir(parents=True)
+            (mine / "shop.toml").write_text('name = "Mine"\n')
+            opened: object = exposed.call("open_shop", {"shop": str(mine)})
+            self.assertEqual(opened, str((mine / "shop.toml").resolve()))
+            self.assertEqual(self.model.shop_title, "Mine")
+            remembered: Settings = read_settings(self.model.settings)
+            self.assertEqual(remembered.last_shop, mine.resolve())
+            self.assertEqual(start_shop(remembered), mine / "shop.toml")
+
+            # No shop there: refused, and nothing remembered.
+            with self.assertRaises(ExposedError):
+                exposed.call("open_shop", {"shop": str(home)})
+            self.assertEqual(
+                read_settings(self.model.settings).last_shop, mine.resolve()
+            )
+            self.model.settings = None
+
+    def test_shop_tree_select(self) -> None:
+        """`open_shop` shows a shop; `tree` lists it; `select` clicks."""
+        with tempfile.TemporaryDirectory() as temporary:
+            # A small shop: the example's `shop.toml`, named, and its
+            # controller.
             directory: Path = Path(temporary) / "shop"
+            (directory / "controllers").mkdir(parents=True)
+            text: str = (EXAMPLE_SHOP / "shop.toml").read_text()
+            (directory / "shop.toml").write_text(
+                text.replace('name = "Home shop"', 'name = "Lab"', 1)
+            )
+            shutil.copy(
+                EXAMPLE_SHOP / "controllers/linuxcnc.toml",
+                directory / "controllers",
+            )
             made: object = exposed.call(
-                "new_shop",
-                {
-                    "directory": str(directory),
-                    "name": "Lab",
-                    "units": "in",
-                    "machines": [],
-                },
+                "open_shop", {"shop": str(directory), "remember": False}
             )
             self.assertTrue(str(made).endswith("shop.toml"))
             self.assertEqual(self.model.shop_title, "Lab")
+
+            # A copy to a bad name is refused.
             with self.assertRaises(ExposedError):
                 exposed.call(
-                    "new_shop",
-                    {
-                        "directory": str(directory),
-                        "name": "Lab",
-                        "units": "in",
-                        "machines": [3],
-                    },
+                    "copy_shop", {"directory": temporary, "name": "a/b"}
                 )
 
             # The tree, then a click on the shop.
@@ -178,10 +209,13 @@ class RunTest(unittest.TestCase):
         """The client starts the GUI, calls `status`, and stops it."""
         port: int = free_port()
         with tempfile.TemporaryDirectory() as temporary:
-            # No shop here, so that none is found from the directory.
-            started: str = client.start(
-                port, Path(temporary) / "none", gui=True
-            )
+            # No shop there: refused, and stopped again (#718).
+            refused: int = free_port()
+            with self.assertRaises(client.ClientError):
+                client.start(refused, Path(temporary) / "none", gui=True)
+
+            # The example shop, opened over MCP and not remembered.
+            started: str = client.start(port, EXAMPLE_SHOP, gui=True)
             self.addCleanup(client.stop, port)
             self.assertIn("status:", started)
             status: object = json.loads(
@@ -230,7 +264,6 @@ class RunTest(unittest.TestCase):
                 "-m",
                 "scraftcam.run",
                 "--headless",
-                f"--shop={EXAMPLE_SHOP}",
                 "--pages=/nowhere/catalog.toml",
             ],
             capture_output=True,

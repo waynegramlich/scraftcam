@@ -18,7 +18,8 @@ else text (`editor="OutlineEditor 1"` and `word=Undo` both work).
 (the outline editor in its first panel, #S5) and waits until it
 answers, then lists its editors (handles are given out when first
 listed); with `--gui` it runs `scraftcam.run --headless --mcp PORT`
-instead (`SHOP` as its `--shop`), and gives its `status` (#577);
+instead (`SHOP` opened over MCP, never remembered), and gives its
+`status` (#577);
 with `--shown` the window is on the user's screen, not headless, so
 the user watches (and can take over) while Claude drives it.
 The process number is kept in `~/.scraftcam/drive/PORT.pid`,
@@ -197,7 +198,8 @@ def start(
         The port.
     * `outline` (`Path | None`):
         The outline file to open, or `None` for a new outline; with
-        `gui`, the shop (`--shop`), or `None` to find one from here.
+        `gui`, the shop (opened over MCP, not remembered), or `None`
+        for the shop shown last.
     * `gui` (`bool`):
         True to start `scraftcam.run` rather than the editor.
     * `shown` (`bool`):
@@ -207,8 +209,8 @@ def start(
     * (`str`): what was started.
 
     Raises:
-    * `ClientError`: when one is already running there, or it does
-      not answer in time.
+    * `ClientError`: when one is already running there, it does not
+      answer in time, or (with `gui`) the shop has no `shop.toml`.
     """
     # Refuse to start a second one on a port that answers.
     try:
@@ -229,8 +231,8 @@ def start(
         "--mcp",
         str(port),
     ]
-    if outline is not None:
-        command.append(f"--shop={outline}" if gui else f"--outline={outline}")
+    if outline is not None and not gui:
+        command.append(f"--outline={outline}")
     elif not gui:
         command.append("--outline")
     DRIVE.mkdir(parents=True, exist_ok=True)
@@ -260,6 +262,22 @@ def start(
         except ClientError:
             time.sleep(0.2)
             continue
+        # The shop, over MCP, leaving the user's settings alone (#718);
+        # none there stops it again.
+        if gui and outline is not None:
+            try:
+                tool(
+                    port,
+                    "call",
+                    {
+                        "name": "open_shop",
+                        "arguments": {"shop": str(outline), "remember": False},
+                    },
+                )
+            except ClientError:
+                stop(port)
+                raise
+
         # Handles are given out when first listed (#507).
         first: str = "status" if gui else "editors"
         listed: str = tool(port, "call", {"name": first, "arguments": {}})

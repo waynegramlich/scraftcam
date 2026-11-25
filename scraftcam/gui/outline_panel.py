@@ -34,6 +34,7 @@ from scraftcam.gui.outline_editor import (
 )
 from scraftcam.gui.outline_file import OutlineError
 from scraftcam.gui.recorder import Recorder
+from scraftcam.shops import is_read_only
 from scraftcam.speech import gain_problems
 
 if typing.TYPE_CHECKING:
@@ -42,6 +43,12 @@ if typing.TYPE_CHECKING:
 
 # What a bare `--outline` gives: a new outline, kept in no file.
 NEW_OUTLINE: Path = Path()
+
+# What an outline in the package says when it is opened (#683).
+READ_ONLY_OUTLINE: str = (
+    "This outline is in the example shop, which is read only: "
+    "[Copy Shop] makes one of your own"
+)
 
 # Where `--record` writes when no file is named (#503).
 RECORDINGS: Path = Path.home() / ".scraftcam" / "recordings"
@@ -154,7 +161,16 @@ class OutlinePanel:
             title = f"Tutorial: {recording.title or source}"
         elif path is not None:
             title = f"Outline: {path.name}"
+
+        # One in the package (the example shop's) is read only, but
+        # for `.allow_edits` (`T.toasl~6.8` #683, #717).
+        locked: bool = path is not None and is_read_only(path)
+        if locked:
+            title += " (read only)"
         panel.hold_editor(editor, title)
+        if locked:
+            editor.set_read_only(True)
+            top.model.say(READ_ONLY_OUTLINE)
         outline_exposed.EDITORS.add(editor)
         editor.view.fit()
 

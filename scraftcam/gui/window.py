@@ -7,10 +7,8 @@ From the top down (`T.g~6` #82):
   [Tree] (shows or hides the tree, on the left edge, #70), the shop's
   and the design's names, the latest message (red for a problem,
   #95), [+ Panel] and [x].
-* The action rows of the item selected (#73, #75); for now only
-  [New Shop], while there is no shop, which opens `NewShopDialog`
-  (#97, #98; it also opens by itself when the GUI starts with no
-  shop, unless headless).
+* The action rows: [Copy Shop] (`CopyShopDialog`, `T.toasl~6.8`
+  #709, #710), [New Machine] and [New Catalog].
 * The panels, side by side, with a splitter between them; [+ Panel]
   adds one (#94).
 
@@ -36,6 +34,7 @@ from types import FrameType
 from typing import TYPE_CHECKING, Protocol
 
 from ..packages import require
+from ..settings import SettingsError, read_settings
 from ..shops import CATALOG_PAGES
 
 # Only for its type: imported when a catalog is opened (#68), since it
@@ -44,16 +43,12 @@ if TYPE_CHECKING:
     from ..catalog.catxtract import App as Pages
 from . import prompt, theme
 from .app import (
-    MACHINE_KINDS,
-    MANUAL_PREFIX,
     NEW_MACHINE_KINDS,
-    NEW_SHOP_DIRECTORY,
-    UNIT_LABELS,
-    UNITS,
     App,
     Message,
     add_ignores,
     controller_templates,
+    copy_problem,
     ignores_needed,
     pdf_pages,
 )
@@ -99,7 +94,6 @@ from PySide6.QtGui import (  # noqa: E402
 )
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -129,7 +123,7 @@ WIDTH: int = 720
 HEIGHT: int = 480
 
 
-# The least width of `NewShopDialog`'s directory, in pixels.
+# The least width of `CopyShopDialog`'s directory, in pixels.
 DIRECTORY_WIDTH: int = 360
 
 # The most of the window's width the tree takes when it is fitted to
@@ -151,6 +145,10 @@ WINDOWS: list["Window"] = []
 
 # What connects a machine by name (`run()`'s `connect`), if anything.
 CONNECT: list[Callable[[str], MachineControl | None]] = []
+
+# The first window's machine (`--program`, `--hmi`), while it waits for
+# `open_shop` over MCP to say which shop it is in (`T.toasl~6.8` #718).
+WAITING: list[Callable[[str], MachineControl | None]] = []
 
 # The `catxtract` windows open, by their `catalog.toml`: one each, in
 # a window of its own, as a page needs all the screen it can get
@@ -242,13 +240,17 @@ def run(
     """
     application: QApplication = make_application(headless=headless)
     CONNECT.clear()
+    WAITING.clear()
     if makers is not None:
         CONNECT.append(makers.connect)
     theme.follow(application, redraw_windows)
     first: Window = Window(model)
     first.show()
     watcher: TreeWatcher = TreeWatcher(model)
-    if makers is not None and makers.first is not None:
+    # Driven over MCP, the first machine waits for `open_shop` (#718).
+    if makers is not None and makers.first is not None and mcp_port:
+        WAITING.append(makers.first)
+    elif makers is not None and makers.first is not None:
         control: MachineControl | None = makers.first("")
         if control is not None:
             first.connect_machine(control)
@@ -261,10 +263,6 @@ def run(
         if checked is not None:
             model.forget(watcher.follow)
             return checked
-
-    # No shop: offer to make one (#97), when someone can answer.
-    elif model.shop is None and not headless:
-        first.new_shop()
 
     # MCP, if asked for: each call runs on Qt's main thread (#577).
     if mcp_port:
@@ -532,7 +530,7 @@ class Window(QWidget):
       Catalog], for `catalogs/` and the shop (`T.c~6.3` #61).
     * `new_machine_row` (`QWidget`): The action row with [New
       Machine], for `machines/` (#141).
-    * `new_shop_row` (`QWidget`): The action row with [New Shop].
+    * `copy_shop_row` (`QWidget`): The action row with [Copy Shop].
     * `panels` (`list[Panel]`): The panels, left to right.
     * `closing` (`list[Panel]`): Panels told to close whose machine
       is still stopping; each closes once it has stopped (#156).
@@ -578,14 +576,14 @@ class Window(QWidget):
         self.add_button(top, EXIT, self.exit_program)
         self.explain_top_line()
 
-        # The action rows, under the top line: [New Shop], while there
-        # is no shop; [New Machine], for `machines/`.  [Enable
+        # The action rows, under the top line: [Copy Shop] (#709);
+        # [New Machine], for `machines/`.  [Enable
         # Editing] and [Edit TOML File] are in each panel (#153).
         self.action_rows: QWidget = QWidget()
         rows: QVBoxLayout = QVBoxLayout(self.action_rows)
         rows.setContentsMargins(0, 0, 0, 0)
-        self.new_shop_row: QWidget = self.action_row(
-            rows, QLabel("No shop yet:"), "New Shop", self.new_shop
+        self.copy_shop_row: QWidget = self.action_row(
+            rows, QLabel("This shop:"), "Copy Shop", self.copy_shop
         )
         self.new_machine_row: QWidget = self.action_row(
             rows, QLabel("machines/:"), "New Machine", self.new_machine
@@ -702,8 +700,7 @@ class Window(QWidget):
             f"color: {problem}" if latest.problem else ""
         )
         self.show_stop_all()
-        self.new_shop_row.setVisible(model.shop is None)
-        self.buttons["New Shop"].setVisible(model.shop is None)
+        self.copy_shop_row.setVisible(model.shop is not None)
 
         # The tree, when it was read again, and the panels' items;
         # then the selected item's action row.
@@ -1449,9 +1446,9 @@ class Window(QWidget):
             else ""
         )
 
-    def new_shop(self) -> None:
-        """Ask about the new shop, and make it ([New Shop])."""
-        dialog: NewShopDialog = NewShopDialog(self, self.model)
+    def copy_shop(self) -> None:
+        """Ask where the copy goes, and copy the shop ([Copy Shop])."""
+        dialog: CopyShopDialog = CopyShopDialog(self, self.model)
         prompt.show_in(self.panels[self.current], dialog)
 
     def new_machine(self) -> None:
@@ -1608,23 +1605,22 @@ def close_all() -> None:
         top.close()
 
 
-# Class `NewShopDialog`:
-class NewShopDialog(QDialog):
-    """The questions for a new shop (#98, #104).
+# Class `CopyShopDialog`:
+class CopyShopDialog(QDialog):
+    """Where [Copy Shop] puts a copy of the shop shown (#709, #710).
 
-    Where it goes (`shop/` under the current directory, unless
-    changed), its name, its units, and a check box for each kind of
-    machine (`MACHINE_KINDS`; those `scraftcam` can not drive yet say
-    so).  [Create], beside the name, stays grey until there is one.
+    The copy's name, and the directory that holds it: one of the
+    settings' shop directories, or one typed (`~/shops` the first
+    time).  A problem with the place shows in red, and [Copy] stays
+    grey until there is none (`copy_problem()`).
 
     Attributes:
     * `model` (`App`): What every window shows.
-    * `directory` (`QLineEdit`): Where the shop goes.
-    * `name` (`QLineEdit`): The shop's name.
-    * `units` (`QComboBox`): The units it prefers.
-    * `kinds` (`dict[str, QCheckBox]`): A check box per kind, by key.
+    * `name` (`QLineEdit`): The copy's name, also its directory's.
+    * `directory` (`QComboBox`): The directory that holds it.
+    * `problem` (`QLabel`): What is wrong with the place, in red.
+    * `copy_button` (`QPushButton`): [Copy], beside the name.
     * `buttons` (`QDialogButtonBox`): [Cancel].
-    * `make_button` (`QPushButton`): [Create], beside the name.
     """
 
     def __init__(self, parent: QWidget, model: App) -> None:
@@ -1636,60 +1632,36 @@ class NewShopDialog(QDialog):
         """
         super().__init__(parent)
         self.model: App = model
-        self.setWindowTitle("New Shop")
+        self.setWindowTitle("Copy Shop")
         form: QFormLayout = QFormLayout(self)
-
-        # Where, with [Browse...] to choose another directory.
-        self.directory: QLineEdit = QLineEdit(
-            str(Path.cwd() / NEW_SHOP_DIRECTORY)
+        form.addRow(
+            QLabel(f'Copy "{model.shop_title}" as a shop of your own.')
         )
-        self.directory.setMinimumWidth(DIRECTORY_WIDTH)
-        browse: QPushButton = QPushButton("Browse...")
-        browse.clicked.connect(self.browse)
-        where: QHBoxLayout = QHBoxLayout()
-        where.addWidget(self.directory, 1)
-        where.addWidget(browse)
-        form.addRow("Directory:", where)
 
-        # The name, with [Create] beside it (#116; Enter presses it),
-        # grey until there is a name.
+        # The name, with [Copy] beside it (Enter presses it).
         self.name: QLineEdit = QLineEdit()
-        self.name.setPlaceholderText("e.g. Home shop")
+        self.name.setPlaceholderText("e.g. my_shop")
         self.name.textChanged.connect(self.check)
-        self.make_button: QPushButton = QPushButton("Create")
-        self.make_button.setDefault(True)
-        self.make_button.clicked.connect(self.make_shop)
+        self.copy_button: QPushButton = QPushButton("Copy")
+        self.copy_button.setDefault(True)
+        self.copy_button.clicked.connect(self.copy_shop)
         named: QHBoxLayout = QHBoxLayout()
         named.addWidget(self.name, 1)
-        named.addWidget(self.make_button)
+        named.addWidget(self.copy_button)
         form.addRow("Name:", named)
 
-        # The units.
-        self.units: QComboBox = QComboBox()
-        unit: str
-        for unit in UNITS:
-            self.units.addItem(UNIT_LABELS[unit], unit)
-        form.addRow("Units:", self.units)
-
-        # A check box per kind of machine: computer controlled ones,
-        # then manual ones (for prep work).
-        form.addRow(QLabel("Which machines does the shop have?"))
-        form.addRow(QLabel("Computer controlled:"))
-        self.kinds: dict[str, QCheckBox] = {}
-        kind: str
-        label: str
-        ready: bool
-        for kind, label, ready in MACHINE_KINDS:
-            if kind.startswith(MANUAL_PREFIX) and not any(
-                key.startswith(MANUAL_PREFIX) for key in self.kinds
-            ):
-                form.addRow(QLabel("Manual, for prep work:"))
-            box: QCheckBox = QCheckBox(
-                label if ready else f"{label} (not supported yet)"
-            )
-            box.setChecked(kind == "cnc_mill")
-            form.addRow(box)
-            self.kinds[kind] = box
+        # The directory: the shop directories, or one typed.
+        self.directory: QComboBox = QComboBox()
+        self.directory.setEditable(True)
+        self.directory.setMinimumWidth(DIRECTORY_WIDTH)
+        place: str
+        for place in shop_directories(model):
+            self.directory.addItem(place)
+        self.directory.currentTextChanged.connect(self.check)
+        form.addRow("In:", self.directory)
+        self.problem: QLabel = QLabel("")
+        self.problem.setStyleSheet(f"color: {colors().problem}")
+        form.addRow(self.problem)
 
         # [Cancel].
         self.buttons: QDialogButtonBox = QDialogButtonBox(
@@ -1700,43 +1672,45 @@ class NewShopDialog(QDialog):
         self.check()
 
     def check(self) -> None:
-        """Grey [Create], saying why, until there is a name."""
-        named: bool = bool(self.name.text().strip())
-        self.make_button.setEnabled(named)
-        self.make_button.setToolTip("" if named else "Give the shop a name.")
-
-    def browse(self) -> None:
-        """Choose the shop's directory ([Browse...]).
-
-        Qt's own dialog, not the desktop's: KDE's, opened from this
-        dialog, did not show (#117).  It starts in the nearest
-        directory that exists.
-        """
-        start: Path = Path(self.directory.text().strip()).expanduser()
-        while not start.is_dir() and start != start.parent:
-            start = start.parent
-        chosen: str = prompt.ask_directory(
-            self, "The shop's directory", str(start)
+        """Say what is wrong with the place, greying [Copy] until none."""
+        problem: str = copy_problem(
+            self.directory.currentText(), self.name.text()
         )
-        if chosen:
-            self.directory.setText(chosen)
+        self.problem.setText(problem)
+        self.copy_button.setEnabled(not problem)
 
-    def make_shop(self) -> None:
-        """Make the shop ([Create]); on a problem, say so and stay."""
-        machines: list[str] = [
-            kind for kind, box in self.kinds.items() if box.isChecked()
-        ]
+    def copy_shop(self) -> None:
+        """Copy the shop ([Copy]); on a problem, say so and stay."""
         try:
-            self.model.new_shop(
-                Path(self.directory.text().strip()).expanduser(),
-                self.name.text(),
-                str(self.units.currentData()),
-                machines,
+            self.model.copy_shop(
+                Path(self.directory.currentText().strip()), self.name.text()
             )
         except (ValueError, OSError) as error:
             self.model.say(str(error), problem=True)
             return
         self.accept()
+
+
+# Function `shop_directories()`:
+def shop_directories(model: App) -> list[str]:
+    """Return where [Copy Shop] offers to put a copy.
+
+    Arguments:
+    * `model` (`App`): What every window shows, for its settings.
+
+    Returns:
+    * (`list[str]`): The settings' shop directories, else `~/shops`.
+    """
+    found: list[str] = []
+    if model.settings is not None:
+        try:
+            found = [
+                str(place)
+                for place in read_settings(model.settings).shop_directories
+            ]
+        except SettingsError as error:
+            model.say(str(error), problem=True)
+    return found or [str(Path.home() / "shops")]
 
 
 # Class `NewCatalogDialog`:

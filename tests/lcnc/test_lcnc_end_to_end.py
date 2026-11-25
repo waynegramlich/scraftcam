@@ -8,7 +8,7 @@ LinuxCNC installed
 it runs only when asked:
 
 ```
-SCRAFTCAM_LINUXCNC=1 python3 -m unittest -v test_lcnc_end_to_end
+SCRAFTCAM_LINUXCNC=1 python3 -m unittest -v tests.lcnc.test_lcnc_end_to_end
 ```
 """
 
@@ -205,14 +205,30 @@ class TestEndToEnd(unittest.TestCase):
         cls.port = free_port()
         cls.hmi = subprocess.Popen(
             [sys.executable, "-m", "scraftcam.run", "--headless",
-             "--shop", str(shops.EXAMPLE_SHOP), "--hmi",
-             "--mcp", str(cls.port)],
+             "--hmi", "--mcp", str(cls.port)],
             cwd=HERE,
         )  # fmt: skip
         end: float = time.monotonic() + STEP_TIME
+        opened: bool = False
         while time.monotonic() < end:
             try:
                 client.request(cls.port, "ping", {})
+
+                # The example shop, not remembered, starts the HMI
+                # (`T.toasl~6.8` #718).
+                if not opened:
+                    client.tool(
+                        cls.port,
+                        "call",
+                        {
+                            "name": "open_shop",
+                            "arguments": {
+                                "shop": str(shops.EXAMPLE_SHOP),
+                                "remember": False,
+                            },
+                        },
+                    )
+                    opened = True
                 if '"HMI 1"' in client.tool(
                     cls.port, "call", {"name": "hmis", "arguments": {}}
                 ):

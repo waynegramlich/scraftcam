@@ -1072,13 +1072,17 @@ class TestHeadlessProgram(unittest.TestCase):
         )
         with subprocess.Popen(
             [sys.executable, "-c", code, "--headless", "--dry-run",
-             "--shop", str(SHOP_TOML), "--program", str(DEMO),
-             "--mcp", str(port)],
+             "--program", str(DEMO), "--mcp", str(port)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             env=environment,
         ) as panel:  # fmt: skip
             try:
+                # The shop, over MCP, starts the waiting HMI (#718).
+                call_until_up(
+                    port, "open_shop", shop=str(SHOP_TOML), remember=False
+                )
+
                 # Handles are given out when first listed (#507).
                 self.assertIn("HMI 1", call_until_up(port, "hmis"))
                 shown = call_until_up(port, "hmi_show", hmi="HMI 1")
