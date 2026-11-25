@@ -98,6 +98,11 @@ the scratchpad (the editor saves every change).
   headless replays already never wait.
 * Later: #544 with #547/#549, #542, #543, #546, #553-#556, #561,
   #501 `--update`, #508/#514.  #516 `scraftcam.run --drive-editor` waits.
+* 2026-11-24 (`T.toasl~6.8`): driving the user's own GUI over MCP
+  (`select`, `state`, `screenshot`, `to_front`, then a headless
+  repeat) found #750/#751 and #754.  New: `tab(editor, name)`
+  ([Drawing]/[SVG]/[Edit]).  Adding a line to `state()` breaks
+  every recording (they compare its text).
 
 ## Notes
 

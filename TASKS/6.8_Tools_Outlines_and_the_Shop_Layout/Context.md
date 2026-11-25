@@ -2,68 +2,51 @@
 
 Made 2026-11-22 from `T.tfo~6.5` #460; renamed from "Shop Directory
 Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
-(closed).  Squeezed 2026-11-24 late, after #S7 (the full history is
-in `hg` and `git`: `023dfc7`, `c26ec49`, `eafdb79`, `6ffd104` and
-the #S7 commit).  Issue numbers are shared by every task; the next
-is in `TASKS/Issue_Counter.md`.
+(closed).  Squeezed 2026-11-24 late, after #S8 (the full history is
+in `hg` and `git`: `023dfc7`, `c26ec49`, `eafdb79`, `6ffd104`,
+`be44d88`, `7fa072c` and the #S8 commit).  Issue numbers are shared
+by every task; the next is in `TASKS/Issue_Counter.md`.
 
-**Where we are (2026-11-24 late):** Steps #694, #S1, #S2, #S3, #S5,
-#S6, #S7 done and committed (#S4 dropped, #678).  Next: #726's
-declaration file (or a task of its own); then `T.tfo~6.5` reopens
-for the other round tools (#690, #727).  Round tool bits only for
-now; assemblies wait in `T.sa~6.11` (Suspended, #734).  The user has
-`scraftcam/example_shop/.allow_edits`.  Undecided, for later: #703
-and #708 (checkboxes and [Copy Marked], now possible after #S5);
-#715 (a stray traceback); the LinuxCNC suite and `--show-demo`
-were last run at #S1.
+**Where we are (2026-11-24 late):** Steps #694, #S1-#S3, #S5-#S8
+done (#S4 dropped, #678).  Next: #726's declaration file (or a task
+of its own); then `T.tfo~6.5` reopens for the other round tools
+(#690, #727).  Round tool bits only for now; assemblies wait in
+`T.sa~6.11` (Suspended, #734).  The user has
+`scraftcam/example_shop/.allow_edits`.
 
-## GUI Testing (2026-11-24 late)
+## Open
 
-* #750/#751 fixed (found over MCP): `Panel.show_outline()` kept its
-  editor for the same outline file, so a second drill showed the
-  first's values, and "Drill outline" after a drill stayed in tool
-  mode (its shape never editable).  Now kept only for the same item
-  (`Panel.outline_item`); `test_panel_outline.test_same_panel`.
-  The shape is edited from the kind's outline item, never a tool's
-  [Outline] tab (#736).
-* #752/#760 fixed: `views.item_text()` had no case for an outline
-  and ran Python's parser over the `.toml` (line 52 is `from = ...`,
-  a keyword); now it shows the file (`test_outline_text`).  #761
-  done first: `tree.Kind` is a `StrEnum` (the old names are
-  aliases), `Node.kind: Kind`, and `item_text()` is a `match`
-  ending in `assert_never()`; mypy named `Kind.OUTLINE` missing
-  before the fix.  Other kind tests (`in (SHOP, FILE)`) are not
-  checked so.
-* Agreed for #S8 (the user): #755 tabs [Drawing] (look only),
-  [SVG], [Edit] (overview, editable, no checkbox), no [Overview]
-  button; #756 [Edit] greyed where read only, every greyed tab or
-  button has a tooltip; #757 a tool's [Outline] has a link "Edit
-  the Drill outline" in place of [Edit]; #758 no [Allow Changes] on
-  an outline's panel (kept where there are fields); #759 the
-  letters table editable only in [Edit].
-* #762a/b, #763 done 2026-11-24 (the user): closed sets the code
-  branches on are marked where defined, `grep -rn '(#762)'` (14
-  in 12 files: `TableField.form`, dimension kinds, `HIDE_X/Y`, hole
-  kinds, `LINE_*`, `StripHandle.part`, catxtract `Region.kind`,
-  `AssemblyItem.kind`, `model` units, `line_kind()`; already
-  `Literal`: `ToolKind`, `DrillCycle`, `CutMode`, `ViolationKind`).
-  Comments only.  Not marked (open, from shop data): tooling and
-  machine kinds; nor parsers, CLI words, protocol methods.  #763:
-  the rule is in `aicontexts/rule_sources/Python_Coding_Rules.md`,
-  refreshed into `aicontexts` and here (`R.pcr`).
-* Test run 2026-11-24 22:04: `fast` 417 OK (64 s), `qt` 361 OK
-  (21 s).  #715 seen again: 35 tracebacks printed (not failures)
-  from `machine_panel.py:1683` (`HMI.show_drawing()`, `done, total
-  = self.drawer.view.progress` got 0 values) fired by `poll()` in
-  `test_outline_editor` tests, after `test_machine_panel`; #764 a
-  machine panel's timer outlives its test.  #753 open: [Allow Changes] can not
-  be pressed over MCP.
-* #754 (found over MCP, after the #750 fix): the drill outline's
-  vertices can not be chosen in the working view, because an
-  outline with hide strips is look-and-pan only there (#171,
-  `outline_editor.py:3613-3615`); [View] > [Overview] makes it
-  editable (checked headless).  A click there silently does
-  nothing: the user's to decide what should happen.
+* #715/#764: a stray traceback, `machine_panel.py:1683`
+  (`HMI.show_drawing()`, `self.drawer.view.progress` empty), fired
+  35 times by `poll()` during `test_outline_editor`, after
+  `test_machine_panel`: a machine panel's timer outlives its test.
+  Tests still pass.
+* #753: [Allow Changes] (still on a tool's panel) can not be pressed
+  over MCP.
+* #762: 14 closed sets marked for a `StrEnum` (`grep -rn '(#762)'`),
+  converted when a Step touches them (#763 is the rule, in
+  `aicontexts/rule_sources/Python_Coding_Rules.md`, `R.pcr`).
+  Other node-kind tests (`in (SHOP, FILE)`) are not checked by mypy.
+* #703/#708 checkboxes and [Copy Marked] (possible since #S5); the
+  LinuxCNC suite and `--show-demo` last run at #S1.
+
+## Done 2026-11-24 late (GUI testing over MCP, #S8)
+
+* #750/#751: a panel kept its outline editor for the same file, so
+  a second drill showed the first's values and "Drill outline" after
+  a drill stayed a tool's table; now per item (`Panel.outline_item`).
+* #752/#760/#761: an outline item's text was Python's parse of its
+  TOML; `tree.Kind` is a `StrEnum`, `item_text()` a `match` ending
+  in `assert_never()` (mypy named the missing case first).
+* #S8 (#754-#759): the editor's tabs `ViewTab` [Drawing] (cut out,
+  look only), [SVG], [Edit] (overview, changes; letters table too);
+  [Overview] gone; `set_read_only()` locks (greys [Edit], tooltip
+  `LOCKED_MESSAGE`/`TOOL_MESSAGE`); a press while read only says
+  why.  A new editor opens on [Edit]; a shop panel opens an outline
+  on [Drawing], with no edit row (#758); a tool's [Outline] has the
+  link "Edit the Drill outline" (`offer_outline()`,
+  `Panel.open_path`, #757).  MCP `tab(editor, name)`; `state()`
+  unchanged (recordings compare it).  `qt` 364, `fast` 417 pass.
 
 ## The Shop (decided and built)
 

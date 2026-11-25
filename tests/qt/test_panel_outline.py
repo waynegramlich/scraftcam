@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QTableWidget, QTableWidgetItem
 
 from scraftcam.exposed import steps
 from scraftcam.gui import outline_exposed, tutorial
-from scraftcam.gui.outline_editor import Drawing, OutlineEditor
+from scraftcam.gui.outline_editor import Drawing, OutlineEditor, ViewTab
 from scraftcam.gui.outline_file import outline_text
 from scraftcam.gui.outline_letters import ToolValues
 from scraftcam.gui.tree import FILE, Node
@@ -80,7 +80,8 @@ class OutlineTabTest(unittest.TestCase):
         before: list[tuple[float, float]] = list(editor.drawing.points)
         outline_exposed.drag(handle, "Vertex 1", to="(1, 1)")
         self.assertEqual(editor.drawing.points, before)
-        self.assertIn("Allow Changes", editor.status.text())
+        self.assertIn("Only this tool's values", editor.status.text())
+
         self.panel.set_editing(True)
         self.assertTrue(editor.read_only)
         tool: ToolValues | None = editor.letters.tool
@@ -92,9 +93,15 @@ class OutlineTabTest(unittest.TestCase):
         self.addCleanup(own.deleteLater)
         outline: Path = self.directory / OUTLINE
         own.show_node(Node("end_mill", OUTLINE_KIND, outline, ""), "in")
-        own.set_editing(True)
         opened: OutlineEditor | None = own.outline
         assert opened is not None
+
+        # It opens on [Drawing], look only; [Edit] changes it, with
+        # no [Allow Changes] (#755, #758).
+        self.assertIs(opened.tab(), ViewTab.DRAWING)
+        self.assertTrue(opened.read_only)
+        self.assertFalse(own.edit_row.isVisibleTo(own))
+        opened.show_tab(ViewTab.EDIT)
         self.assertFalse(opened.read_only)
         self.assertTrue(opened.button_actions["Delete"].isEnabled())
 
@@ -114,6 +121,24 @@ class OutlineTabTest(unittest.TestCase):
         node: Node = Node("end_mill", OUTLINE_KIND, outline, "")
         self.assertEqual(item_text(node), outline.read_text(encoding="utf-8"))
 
+    def test_outline_link(self) -> None:
+        """A tool's [Outline] has no [Edit]: a link opens its kind's
+        outline (`T.toasl~6.8` #757)."""
+        self.panel.show_node(Node(TOOL, FILE, self.tool, ""), "in")
+        self.panel.show()
+        editor: OutlineEditor | None = self.panel.outline
+        assert editor is not None
+        self.panel.tabs.setCurrentWidget(editor)
+        qt_app.process_events()
+        edit: int = list(ViewTab).index(ViewTab.EDIT)
+        self.assertFalse(editor.tab_bar.isTabVisible(edit))
+        self.assertTrue(editor.outline_link.isVisible())
+        self.assertIn("Edit the End mill outline", editor.outline_link.text())
+        opened_paths: list[str] = []
+        self.panel.open_path = opened_paths.append
+        editor.follow_outline_link("edit")
+        self.assertEqual(opened_paths, [str(self.directory / OUTLINE)])
+
     def test_same_panel(self) -> None:
         """One panel: a tool, its kind's outline, another tool; each
         gets its own editor, though the file is the same (#750,
@@ -127,9 +152,9 @@ class OutlineTabTest(unittest.TestCase):
 
         # The outline itself: no tool's values, and it may be changed.
         self.panel.show_node(Node("end_mill", OUTLINE_KIND, outline, ""), "in")
-        self.panel.set_editing(True)
         shape: OutlineEditor | None = self.panel.outline
         assert shape is not None
+        shape.show_tab(ViewTab.EDIT)
         self.assertIsNot(shape, first)
         self.assertIsNone(shape.letters.tool)
         self.assertFalse(shape.read_only)
@@ -242,9 +267,9 @@ class ReplayInPanelTest(unittest.TestCase):
                     Node("end_mill", OUTLINE_KIND, directory / OUTLINE, ""),
                     "in",
                 )
-                panel.set_editing(True)
                 editor: OutlineEditor | None = panel.outline
                 assert editor is not None
+                editor.show_tab(ViewTab.EDIT)
                 panel.tabs.setCurrentWidget(editor)
                 self.assertEqual(tutorial.mismatches(editor, recording), [])
                 panel.deleteLater()

@@ -32,3 +32,7 @@ numbers are shared by every task; the next is in
   scraftcam.gui.tool_svgs [SHOP]` rewrites a shop's; the outline
   editor's MCP `resize`; a tool's [Outline] tab table (Default /
   This tool).
+* `T.toasl~6.8` #S8: an outline is changed in its [Edit] tab (no
+  [Allow Changes]; [Overview] is gone); a tool's [Outline] links to
+  its kind's outline.  `T.toasl~6.8` #S7: the shop's `stock/`,
+  `tools/materials/`, `tooling/grid_plates/` layout.

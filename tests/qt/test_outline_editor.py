@@ -38,7 +38,14 @@ from scraftcam.gui.dimensions import (
 from scraftcam.gui.hides import HIDE_Y, Hide, across, strip
 from scraftcam.gui.letters import Letter
 from scraftcam.gui.outline_diagram import fillet_arcs, outline_strokes
-from scraftcam.gui.outline_editor import Drawing, OutlineEditor, drawing_from
+from scraftcam.gui.outline_editor import (
+    LOCKED_MESSAGE,
+    READ_ONLY_MESSAGE,
+    Drawing,
+    OutlineEditor,
+    ViewTab,
+    drawing_from,
+)
 from scraftcam.gui.outline_file import PLAIN, Hole, outline_text
 from scraftcam.gui.values import crossings
 from scraftcam.shops import EXAMPLE_SHOP
@@ -1546,13 +1553,15 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         hide = view.drawing.hides[0]
         self.assertEqual((hide.axis, hide.below, hide.above), (1, 1, 2))
         editor.show_message()
-        self.assertTrue(editor.buttons["Overview"].isChecked())
+        self.assertIs(editor.tab(), ViewTab.EDIT)
         self.assertFalse(view.grab().isNull())
         drag(QPointF(-1.0, 0.5), QPointF(3.0, 2.0))
         self.assertIn("corner", view.message)
         self.assertEqual(len(view.drawing.hides), 1)
-        editor.buttons["Overview"].click()
+        editor.show_tab(ViewTab.DRAWING)
         self.assertFalse(view.overview)
+        self.assertTrue(editor.read_only)
+        editor.show_tab(ViewTab.EDIT)
         view.undo()
         self.assertEqual(view.drawing.hides, [])
 
@@ -1563,10 +1572,11 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
         view.make_squares()
+        self.editor.show_tab(ViewTab.DRAWING)
         view.lay_hide(QRectF(-1.0, 3.0, 4.0, 3.0))
         self.assertEqual(len(view.grips), 5)
         self.assertFalse(view.grips[0].isVisible())
-        view.toggle_overview()
+        self.editor.show_tab(ViewTab.EDIT)
         view.fit()
         self.assertTrue(view.grips[0].isVisible())
         port = view.viewport()
@@ -1634,6 +1644,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view = self.editor.view
         view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 40), (0, 40)]
         view.make_squares()
+        self.editor.show_tab(ViewTab.DRAWING)
         view.lay_hide(QRectF(-1.0, 5.0, 4.0, 30.0))
         self.assertEqual(view.drawing.hides[0].axis, 1)
         self.assertFalse(view.overview)
@@ -1671,8 +1682,47 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertGreater(
             below.boundingRect().width(), below.boundingRect().height()
         )
-        view.toggle_overview()
+        self.editor.show_tab(ViewTab.EDIT)
         self.assertTrue(view.isInteractive())
+
+    def test_tabs(self) -> None:
+        """[Drawing] is look only, a press on a corner saying why;
+        [Edit] changes; a locked outline greys [Edit], its tooltip
+        saying why (`T.toasl~6.8` #754a, #755, #756, #759)."""
+        editor = self.editor
+        view = editor.view
+        self.assertIs(editor.tab(), ViewTab.EDIT)
+        self.assertFalse(editor.read_only)
+        self.assertTrue(editor.buttons["Delete"].isEnabled())
+
+        # [Drawing]: nothing changes, and a press says so.
+        editor.show_tab(ViewTab.DRAWING)
+        self.assertTrue(editor.read_only)
+        self.assertFalse(view.overview)
+        self.assertFalse(editor.buttons["Delete"].isEnabled())
+        view.fit()
+        corner: QPointF = QPointF(*view.drawing.points[1])
+        QTest.mouseClick(
+            view.viewport(),
+            Qt.MouseButton.LeftButton,
+            pos=view.mapFromScene(corner),
+        )
+        self.assertEqual(view.message, READ_ONLY_MESSAGE)
+
+        # [Edit]: the whole drawing, changes allowed.
+        editor.show_tab(ViewTab.EDIT)
+        self.assertTrue(view.overview)
+        self.assertFalse(editor.read_only)
+
+        # Locked: back to [Drawing], [Edit] greyed with a reason.
+        editor.set_read_only(True)
+        edit: int = list(ViewTab).index(ViewTab.EDIT)
+        self.assertIs(editor.tab(), ViewTab.DRAWING)
+        self.assertFalse(editor.tab_bar.isTabEnabled(edit))
+        self.assertEqual(editor.tab_bar.tabToolTip(edit), LOCKED_MESSAGE)
+        editor.show_tab(ViewTab.EDIT)
+        self.assertIs(editor.tab(), ViewTab.DRAWING)
+        self.assertEqual(view.read_only_message, LOCKED_MESSAGE)
 
     def test_undo_redo(self) -> None:
         """Undo and redo go back and forth; a new change ends redo."""

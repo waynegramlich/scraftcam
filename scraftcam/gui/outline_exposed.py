@@ -394,6 +394,29 @@ def button(editor: str, word: str) -> str:
 
 
 @exposed.changes
+def tab(editor: str, name: str) -> str:
+    """Choose the [{name}] tab of {editor}'s drawing: Drawing, SVG or
+    Edit (`T.toasl~6.8` #755)."""
+    # Chosen as a user chooses it, so a greyed or hidden one fails as
+    # it would for them.
+    shown: OutlineEditor = _editor(editor)
+    names: list[str] = [
+        shown.tab_bar.tabText(index) for index in range(shown.tab_bar.count())
+    ]
+    if name not in names:
+        raise ExposedError(f"no tab [{name}]; there are: {', '.join(names)}")
+    index: int = names.index(name)
+    if not shown.tab_bar.isTabVisible(index):
+        raise ExposedError(f"[{name}] is not shown here")
+    if not shown.tab_bar.isTabEnabled(index):
+        why: str = shown.tab_bar.tabToolTip(index)
+        raise ExposedError(f"[{name}] is greyed: {why}")
+    shown.tab_bar.setCurrentIndex(index)
+    QTest.qWait(1)
+    return state(editor)
+
+
+@exposed.changes
 def resize(editor: str, width: int, height: int) -> str:
     """Make {editor}'s window `width` by `height` pixels, then fit
     the drawing to it (a headless window starts small, too small to

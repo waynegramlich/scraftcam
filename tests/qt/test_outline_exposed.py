@@ -8,7 +8,7 @@ from pathlib import Path
 from scraftcam.exposed import exposed
 from scraftcam.exposed.exposed import ExposedError
 from scraftcam.gui import outline_exposed
-from scraftcam.gui.outline_editor import Drawing, OutlineEditor
+from scraftcam.gui.outline_editor import Drawing, OutlineEditor, ViewTab
 from tests import qt_app
 
 
@@ -51,6 +51,22 @@ class TestOutlineExposed(unittest.TestCase):
         )
         self.assertIn("chosen corners: []", lines)
         self.assertEqual(lines[-1], "undo depth: 0")
+
+    def test_tab(self) -> None:
+        """[Drawing] and [Edit] are chosen as a user chooses them; a
+        greyed one is refused, saying why (`T.toasl~6.8` #755)."""
+        handle: str = "OutlineEditor 1"
+        exposed.call("editors", {})
+        exposed.call("tab", {"editor": handle, "name": "Drawing"})
+        self.assertIs(self.editor.tab(), ViewTab.DRAWING)
+        self.assertTrue(self.editor.read_only)
+        exposed.call("tab", {"editor": handle, "name": "Edit"})
+        self.assertFalse(self.editor.read_only)
+        with self.assertRaisesRegex(ExposedError, "no tab"):
+            exposed.call("tab", {"editor": handle, "name": "Overview"})
+        self.editor.set_read_only(True)
+        with self.assertRaisesRegex(ExposedError, "greyed: This outline"):
+            exposed.call("tab", {"editor": handle, "name": "Edit"})
 
     def test_not_an_editor(self) -> None:
         """A handle that is not an open editor is refused."""

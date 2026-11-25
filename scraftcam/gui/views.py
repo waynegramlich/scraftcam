@@ -292,7 +292,8 @@ def no_controls() -> list[MachineControl]:
 
 # Function `no_machine()`:
 def no_machine(_name: str) -> None:
-    """Do nothing: a panel's `open_machine` and `say` until the window's."""
+    """Do nothing: a panel's `open_machine`, `open_path` and `say`
+    until the window's."""
 
 
 # Function `narrow()`:
@@ -495,8 +496,11 @@ class Panel(QFrame):
       if any: [Guide] (`guide`), [Machines] (`summary`), or
       [Machine] (`header` over the machine's controls).
     * `outline` (`OutlineEditor | None`): That outline's editor
-      (#578), if shown; it is read only unless [Allow Changes] is
-      checked (#588, #590), and saves every change (#578c).
+      (#578), if shown; a kind's outline is changed only in its
+      [Edit] tab (`T.toasl~6.8` #755), a tool's never, and it saves
+      every change (#578c).
+    * `open_path` (`Callable[[str], None]`): Shows the tree item at
+      a path (the window's), as a tool's link to its outline (#757).
     * `outline_path` (`Path | None`): Its outline file.
     * `outline_item` (`Path | None`): The item its [Outline] tab was
       made for: a tool, or the outline file itself (#750, #751).
@@ -527,6 +531,7 @@ class Panel(QFrame):
         self.summary: MachinesView | None = None
         self.controls: Callable[[], list[MachineControl]] = no_controls
         self.open_machine: Callable[[str], None] = no_machine
+        self.open_path: Callable[[str], None] = no_machine
         self.editing: bool = False
         self.follow_up: FollowUpView | None = None
         self.say: Callable[[str], None] = no_machine
@@ -685,8 +690,6 @@ class Panel(QFrame):
             # A tool's values may be typed in; its outline, never.
             tool.editing = editing
             self.outline.letters.show_rows()
-        elif self.outline is not None:
-            self.outline.set_read_only(not editing)
         row: Row
         for row in self.rows:
             entry: Entry | None = self.entries.get(row.schema.key)
@@ -768,8 +771,10 @@ class Panel(QFrame):
         Only for an item with a file to edit, never with a machine,
         the `machines/` summary or the guide.
         """
+        # An outline is changed in its [Edit] tab, never here (#758).
         self.edit_row.setVisible(
             self.node is not None
+            and self.node.kind != OUTLINE
             and not self.machines
             and self.summary is None
             and edit_path(self.node) is not None
@@ -940,10 +945,23 @@ class Panel(QFrame):
         except (OSError, ValueError) as error:
             self.say(f"{path.name}: {error}")
             return
+        # A kind's outline opens on [Drawing], [Edit] greyed in a read
+        # only shop (#755, #756); a tool's has a link to it (#757).
         editor: OutlineEditor = editors.OutlineEditor(drawing, path=path)
-        editor.set_read_only(not self.editing)
+        editor.set_read_only(is_read_only(path))
+        editor.show_tab(editors.ViewTab.DRAWING)
         if self.node is not None and self.node.kind != OUTLINE:
             self.show_tool_values(editor)
+            kind: str = path.name.removesuffix(OUTLINE_SUFFIX)
+
+            # Function `open_outline()`:
+            def open_outline() -> None:
+                """Show the kind's outline (the window's, when clicked)."""
+                self.open_path(str(path))
+
+            editor.offer_outline(
+                kind.replace("_", " ").capitalize(), open_outline
+            )
         exposed.EDITORS.add(editor)
         self.outline = editor
         self.tabs.addTab(editor, "Outline")

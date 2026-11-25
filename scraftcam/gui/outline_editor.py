@@ -34,8 +34,10 @@ import copy
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from functools import partial
 from pathlib import Path
+from typing import assert_never
 
 from ..packages import require
 
@@ -78,7 +80,9 @@ from PySide6.QtWidgets import (  # noqa: E402
     QLabel,
     QSizePolicy,
     QSplitter,
+    QStackedWidget,
     QStyleOptionGraphicsItem,
+    QTabBar,
     QTabWidget,
     QToolButton,
     QVBoxLayout,
@@ -212,7 +216,6 @@ BUTTON_WORDS: tuple[str, ...] = (
     "Font +",
     "Font -",
     "Hide",
-    "Overview",
     "Fit",
     "Undo",
     "Redo",
@@ -235,8 +238,32 @@ CHANGE_WORDS: tuple[str, ...] = (
 )
 
 
-# What a refused change says while the outline is read only (#590b).
-READ_ONLY_MESSAGE: str = "Check [Allow Changes] first."
+# What a refused change says, by why the outline may not be changed
+# (#590b, `T.toasl~6.8` #755-#757).
+READ_ONLY_MESSAGE: str = "Choose the [Edit] tab to change the outline."
+LOCKED_MESSAGE: str = (
+    "This outline is read only: [Copy Shop] makes a shop of your own."
+)
+TOOL_MESSAGE: str = (
+    "Only this tool's values change here; its kind's outline is "
+    "changed in its own [Edit] tab."
+)
+
+
+# Class `ViewTab`:
+class ViewTab(StrEnum):
+    """The drawing's tabs (`T.toasl~6.8` #755), in their order.
+
+    Attributes:
+    * `DRAWING`: The working view, hide strips cut out; look only.
+    * `SVG`: The diagram the outline makes.
+    * `EDIT`: The whole drawing, strips shaded; where it is changed.
+    """
+
+    DRAWING = "Drawing"
+    SVG = "SVG"
+    EDIT = "Edit"
+
 
 # The buttons in tabs of related ones (#319), the most used first; a
 # button may sit on more than one tab.
@@ -252,7 +279,6 @@ BUTTON_TABS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "Grid",
             "Snap",
             "Fit",
-            "Overview",
             "Hide",
             "Rotate Diagram",
             "Font +",
@@ -2255,6 +2281,8 @@ class OutlineView(QGraphicsView):
     * `message` (`str`): The last refusal, for the mode bar.
     * `read_only` (`bool`): True while nothing may be dragged
       (#590b); presses still choose, and the view still pans.
+    * `read_only_message` (`str`): What a refused change says, read
+      only (`READ_ONLY_MESSAGE`, `LOCKED_MESSAGE`, `TOOL_MESSAGE`).
     * `chosen_points` (`list[int]`):
       The selected points (`ORIGIN` or corners), in the order clicked.
     * `chosen_dimensions` (`list[int]`): The selected dimensions.
@@ -2329,6 +2357,7 @@ class OutlineView(QGraphicsView):
         self.history: History = History()
         self.message: str = ""
         self.read_only: bool = False
+        self.read_only_message: str = READ_ONLY_MESSAGE
         self.chosen_points: list[int] = []
         self.chosen_dimensions: list[int] = []
         self.chosen_edges: list[int] = []
@@ -2673,6 +2702,14 @@ class OutlineView(QGraphicsView):
             self.band.setVisible(True)
             return
         super().mousePressEvent(event)
+
+        # Read only, a press on the drawing says why (#754a).
+        if (
+            self.read_only
+            and event.button() == Qt.MouseButton.LeftButton
+            and self.itemAt(event.position().toPoint()) is not None
+        ):
+            self.message = self.read_only_message
         if (
             event.button() == Qt.MouseButton.LeftButton
             and self.scene().mouseGrabberItem() is None
@@ -2721,7 +2758,7 @@ class OutlineView(QGraphicsView):
             # Read only, a drag of a corner, strip or dimension goes
             # nowhere (#590b): every drag changes things only here.
             if self.read_only and self.scene().mouseGrabberItem() is not None:
-                self.message = READ_ONLY_MESSAGE
+                self.message = self.read_only_message
                 return
             super().mouseMoveEvent(event)
             return
@@ -4196,10 +4233,19 @@ class OutlineEditor(QWidget):
     * `buttons` (`dict[str, QToolButton]`): Each word's first button.
     * `drawing` (`Drawing`): The outline being drawn.
     * `read_only` (`bool`): True while the outline may not be changed
-      ([Allow Changes] unchecked in its panel, #590): the view still
-      zooms, pans and chooses.
+      (locked, a tool's values, or not [Edit], #590, #755): the view
+      still zooms, pans and chooses.
+    * `locked` (`bool`): True when its owner forbids changes (a read
+      only shop, #756), so [Edit] is greyed.
     * `tool_values` (`bool`): True while it shows one tool's values
       (`show_tool()`), so the outline is never saved.
+    * `edit_outline` (`Callable[[], None] | None`): Opens a tool's
+      kind's outline, from the link beside the tabs (#757).
+    * `views` (`QWidget`): The drawing's tabs over what they show.
+    * `tab_bar` (`QTabBar`): [Drawing], [SVG], [Edit] (`ViewTab`).
+    * `stack` (`QStackedWidget`): The view or the diagram.
+    * `outline_link` (`QLabel`): "Edit the Drill outline", for a tool.
+    * `picture` (`QSvgWidget`): The diagram, in [SVG].
     * `splitter` (`QSplitter`): The drawing over the table.
     * `status` (`QLabel`): The last refusal, under the button tabs.
     * `letters` (`LettersTable`): The letters' table, its tabs and
@@ -4223,7 +4269,9 @@ class OutlineEditor(QWidget):
         self.drawing: Drawing = Drawing() if drawing is None else drawing
         self.path: Path | None = path
         self.read_only: bool = False
+        self.locked: bool = False
         self.tool_values: bool = False
+        self.edit_outline: Callable[[], None] | None = None
         self.saved: str = file_text(path)
         self.setWindowTitle(
             "Outline Editor" if path is None else f"Outline Editor: {path}"
@@ -4250,7 +4298,7 @@ class OutlineEditor(QWidget):
         # #248, #189).
         self.splitter: QSplitter = QSplitter(Qt.Orientation.Vertical)
         self.picture: QSvgWidget = QSvgWidget()
-        self.views: QTabWidget = self.drawing_tabs()
+        self.views: QWidget = self.drawing_tabs()
         self.splitter.addWidget(self.views)
         self.letters: LettersTable = LettersTable(
             self.drawing,
@@ -4265,7 +4313,7 @@ class OutlineEditor(QWidget):
         self.make_buttons()
         self.hook_view()
         self.letters.fill_table()
-        self.show_message()
+        self.show_tab(ViewTab.EDIT)
         self.resize(800, 600)
 
     # Method `OutlineEditor.make_buttons()`:
@@ -4280,7 +4328,7 @@ class OutlineEditor(QWidget):
             # [Dim. Kind] cycles, so it shows a cycle arrow (U+21BB).
             cycle: str = " \u21bb" if word == "Dim. Kind" else ""
             self.button_actions[word] = QAction(f"{word}{cycle}", self)
-        for word in ("Grid", "Snap", "Revolve", "Overview", "Show Marks"):
+        for word in ("Grid", "Snap", "Revolve", "Show Marks"):
             self.button_actions[word].setCheckable(True)
         for word in ("Grid", "Snap"):
             self.button_actions[word].setChecked(True)
@@ -4315,7 +4363,6 @@ class OutlineEditor(QWidget):
             "Font +": partial(self.view.step_font, 1),
             "Font -": partial(self.view.step_font, -1),
             "Hide": self.view.start_hide,
-            "Overview": self.toggle_overview,
             "Undo": self.view.undo,
             "Redo": self.view.redo,
             "New Letter": self.letters.new_letter,
@@ -4325,29 +4372,111 @@ class OutlineEditor(QWidget):
             self.button_actions[word].triggered.connect(does_it)
 
     # Method `OutlineEditor.drawing_tabs()`:
-    def drawing_tabs(self) -> QTabWidget:
-        """Return the drawing's tabs: [Drawing], the working view, and
-        [SVG], the diagram it makes, kept to its shape.
+    def drawing_tabs(self) -> QWidget:
+        """Return the drawing's tabs (`ViewTab`, #755): [Drawing] and
+        [Edit] share the one view, cut out or whole; [SVG] the
+        diagram it makes, kept to its shape.  Beside them, for a
+        tool, the link to its kind's outline (#757).
 
         Returns:
-        * (`QTabWidget`): The tabs.
+        * (`QWidget`): The tabs over what they show.
         """
-        views: QTabWidget = QTabWidget()
-        views.addTab(self.view, "Drawing")
-        views.addTab(self.picture, "SVG")
-        views.currentChanged.connect(self.show_svg)
+        self.tab_bar: QTabBar = QTabBar()
+        tab: ViewTab
+        for tab in ViewTab:
+            self.tab_bar.addTab(tab.value)
+        self.outline_link: QLabel = QLabel("")
+        self.outline_link.setVisible(False)
+        self.outline_link.linkActivated.connect(self.follow_outline_link)
+        row: QHBoxLayout = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.tab_bar)
+        row.addWidget(self.outline_link)
+        row.addStretch(1)
+        self.stack: QStackedWidget = QStackedWidget()
+        self.stack.addWidget(self.view)
+        self.stack.addWidget(self.picture)
+        views: QWidget = QWidget()
+        column: QVBoxLayout = QVBoxLayout(views)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        column.addLayout(row)
+        column.addWidget(self.stack)
+        self.tab_bar.currentChanged.connect(self.tab_changed)
         return views
 
-    # Method `OutlineEditor.show_svg()`:
-    def show_svg(self, tab: int) -> None:
-        """Draw the [SVG] tab again when it is chosen: the outline's
-        diagram (`outline_sheet()`), in the theme's ink and paper.
+    # Method `OutlineEditor.tab()`:
+    def tab(self) -> ViewTab:
+        """Return the drawing's tab shown.
+
+        Returns:
+        * (`ViewTab`): It.
+        """
+        return list(ViewTab)[max(self.tab_bar.currentIndex(), 0)]
+
+    # Method `OutlineEditor.show_tab()`:
+    def show_tab(self, tab: ViewTab) -> None:
+        """Show one of the drawing's tabs; [Edit] only when it may be
+        chosen (else [Drawing]).
 
         Arguments:
-        * `tab` (`int`): The tab now shown.
+        * `tab` (`ViewTab`): The tab.
         """
-        if self.views.widget(tab) is not self.picture:
-            return
+        index: int = list(ViewTab).index(tab)
+        if tab is ViewTab.EDIT and not self.tab_bar.isTabEnabled(index):
+            index = list(ViewTab).index(ViewTab.DRAWING)
+        if index == self.tab_bar.currentIndex():
+            self.tab_changed(index)
+        else:
+            self.tab_bar.setCurrentIndex(index)
+
+    # Method `OutlineEditor.tab_changed()`:
+    def tab_changed(self, _index: int) -> None:
+        """Show what the tab now chosen shows: the view, cut out or
+        whole, or the diagram; changes only in [Edit] (#755, #759)."""
+        tab: ViewTab = self.tab()
+        match tab:
+            case ViewTab.SVG:
+                self.stack.setCurrentWidget(self.picture)
+                self.show_svg()
+            case ViewTab.DRAWING | ViewTab.EDIT:
+                self.stack.setCurrentWidget(self.view)
+                if self.view.overview != (tab is ViewTab.EDIT):
+                    self.view.toggle_overview()
+            case _:
+                assert_never(tab)
+        self.apply_read_only()
+
+    # Method `OutlineEditor.offer_outline()`:
+    def offer_outline(self, kind: str, edit: Callable[[], None]) -> None:
+        """For a tool: a link to its kind's outline, in place of the
+        [Edit] tab (#757).
+
+        Arguments:
+        * `kind` (`str`): The kind's name, as "Drill".
+        * `edit` (`Callable[[], None]`): Opens the kind's outline.
+        """
+        self.edit_outline = edit
+        self.outline_link.setText(
+            f'<a href="edit">Edit the {kind} outline</a>'
+        )
+        self.outline_link.setToolTip(
+            f"This tool's values change here; the {kind.lower()} "
+            "outline every one of them shares is changed in its own "
+            "[Edit] tab."
+        )
+        self.outline_link.setVisible(True)
+
+    # Method `OutlineEditor.follow_outline_link()`:
+    def follow_outline_link(self, _link: str) -> None:
+        """Open the kind's outline (the link beside the tabs)."""
+        if self.edit_outline is not None:
+            self.edit_outline()
+
+    # Method `OutlineEditor.show_svg()`:
+    def show_svg(self) -> None:
+        """Draw the [SVG] tab again when it is chosen: the outline's
+        diagram (`outline_sheet()`), in the theme's ink and paper."""
         colors: theme.Colors = theme.colors()
         self.picture.load(
             svg(
@@ -4387,7 +4516,7 @@ class OutlineEditor(QWidget):
         """
         # Read only, arming would fillet the chosen corners (#590b).
         if self.read_only and letter is not None:
-            self.view.message = READ_ONLY_MESSAGE
+            self.view.message = self.view.read_only_message
             letter = None
         self.view.armed = letter
         if letter is not None:
@@ -4407,12 +4536,6 @@ class OutlineEditor(QWidget):
     def toggle_snap(self) -> None:
         """Turn snapping on or off, as [Snap] now shows."""
         self.view.snap_on = self.button_actions["Snap"].isChecked()
-
-    # Method `OutlineEditor.toggle_overview()`:
-    def toggle_overview(self) -> None:
-        """[Overview]: switch views, the button showing which."""
-        self.view.toggle_overview()
-        self.button_actions["Overview"].setChecked(self.view.overview)
 
     # Method `OutlineEditor.toggle_revolve()`:
     def toggle_revolve(self) -> None:
@@ -4447,22 +4570,59 @@ class OutlineEditor(QWidget):
 
         tool.redraw = redraw
         redraw()
+        self.tab_bar.setTabVisible(list(ViewTab).index(ViewTab.EDIT), False)
         self.set_read_only(True)
         self.letters.show_tool(tool)
 
     # Method `OutlineEditor.set_read_only()`:
     def set_read_only(self, read_only: bool) -> None:
-        """Refuse every change to the outline, or allow them (#590).
+        """Lock the outline, or let it be changed in [Edit] (#590,
+        #756).
 
-        Read only, the buttons that change it are greyed, the letters
-        table cannot be typed in, and drags go nowhere; zooming,
-        panning, choosing and the view's buttons still work.
+        Locked, [Edit] is greyed, its tooltip saying why, and the
+        drawing goes back to [Drawing].
 
         Arguments:
-        * `read_only` (`bool`): True to refuse changes.
+        * `read_only` (`bool`): True to lock it.
         """
+        self.locked = read_only
+        edit: int = list(ViewTab).index(ViewTab.EDIT)
+        may: bool = not read_only and not self.tool_values
+        # Off [Edit] first: Qt would move a greyed current tab to [SVG].
+        if not may and self.tab() is ViewTab.EDIT:
+            self.tab_bar.setCurrentIndex(list(ViewTab).index(ViewTab.DRAWING))
+        self.tab_bar.setTabEnabled(edit, may)
+        self.tab_bar.setTabToolTip(
+            edit,
+            "Change the outline here: the whole drawing, hide strips shaded"
+            if may
+            else TOOL_MESSAGE
+            if self.tool_values
+            else LOCKED_MESSAGE,
+        )
+        self.apply_read_only()
+
+    # Method `OutlineEditor.apply_read_only()`:
+    def apply_read_only(self) -> None:
+        """Refuse every change unless [Edit] is shown and allowed.
+
+        Read only, the buttons that change the outline are greyed,
+        the letters table cannot be typed in, and drags go nowhere;
+        zooming, panning, choosing and the view's buttons still work.
+        A refusal says why (`read_only_message`).
+        """
+        read_only: bool = (
+            self.locked or self.tool_values or self.tab() is not ViewTab.EDIT
+        )
         self.read_only = read_only
         self.view.read_only = read_only
+        self.view.read_only_message = (
+            TOOL_MESSAGE
+            if self.tool_values
+            else LOCKED_MESSAGE
+            if self.locked
+            else READ_ONLY_MESSAGE
+        )
         word: str
         for word in CHANGE_WORDS:
             self.button_actions[word].setEnabled(not read_only)
@@ -4509,7 +4669,6 @@ class OutlineEditor(QWidget):
         )
         # [Revolve] shows the drawing's state (a refusal, an undo).
         self.button_actions["Revolve"].setChecked(self.view.drawing.revolve)
-        self.button_actions["Overview"].setChecked(self.view.overview)
         self.save()
         # A refusal in red; else the armed letter's hint (#214).
         hint: str = ""

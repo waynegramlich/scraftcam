@@ -782,6 +782,7 @@ class Window(QWidget):
         """
         panel.controls = machine_controls
         panel.open_machine = self.open_machine
+        panel.open_path = self.open_path
         panel.say = functools.partial(self.model.say, problem=True)
         panel.edit_file = functools.partial(self.edit, panel)
         panel.open_pages = functools.partial(self.open_pages, panel)
@@ -990,6 +991,19 @@ class Window(QWidget):
                     created=str(node.path) in self.model.created,
                 )
         self.show_actions()
+
+    def open_path(self, path: str) -> None:
+        """Show the tree item at a path, as if clicked (#757).
+
+        Arguments:
+        * `path` (`str`): Its file or directory.
+        """
+        item: QTreeWidgetItem | None = self.tree.item_at_path(
+            Path(path).resolve()
+        )
+        if item is not None:
+            self.tree.setCurrentItem(item)
+            self.select_item(item)
 
     def connected_name(self, node: Node) -> str:
         """Return the name of the connected machine an item is, if any.
