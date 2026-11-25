@@ -182,6 +182,31 @@ class TestReader(CopiedShop):
     BALL_MILL: str = "tools/end_mills/1_4_in_2_flute_hss_ball_end_mill.toml"
     DRILL: str = "tools/drills/15_64_in_hss_jobber_drill.toml"
 
+    def test_material_in_both_lists(self) -> None:
+        """A name in both material lists is refused (#802)."""
+        self.change(
+            "tools/materials/carbide.toml",
+            'name = "carbide"',
+            'name = "aluminum"',
+        )
+        self.assertIn(
+            "tools/materials: 'aluminum' is also a stock material "
+            "(stock/materials); a material's name must be in one list only",
+            self.problems(),
+        )
+
+    def test_material_appearance(self) -> None:
+        """A material's colour and hatch are checked (#803, #804)."""
+        name: str = "stock/materials/aluminum.toml"
+        self.change(
+            name,
+            'color = "R80% G82% B85%"',
+            'color = "#123456"\nhatch = "A45 S2 T1mm"',
+        )
+        found: str = "\n".join(self.problems())
+        self.assertIn("'#123456' is not a colour", found)
+        self.assertIn("'A45 S2 T1mm' is not a hatch", found)
+
     def test_example(self) -> None:
         """The example reads, its directories filled in."""
         shop: dict[str, Any] = shops.read(EXAMPLES / "shop.toml")

@@ -1378,9 +1378,12 @@ feed_factor = "150 %"
 A material the shop cuts.  It has a `name` even when it is not a file of
 its own.
 
-| Key     | Value  | Required | Meaning                 |
-| ------- | ------ | -------- | ----------------------- |
-| `group` | string | yes      | The group it cuts with. |
+| Key     | Value  | Required | Meaning                                       |
+| ------- | ------ | -------- | --------------------------------------------- |
+| `group` | string | yes      | The group it cuts with.                       |
+| `color` | color  | no       | Its colour in drawings and solids (#803).     |
+| `hatch` | hatch  | no       | Its hatch in drawings (#804); one is given if |
+|         |        |          | none.                                         |
 
 ```toml
 name = "6061 aluminum"
@@ -1398,6 +1401,10 @@ of these.  It has a `name` even when it is not a file of its own.
 | `speed_factor` | fraction | yes      | Its surface speed, as a share of     |
 |                |          |          | HSS's (HSS's own is 100 %).          |
 | `description`  | string   | no       | What it is, in a few words.          |
+| `color`        | color    | no       | Its colour in drawings and solids    |
+|                |          |          | (#803).                              |
+| `hatch`        | hatch    | no       | Its hatch in drawings (#804); one is |
+|                |          |          | given if none.                       |
 
 ```toml
 name = "carbide"

@@ -30,6 +30,7 @@ import re
 import sys
 from pathlib import Path
 
+from .appearance import COLOR, HATCH
 from .shops import HEADER, KINDS, UNITS, TableField, TableKind
 
 # Where the schemas are published, and where they are in the package.
@@ -47,6 +48,11 @@ ALL_KINDS: str = "shop.schema.json"
 NUMBER: str = r"[-+]?(?:(?:\d+-)?\d+/\d+|(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)"
 
 
+# A colour and a hatch, as `appearance.COLOR` and `appearance.HATCH`
+# take them (#803, #804).
+COLOR_PATTERN: str = f"^{COLOR.pattern}$"
+HATCH_PATTERN: str = f"^(?:{HATCH.pattern}\\+)*{HATCH.pattern}$"
+
 # The schemas of the forms that need nothing from their key.
 SIMPLE: dict[str, dict[str, object]] = {
     "string": {"type": "string"},
@@ -56,6 +62,8 @@ SIMPLE: dict[str, dict[str, object]] = {
     "positive_integer": {"type": "integer", "minimum": 1},
     "boolean": {"type": "boolean"},
     "date": {"format": "date"},
+    "color": {"type": "string", "pattern": COLOR_PATTERN},
+    "hatch": {"type": "string", "pattern": HATCH_PATTERN},
     "page_ranges": {
         "type": "array",
         "minItems": 1,

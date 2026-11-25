@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QGraphicsSceneMouseEvent,
     QLineEdit,
+    QPushButton,
     QTableWidgetItem,
     QToolButton,
     QWidget,
@@ -2648,7 +2649,7 @@ class PolygonsTest(unittest.TestCase):
         self.assertFalse(values.table.isVisibleTo(values))
         self.assertTrue(table.isVisibleTo(values))
         self.assertEqual(table.rowCount(), 2)
-        corners: QTableWidgetItem | None = table.item(1, 3)
+        corners: QTableWidgetItem | None = table.item(1, 4)
         assert corners is not None
         self.assertEqual(corners.text(), "V4 V3 V5")
 
@@ -2667,6 +2668,33 @@ class PolygonsTest(unittest.TestCase):
         self.assertEqual(drawing.letters[-1].polygon, "cap")
         values.tabs.setCurrentIndex(outline_values.DIMENSIONS_TAB)
         self.assertTrue(values.table.isVisibleTo(values))
+        editor.deleteLater()
+        qt_app.process_events()
+
+    def test_polygon_color(self) -> None:
+        """A polygon's [Colour] opens the picker in the tab, not over
+        the screen; [Done] keeps the colour, [Clear] takes it away
+        (#805)."""
+        drawing: Drawing = Drawing([(0.0, 0.0), (4.0, 0.0), (2.0, 3.0)])
+        editor: OutlineEditor = OutlineEditor(drawing)
+        values: outline_values.ValuesTable = editor.values
+        picker: outline_values.ColorPicker = values.color_picker
+        values.tabs.setCurrentIndex(outline_values.POLYGONS_TAB)
+        button: QWidget | None = values.polygon_table.cellWidget(0, 3)
+        assert isinstance(button, QPushButton)
+        self.assertEqual(button.text(), "Material")
+        button.click()
+        self.assertTrue(picker.isVisibleTo(values))
+        picker.dialog.setCurrentColor(QColor(51, 102, 153, 204))
+        picker.done()
+        self.assertEqual(drawing.polygons[0].color, "R20% G40% B60% T20%")
+        self.assertFalse(picker.isVisibleTo(values))
+        button = values.polygon_table.cellWidget(0, 3)
+        assert isinstance(button, QPushButton)
+        self.assertEqual(button.text(), "R20% G40% B60% T20%")
+        button.click()
+        picker.clear()
+        self.assertEqual(drawing.polygons[0].color, "")
         editor.deleteLater()
         qt_app.process_events()
 

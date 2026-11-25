@@ -34,7 +34,9 @@ from PySide6.QtCore import (  # noqa: E402
 from PySide6.QtGui import QColor, QFont  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractItemView,
+    QColorDialog,
     QComboBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -47,6 +49,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QWidget,
 )
 
+from ..appearance import Color  # noqa: E402
 from . import theme  # noqa: E402
 from .dimensions import ANGLE, RADIUS, Dimension  # noqa: E402
 from .letters import (  # noqa: E402
@@ -77,7 +80,16 @@ POLYGONS_TAB: int = 2
 
 # The [Polygons] table's columns (`T.sa~6.11` #801): its name, role
 # and material are typed or chosen; its corners are only shown.
-POLYGON_COLUMNS: tuple[str, ...] = ("Name", "Role", "Material", "Corners")
+POLYGON_COLUMNS: tuple[str, ...] = (
+    "Name",
+    "Role",
+    "Material",
+    "Colour",
+    "Corners",
+)
+
+# The colour the picker starts at for a polygon with none of its own.
+NO_COLOR: Color = Color(50.0, 50.0, 50.0)
 
 # The table's first row, shown only in [Fillets]: "No fillet", a
 # fixed entry never edited, deleted or saved (#219, #222); the letters
@@ -275,11 +287,12 @@ class PolygonsTable(QTableWidget):
             role.currentTextChanged.connect(self.role_chooser(row))
             self.setCellWidget(row, 1, role)
             self.setItem(row, 2, QTableWidgetItem(polygon.material))
+            self.setCellWidget(row, 3, self.color_button(row, polygon))
             corners: QTableWidgetItem = QTableWidgetItem(
                 " ".join(drawing.names[at] for at in loops[row])
             )
             corners.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self.setItem(row, 3, corners)
+            self.setItem(row, 4, corners)
         triggers: type[QAbstractItemView.EditTrigger] = (
             QAbstractItemView.EditTrigger
         )
@@ -291,6 +304,36 @@ class PolygonsTable(QTableWidget):
             | triggers.EditKeyPressed
         )
         self.blockSignals(False)
+
+    # Method `PolygonsTable.color_button()`:
+    def color_button(self, row: int, polygon: Polygon) -> QPushButton:
+        """Return a row's [Colour] button, which opens the picker.
+
+        Arguments:
+        * `row` (`int`): The polygon's row.
+        * `polygon` (`Polygon`): Its polygon.
+
+        Returns:
+        * (`QPushButton`): Its colour's text, on its colour; "Material"
+          when it has none of its own (#805).
+        """
+        button: QPushButton = QPushButton(polygon.color or "Material")
+        if polygon.color:
+            red, green, blue, alpha = Color.parse(polygon.color).rgba()
+            ink: str = "black" if red + green + blue > 384 else "white"
+            button.setStyleSheet(
+                f"background: rgba({red}, {green}, {blue}, {alpha});"
+                f" color: {ink}"
+            )
+        button.setEnabled(not self.values.read_only)
+
+        # Function `pressed()`:
+        def pressed() -> None:
+            """Open the picker on this row's polygon."""
+            self.values.color_picker.choose(row)
+
+        button.clicked.connect(pressed)
+        return button
 
     # Method `PolygonsTable.role_chooser()`:
     def role_chooser(self, row: int) -> Callable[[str], None]:
@@ -346,6 +389,93 @@ class PolygonsTable(QTableWidget):
         self.values.view.message = ""
         self.values.save()
         self.values.show_message()
+
+
+# Class `ColorPicker`:
+class ColorPicker(QWidget):
+    """A polygon's colour chooser, in the [Polygons] tab itself rather
+    than a dialog over the screen (#805): Qt's colour dialog, with
+    transparency, [Clear] (back to the material's) and [Done].
+
+    Attributes:
+    * `values` (`ValuesTable`): The Values table it is in.
+    * `dialog` (`QColorDialog`): The colour chooser, shown in place.
+    * `row` (`int`): The polygon being coloured (-1 for none).
+    """
+
+    # Method `ColorPicker.__init__()`:
+    def __init__(self, values: ValuesTable) -> None:
+        """Make the hidden picker.
+
+        Arguments:
+        * `values` (`ValuesTable`): The Values table it is in.
+        """
+        super().__init__()
+        self.values: ValuesTable = values
+        self.dialog: QColorDialog = QColorDialog()
+        self.row: int = -1
+        options: type[QColorDialog.ColorDialogOption] = (
+            QColorDialog.ColorDialogOption
+        )
+        self.dialog.setOptions(options.NoButtons | options.ShowAlphaChannel)
+        self.dialog.setWindowFlags(Qt.WindowType.Widget)
+        clear: QPushButton = QPushButton("Clear")
+        done: QPushButton = QPushButton("Done")
+        clear.clicked.connect(self.clear)
+        done.clicked.connect(self.done)
+        buttons: QHBoxLayout = QHBoxLayout()
+        buttons.addWidget(clear)
+        buttons.addWidget(done)
+        buttons.addStretch()
+        stack: QVBoxLayout = QVBoxLayout(self)
+        stack.setContentsMargins(0, 0, 0, 0)
+        stack.addWidget(self.dialog)
+        stack.addLayout(buttons)
+        self.setVisible(False)
+
+    # Method `ColorPicker.choose()`:
+    def choose(self, row: int) -> None:
+        """Show the picker on a polygon, at its own colour.
+
+        Arguments:
+        * `row` (`int`): The polygon's row.
+        """
+        self.row = row
+        polygon: Polygon = self.values.drawing.polygons[row]
+        color: Color = (
+            Color.parse(polygon.color) if polygon.color else (NO_COLOR)
+        )
+        self.dialog.setCurrentColor(QColor(*color.rgba()))
+        self.setVisible(True)
+
+    # Method `ColorPicker.set_color()`:
+    def set_color(self, text: str) -> None:
+        """Give the chosen polygon a colour, save, and hide.
+
+        Arguments:
+        * `text` (`str`): Its colour's text ("" for the material's).
+        """
+        if 0 <= self.row < len(self.values.drawing.polygons):
+            self.values.drawing.polygons[self.row].color = text
+            self.values.save()
+            self.values.polygon_table.fill()
+        self.row = -1
+        self.setVisible(False)
+
+    # Method `ColorPicker.done()`:
+    def done(self) -> None:
+        """Keep the colour chosen."""
+        chosen: QColor = self.dialog.currentColor()
+        self.set_color(
+            Color.from_rgba(
+                chosen.red(), chosen.green(), chosen.blue(), chosen.alpha()
+            ).text()
+        )
+
+    # Method `ColorPicker.clear()`:
+    def clear(self) -> None:
+        """Take the polygon's own colour away: its material's shows."""
+        self.set_color("")
 
 
 # Class `ValuesTable`:
@@ -417,6 +547,7 @@ class ValuesTable(QWidget):
         self.tabs: QTabBar = QTabBar()
         self.new_fillet: QPushButton = QPushButton("New Fillet Dimension")
         self.polygon_table: PolygonsTable = PolygonsTable(self)
+        self.color_picker: ColorPicker = ColorPicker(self)
 
         # The tabs over the table, the problems under it (#141).
         self.table.setHorizontalHeaderLabels([title for title, _ in COLUMNS])
@@ -449,6 +580,7 @@ class ValuesTable(QWidget):
         stack.addWidget(self.tabs)
         stack.addWidget(self.table)
         stack.addWidget(self.polygon_table)
+        stack.addWidget(self.color_picker)
         stack.addWidget(self.new_fillet, 0, Qt.AlignmentFlag.AlignLeft)
         stack.addWidget(self.problems)
 
@@ -589,6 +721,8 @@ class ValuesTable(QWidget):
         )
         self.table.setVisible(not polygons)
         self.polygon_table.setVisible(polygons)
+        if not polygons:
+            self.color_picker.setVisible(False)
         if polygons:
             self.polygon_table.fill()
 

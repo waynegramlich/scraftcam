@@ -7,3 +7,4 @@ notes = """\
   The materials this shop cuts, each naming its group: generic ones \
   first, then particular alloys."""
 group = "soft"
+color = "R80% G82% B85%"

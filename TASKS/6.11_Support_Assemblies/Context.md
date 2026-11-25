@@ -7,8 +7,32 @@ by the user, whose own text is now `Details.md`.  Designed
 Issue numbers are shared by every task; the next is in
 `TASKS/Issue_Counter.md`.
 
-**Where we are (2026-11-25):** #S1 and #S2 done.  Next: #S3; #S4
-starts with the drill split (#800 (a)).
+**Where we are (2026-11-25):** #S1, #S2 done; #S3 under way.
+#S4 starts with the drill split (#800 (a)).
+
+## #S3 Progress
+
+* Built: `scraftcam/appearance.py` (`Color`, `Hatch`, `HatchLines`,
+  `page_length()` in mm/in/pt, `color_problem()`, `hatch_problem()`,
+  `STANDARD_HATCHES`); `color`/`hatch` forms and fields on
+  `material` and `tool_material` (schemas, `Shops.md`, GUI help);
+  the reader refuses a name in both lists (#802); the example
+  materials have colours, no hatches.  `Polygon.color` read,
+  checked, written.  [Polygons] has a Colour column; its button
+  opens `ColorPicker` in the tab (embedded `QColorDialog`, alpha,
+  [Clear], [Done]; no pop-up).
+* `appearance.looks()` resolves each polygon's `Look` (own colour,
+  else the material's; the material's hatch, else the first unused
+  standard one).
+* Decided (#808-#811): #808 [Drawing] and [SVG] show hatches only,
+  black on white; [Edit] the colour fill plus the hatch; solids the
+  colour (#S4).  #809 an outline uses its own shop's materials; one
+  outside any shop, the example shop's.  #810 in [Edit] hatch
+  spacing is fixed on screen (like line widths); [SVG] uses the page
+  lengths as written.  #811 the embedded picker is preferred.
+* Next: draw them: the editor ([Edit] fill and hatch, [Drawing]
+  hatch) and the `.svg` (`diagram.svg()` patterns); find the
+  outline's shop's materials (#809).
 
 ## Built (#S1, #S2)
 
@@ -92,6 +116,24 @@ starts with the drill split (#800 (a)).
   `offers` and exported letters.  h `KIND/KIND.assembly.toml`,
   parts beside or below; [Move]/[Rename] rewrite references.
 * #791 shared parts: a named library root (`library:...`).
+
+## #S3 Decided (2026-11-25, #802-#807)
+
+* #802 a polygon's `material` names a stock material
+  (`stock/materials/`, with speeds and feeds) or a tool material
+  (`tools/materials/`, none); one short name in both lists is
+  refused by the reader.
+* #803 a material's `color` and `hatch` fields.  Colour text
+  `R13% G32% B78% T0%` (spaces optional, `T` transparency, optional,
+  0% opaque).
+* #804 a hatch is angle, spacing, thickness: `A45 S2mm T0.25mm`
+  (degrees; spacing and thickness on the page, with units); a
+  crosshatch joins two with `+`.  A material with no hatch gets the
+  first unused one in the drawing (#781).
+* #805 a [Polygons] colour cell opens `QColorDialog` (alpha),
+  written as the polygon's `color`, overriding the material's.
+* #806 the drill gets materials in #S4; #S3 is tested on scratch
+  outlines.  #807 done: `.hgignore` ignores Emacs files.
 
 ## Steps
 

@@ -57,6 +57,7 @@ import tomllib
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from ..appearance import color_problem
 from .dimensions import (
     ANGLE,
     DIAMETER,
@@ -180,9 +181,11 @@ class Polygon:
     * `vertices` (`list[str]`): Its corners' names, in order.
     * `material` (`str`): Its material's short name ("" for none,
       #768).
+    * `color` (`str`): Its own colour, as `R13% G32% B78%`, which
+      overrides its material's ("" for none, #805).
 
     Constructor:
-    * `Polygon(name, role, vertices, material)`
+    * `Polygon(name, role, vertices, material, color)`
     """
 
     # Constructor arguments:
@@ -190,6 +193,7 @@ class Polygon:
     role: Role = field(init=True)
     vertices: list[str] = field(init=True, default_factory=list)
     material: str = field(init=True, default="")
+    color: str = field(init=True, default="")
 
 
 # The name of the polygon a drawing starts with.
@@ -534,6 +538,8 @@ def outline_text(outline: Outline) -> str:
         ]
         if polygon.material:
             lines.append(f"material = {_string(polygon.material)}")
+        if polygon.color:
+            lines.append(f"color = {_string(polygon.color)}")
         lines.append(
             "vertices = ["
             + ", ".join(_string(name) for name in polygon.vertices)
@@ -914,6 +920,7 @@ class _Reader:
             name: object = table.get("name")
             role: object = table.get("role")
             material: object = table.get("material", "")
+            color: object = table.get("color", "")
             vertices: object = table.get("vertices")
             if not isinstance(name, str) or not VERTEX_NAME.fullmatch(name):
                 self.note(
@@ -927,6 +934,8 @@ class _Reader:
                 self.note(where, f"role = {role!r}: not one of {roles}")
             elif not isinstance(material, str):
                 self.note(where, "material is not a name")
+            elif color != "" and color_problem(color):
+                self.note(where, f"color: {color_problem(color)}")
             elif not (
                 isinstance(vertices, list)
                 and len(vertices) >= 3
@@ -940,7 +949,9 @@ class _Reader:
                 )
             else:
                 outline.polygons.append(
-                    Polygon(name, Role(role), list(vertices), material)
+                    Polygon(
+                        name, Role(role), list(vertices), material, str(color)
+                    )
                 )
 
     # Method `_Reader.holes()`:

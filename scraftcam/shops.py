@@ -38,6 +38,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, TypeAlias, cast
 
+from .appearance import color_problem, hatch_problem
 from .machine import DrillCycle, Machine, ToolEntry, ToolKind
 
 # The format version that this module reads and describes.
@@ -132,6 +133,8 @@ FORMS: tuple[str, ...] = (
     "list",
     "t_numbers",
     "by_material",
+    "color",
+    "hatch",
 )
 
 # The widest line in `Shops.md`.
@@ -2027,7 +2030,28 @@ feed_factor = "150 %"
         TableKind(
             "material",
             "A material the shop cuts.",
-            (TableField("group", "string", "The group it cuts with.", True),),
+            (
+                TableField("group", "string", "The group it cuts with.", True),
+                TableField(
+                    "color",
+                    "color",
+                    "Its colour in drawings and solids (#803).",
+                    how=(
+                        'Percentages of red, green and blue, e.g. `"R13% '
+                        'G32% B78%"`; add `T40%` to make it 40 % '
+                        "see-through."
+                    ),
+                ),
+                TableField(
+                    "hatch",
+                    "hatch",
+                    "Its hatch in drawings (#804); one is given if none.",
+                    how=(
+                        'An angle, spacing and thickness, e.g. `"A45 S2mm '
+                        'T0.25mm"`; join two with `+` for a crosshatch.'
+                    ),
+                ),
+            ),
             True,
             """\
 name = "6061 aluminum"
@@ -2055,6 +2079,25 @@ group = "soft"
                 ),
                 TableField(
                     "description", "string", "What it is, in a few words."
+                ),
+                TableField(
+                    "color",
+                    "color",
+                    "Its colour in drawings and solids (#803).",
+                    how=(
+                        'Percentages of red, green and blue, e.g. `"R13% '
+                        'G32% B78%"`; add `T40%` to make it 40 % '
+                        "see-through."
+                    ),
+                ),
+                TableField(
+                    "hatch",
+                    "hatch",
+                    "Its hatch in drawings (#804); one is given if none.",
+                    how=(
+                        'An angle, spacing and thickness, e.g. `"A45 S2mm '
+                        'T0.25mm"`; join two with `+` for a crosshatch.'
+                    ),
                 ),
             ),
             True,
@@ -2826,6 +2869,20 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
         shop["tooling"] = [collection("tooling", "Tooling", found)]
         shop["tool_materials"] = found.get("tool_material", [])
         shop["catalogs"] = found.get("catalog", [])
+
+        # A polygon's `material` names either list, so no name may be
+        # in both (`T.sa~6.11` #802).
+        stock: set[object] = {
+            entry.get("name") for entry in found.get("material", [])
+        }
+        entry: dict[str, object]
+        for entry in found.get("tool_material", []):
+            if entry.get("name") in stock:
+                self.problems.append(
+                    f"tools/materials: {entry.get('name')!r} is also a "
+                    "stock material (stock/materials); a material's name "
+                    "must be in one list only"
+                )
         cutting: list[dict[str, object]] = found.get("materials", [])
         if cutting:
             materials: dict[str, object] = dict(cutting[0])
@@ -3750,6 +3807,8 @@ def _t_numbers_problem(value: object) -> str:
 
 # The forms checked by a function of the value alone.
 VALUE_PROBLEMS: dict[str, Callable[[object], str]] = {
+    "color": color_problem,
+    "hatch": hatch_problem,
     "holder_list": _holder_problem,
     "t_numbers": _t_numbers_problem,
     "page_ranges": _page_ranges_problem,

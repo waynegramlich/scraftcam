@@ -133,10 +133,13 @@ class OutlineFileTest(unittest.TestCase):
         split: Outline = outline_from_text(outline_text(HALF_DRILL))
         split.polygons = [
             Polygon("flutes", Role.CUTTING, ["V1", "V2", "V3"], "hss"),
-            Polygon("shank", Role.SUPPORT, ["V3", "V2", "V1"]),
+            Polygon(
+                "shank", Role.SUPPORT, ["V3", "V2", "V1"], "", "R1% G2% B3%"
+            ),
         ]
         text: str = outline_text(split)
         self.assertIn('material = "hss"', text)
+        self.assertIn('color = "R1% G2% B3%"', text)
         self.assertEqual(outline_from_text(text), split)
         problem: str
         broken: str
@@ -148,6 +151,7 @@ class OutlineFileTest(unittest.TestCase):
                 "needs vertices",
             ),
             (text.replace("[[polygons]]", "[[polygon]]"), "at least one"),
+            (text.replace("R1% G2%", "#1234"), "is not a colour"),
         ):
             with self.assertRaises(OutlineError) as caught:
                 outline_from_text(broken)

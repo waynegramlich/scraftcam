@@ -2531,6 +2531,16 @@
         "group": {
           "description": "The group it cuts with.",
           "type": "string"
+        },
+        "color": {
+          "description": "Its colour in drawings and solids (#803).",
+          "type": "string",
+          "pattern": "^\\s*[Rr]\\s*(\\d+(?:\\.\\d*)?)\\s*%\\s*[Gg]\\s*(\\d+(?:\\.\\d*)?)\\s*%\\s*[Bb]\\s*(\\d+(?:\\.\\d*)?)\\s*%\\s*(?:[Tt]\\s*(\\d+(?:\\.\\d*)?)\\s*%)?\\s*$"
+        },
+        "hatch": {
+          "description": "Its hatch in drawings (#804); one is given if none.",
+          "type": "string",
+          "pattern": "^(?:\\s*[Aa]\\s*([-+]?\\d+(?:\\.\\d*)?)\\s*[Ss]\\s*(\\d*\\.?\\d+\\s*[A-Za-z]+)\\s*[Tt]\\s*(\\d*\\.?\\d+\\s*[A-Za-z]+)\\s*\\+)*\\s*[Aa]\\s*([-+]?\\d+(?:\\.\\d*)?)\\s*[Ss]\\s*(\\d*\\.?\\d+\\s*[A-Za-z]+)\\s*[Tt]\\s*(\\d*\\.?\\d+\\s*[A-Za-z]+)\\s*$"
         }
       },
       "required": [
@@ -2571,6 +2581,16 @@
         "description": {
           "description": "What it is, in a few words.",
           "type": "string"
+        },
+        "color": {
+          "description": "Its colour in drawings and solids (#803).",
+          "type": "string",
+          "pattern": "^\\s*[Rr]\\s*(\\d+(?:\\.\\d*)?)\\s*%\\s*[Gg]\\s*(\\d+(?:\\.\\d*)?)\\s*%\\s*[Bb]\\s*(\\d+(?:\\.\\d*)?)\\s*%\\s*(?:[Tt]\\s*(\\d+(?:\\.\\d*)?)\\s*%)?\\s*$"
+        },
+        "hatch": {
+          "description": "Its hatch in drawings (#804); one is given if none.",
+          "type": "string",
+          "pattern": "^(?:\\s*[Aa]\\s*([-+]?\\d+(?:\\.\\d*)?)\\s*[Ss]\\s*(\\d*\\.?\\d+\\s*[A-Za-z]+)\\s*[Tt]\\s*(\\d*\\.?\\d+\\s*[A-Za-z]+)\\s*\\+)*\\s*[Aa]\\s*([-+]?\\d+(?:\\.\\d*)?)\\s*[Ss]\\s*(\\d*\\.?\\d+\\s*[A-Za-z]+)\\s*[Tt]\\s*(\\d*\\.?\\d+\\s*[A-Za-z]+)\\s*$"
         }
       },
       "required": [

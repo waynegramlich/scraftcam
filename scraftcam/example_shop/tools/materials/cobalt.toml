@@ -7,3 +7,4 @@ speed_factor = "110 %"
 description = """\
   M42 cobalt high speed steel; Claude's guess (usually run a little \
   faster than HSS)."""
+color = "R60% G55% B45%"

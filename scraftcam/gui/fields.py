@@ -42,6 +42,8 @@ PLAIN: tuple[str, ...] = (
     "version",
     "triple",
     "page_ranges",
+    "color",
+    "hatch",
 )
 
 # The header keys shown but not edited: changing them changes what
@@ -132,7 +134,9 @@ def value_of(text: str, schema: TableField) -> tuple[object, str]:
 # What a field takes, by form, for its help (#149).
 FORM_HELP: dict[str, str] = {
     "boolean": "`true` or `false`.",
+    "color": "Red, green, blue (and see-through) %, e.g. `R13% G32% B78%`.",
     "date": "A date, year first, e.g. `2026-11-14`.",
+    "hatch": "Angle, spacing, thickness, e.g. `A45 S2mm T0.25mm`.",
     "integer": "A whole number.",
     "positive_integer": "A whole number from 1 up.",
     "page_ranges": "Pages and ranges, e.g. `451-455, 460`.",
