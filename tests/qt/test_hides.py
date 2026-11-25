@@ -56,6 +56,23 @@ class HidesTest(unittest.TestCase):
         self.assertEqual(
             inside_spans(DRILL, HIDE_Y, 5.0, mirror=True), [(-2.0, 2.0)]
         )
+
+        # Two polygons, a box and a roof on it (`T.sa~6.11` #765):
+        # across the roof only its stretch, across both their union.
+        house: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (2.0, 6.0),
+        ]
+        loops: list[list[int]] = [[0, 1, 2, 3], [3, 2, 4]]
+        self.assertEqual(
+            inside_spans(house, HIDE_Y, 5.0, loops=loops), [(1.0, 3.0)]
+        )
+        self.assertEqual(
+            inside_spans(house, HIDE_X, 1.0, loops=loops), [(0.0, 5.0)]
+        )
         u_shape: list[tuple[float, float]] = [
             (0.0, 0.0),
             (6.0, 0.0),

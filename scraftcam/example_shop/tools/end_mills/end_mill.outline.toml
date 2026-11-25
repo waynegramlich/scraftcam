@@ -1,5 +1,5 @@
 kind = "outline"
-version = 5
+version = 6
 revolve = true
 
 [letters.D]
@@ -49,6 +49,11 @@ at = [10.0, 63.5]
 [[vertices]]
 name = "V6"
 at = [0.0, 63.5]
+
+[[polygons]]
+name = "outline"
+role = "other"
+vertices = ["V1", "V2", "V3", "V4", "V5", "V6"]
 
 [[dimensions]]
 letter = ""

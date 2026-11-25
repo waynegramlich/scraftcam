@@ -2865,8 +2865,8 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
                 self.problem(
                     source,
                     path + (key,),
-                    "is worked out by the outline's formula, never given "
-                    "(#722)",
+                    "is the outline's own (a formula, or internal), "
+                    "never given (#722, #783b)",
                 )
             elif key not in fields:
                 known: str = ", ".join(f.short or f.key for f in kind.fields)
@@ -2921,7 +2921,14 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
         for letter, table in (
             letters.items() if isinstance(letters, dict) else ()
         ):
-            if not isinstance(table, dict) or "formula" in table:
+            # A formula letter, and an internal or polygon one
+            # (`T.sa~6.11` #783b2), is the outline's own: never given.
+            if (
+                not isinstance(table, dict)
+                or "formula" in table
+                or table.get("internal") is True
+                or table.get("polygon")
+            ):
                 formulas.add(letter)
                 continue
             known: TableField | None = fields.get(letter)

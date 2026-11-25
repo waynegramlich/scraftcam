@@ -90,7 +90,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QWidget,
 )
 
-from ..diagram import FONT_STEP, TEXT, Stroke, svg  # noqa: E402
+from ..diagram import FONT_STEP, TEXT, Stroke, Weight, svg  # noqa: E402
 from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
 from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
@@ -106,8 +106,10 @@ from .dimensions import (  # noqa: E402
     X_AXIS,
     Y_AXIS,
     Dimension,
+    Edge,
     Formula,
     Solution,
+    angle_edges,
     is_across,
     is_mark,
     mark_broken,
@@ -136,6 +138,7 @@ from .letters import (  # noqa: E402
 from .outline_cuts import cut_pieces  # noqa: E402
 from .outline_diagram import (  # noqa: E402
     Fillet,
+    dimension_arc,
     dimension_strokes,
     fillet_arcs,
     outline_sheet,
@@ -148,12 +151,16 @@ from .outline_file import (  # noqa: E402
     VERTEX_NAME,
     Hole,
     Outline,
+    Polygon,
+    Role,
+    letter_scope_problems,
     outline_from_text,
     outline_text,
 )
-from .outline_letters import LettersTable, ToolValues  # noqa: E402
+from .outline_values import ToolValues, ValuesTable  # noqa: E402
 from .values import (  # noqa: E402
     crossings,
+    overlaps,
     placed_corners,
     set_letters,
     values_cross,
@@ -223,6 +230,7 @@ BUTTON_WORDS: tuple[str, ...] = (
     "Undo",
     "Redo",
     "New Letter",
+    "New Polygon",
     "Show Marks",
     "Show Names",
 )
@@ -234,6 +242,7 @@ CHANGE_WORDS: tuple[str, ...] = (
     "Dimension",
     "Dim. Kind",
     "New Letter",
+    "New Polygon",
     "Revolve",
     "Hide",
     "Rotate Diagram",
@@ -276,7 +285,17 @@ BUTTON_TABS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "Most Common",
         ("Undo", "Redo", "Delete", "Dimension", "Fit", "Rotate Diagram"),
     ),
-    ("Draw", ("Delete", "Dimension", "Dim. Kind", "New Letter", "Revolve")),
+    (
+        "Draw",
+        (
+            "Delete",
+            "Dimension",
+            "Dim. Kind",
+            "New Letter",
+            "New Polygon",
+            "Revolve",
+        ),
+    ),
     (
         "View",
         (
@@ -432,10 +451,12 @@ class Snapshot:  # pylint: disable=too-many-instance-attributes
     * `text_height` (`float`): The diagram's letter height (#273).
     * `holes` (`tuple[Hole, ...]`): Copies of the holes (#447).
     * `names` (`tuple[str, ...]`): The corners' names (#787).
+    * `polygons` (`tuple[Polygon, ...]`): Copies of the polygons
+      (#765).
 
     Constructor:
     * `Snapshot(points, dimensions, letters, revolve, note_radius,
-      hides, turns, text_height, holes, names)`
+      hides, turns, text_height, holes, names, polygons)`
     """
 
     # Constructor arguments:
@@ -449,6 +470,38 @@ class Snapshot:  # pylint: disable=too-many-instance-attributes
     text_height: float = field(init=True, default=0.0)
     holes: tuple[Hole, ...] = field(init=True, default=())
     names: tuple[str, ...] = field(init=True, default=())
+    polygons: tuple[Polygon, ...] = field(init=True, default=())
+
+
+# Function `_reached()`:
+def _reached(edge: Edge, count: int) -> int:
+    """Return the corner an angle's edge reaches, as a `Dimension`
+    keeps it: -1 for an axis or the corner after it in `points`
+    (#797).
+
+    Arguments:
+    * `edge` (`Edge`): The corners it leaves and reaches.
+    * `count` (`int`): How many corners there are.
+
+    Returns:
+    * (`int`): `Dimension.start_to` or `end_to`.
+    """
+    if edge[0] in AXES or edge[1] == (edge[0] + 1) % count:
+        return -1
+    return edge[1]
+
+
+# Function `_copied()`:
+def _copied(polygon: Polygon) -> Polygon:
+    """Return a copy of a polygon, its vertex list its own.
+
+    Arguments:
+    * `polygon` (`Polygon`): The polygon.
+
+    Returns:
+    * (`Polygon`): The copy.
+    """
+    return replace(polygon, vertices=list(polygon.vertices))
 
 
 # Class `Drawing`:
@@ -473,10 +526,11 @@ class Drawing(Outline):
     * `scale` (`float`): Drawing steps per millimeter, once the
       drawing follows the values (#148); 0 before.
     * `names` (`list[str]`): Each corner's name (#787).
+    * `polygons` (`list[Polygon]`): The polygons (#765).
 
     Constructor:
     * `Drawing(points, letters, dimensions, revolve, note_radius,
-      hides, text_height, turns, holes, names)`
+      hides, text_height, turns, holes, names, polygons)`
     """
 
     # Remaining attributes (alphabetized):
@@ -488,6 +542,7 @@ class Drawing(Outline):
         if not self.points:
             self.points[:] = triangle()
         self.fill_names()
+        self.fill_polygons()
 
     # Method `Drawing.snapshot()`:
     def snapshot(self) -> Snapshot:
@@ -503,6 +558,7 @@ class Drawing(Outline):
             self.text_height,
             tuple(replace(hole) for hole in self.holes),
             tuple(self.names),
+            tuple(_copied(polygon) for polygon in self.polygons),
         )
 
     # Method `Drawing.restore()`:
@@ -525,6 +581,7 @@ class Drawing(Outline):
         self.holes[:] = [replace(hole) for hole in snapshot.holes]
         self.names[:] = snapshot.names
         self.fill_names()
+        self.polygons[:] = [_copied(polygon) for polygon in snapshot.polygons]
 
     # Method `Drawing.follow_angles()`:
     def follow_angles(self) -> None:
@@ -537,7 +594,10 @@ class Drawing(Outline):
             if dimension.kind != ANGLE:
                 continue
             rays: tuple[int, int] | None = middle_rays(
-                self.points, dimension.start, dimension.end
+                self.points,
+                dimension.start,
+                dimension.end,
+                (dimension.start_to, dimension.end_to),
             )
             if rays is None:
                 continue
@@ -547,40 +607,134 @@ class Drawing(Outline):
             )
             if arc is not None and arc[2] > 180.0:
                 dimension.start, dimension.end = dimension.end, dimension.start
+                dimension.start_to, dimension.end_to = (
+                    dimension.end_to,
+                    dimension.start_to,
+                )
                 dimension.rays = (rays[1], rays[0])
 
     # Method `Drawing.insert()`:
-    def insert(self, index: int, point: tuple[float, float]) -> None:
-        """Insert a corner; the dimensions and hide strips keep to
-        their corners (#446), and a mark on the edge it splits goes
-        (#233).
+    def insert(self, point: tuple[float, float], edge: Edge) -> int:
+        """Add a corner splitting an edge: it goes last in `points`,
+        in the order made (`T.sa~6.11` #799), so no other corner is
+        renumbered; it joins each polygon with the edge, a mark on
+        the edge goes (#233), and an angle on it reaches the new
+        corner (#797).
 
         Arguments:
-        * `index` (`int`): Where the new corner goes.
         * `point` (`tuple[float, float]`): The new corner.
+        * `edge` (`Edge`): The edge it splits.
+
+        Returns:
+        * (`int`): The new corner's index.
         """
-        split: int = (index - 1) % len(self.points)
+        # A mark on the split edge goes (#233).
+        self.explicit_angles()
+        loops: list[list[int]] = self.loops()
         self.dimensions[:] = [
             dimension
             for dimension in self.dimensions
-            if mark_edge(dimension, len(self.points)) != split
+            if (found := mark_edge(dimension, len(self.points), loops)) is None
+            or frozenset(found) != frozenset(edge)
         ]
-        self.points.insert(index, point)
-        self.names.insert(index, self.new_name())
+        before: str = self.names[edge[0]]
+        after: str = self.names[edge[1]]
+        index: int = len(self.points)
+        self.points.append(point)
+        name: str = self.new_name()
+        self.names.append(name)
+
+        # Into each polygon with the split edge, between its ends.
+        polygon: Polygon
+        for polygon in self.polygons:
+            corners: list[str] = polygon.vertices
+            spot: int
+            corner: str
+            for spot, corner in enumerate(corners):
+                if {corner, corners[spot - 1]} == {before, after}:
+                    corners.insert(spot, name)
+                    break
+
+        # An angle along the split edge now reaches the new corner.
         dimension: Dimension
         for dimension in self.dimensions:
-            if dimension.start >= index:
-                dimension.start += 1
-            if dimension.end >= index:
-                dimension.end += 1
-        self.hides[:] = [
-            replace(
-                hide,
-                below=hide.below + (hide.below >= index),
-                above=hide.above + (hide.above >= index),
-            )
-            for hide in self.hides
+            if dimension.kind != ANGLE:
+                continue
+            if {dimension.start, dimension.start_to} == set(edge):
+                dimension.start_to = index
+            if {dimension.end, dimension.end_to} == set(edge):
+                dimension.end_to = index
+        return index
+
+    # Method `Drawing.new_triangle()`:
+    def new_triangle(self, first: int, second: int) -> str:
+        """Add a polygon (`T.sa~6.11` #772): an equilateral triangle on
+        the edge between two corners, outside the one polygon that has
+        the edge, sharing the two; its third corner made last.
+
+        Arguments:
+        * `first` (`int`): One corner of the edge.
+        * `second` (`int`): The other.
+
+        Returns:
+        * (`str`): The new polygon's name; "" when the two are not an
+          edge of exactly one polygon (nothing is changed).
+        """
+        # The one polygon with the edge, and the edge as it walks it.
+        found: list[tuple[list[int], Edge]] = [
+            (loop, (corner, loop[(spot + 1) % len(loop)]))
+            for loop in self.loops()
+            for spot, corner in enumerate(loop)
+            if {corner, loop[(spot + 1) % len(loop)]} == {first, second}
         ]
+        if len(found) != 1:
+            return ""
+        loop: list[int]
+        edge: Edge
+        loop, edge = found[0]
+
+        # Outside: right of the edge as a counterclockwise polygon walks
+        # it (left for a clockwise one), at the equilateral height.
+        ring: list[tuple[float, float]] = [self.points[at] for at in loop]
+        area: float = sum(
+            here[0] * there[1] - there[0] * here[1]
+            for here, there in zip(ring, ring[1:] + ring[:1], strict=True)
+        )
+        start: tuple[float, float] = self.points[edge[0]]
+        end: tuple[float, float] = self.points[edge[1]]
+        side: float = (1.0 if area > 0.0 else -1.0) * math.sqrt(3.0) / 2.0
+        apex: tuple[float, float] = (
+            (start[0] + end[0]) / 2.0 + side * (end[1] - start[1]),
+            (start[1] + end[1]) / 2.0 - side * (end[0] - start[0]),
+        )
+        self.points.append(apex)
+        name: str = self.new_name()
+        self.names.append(name)
+        polygon: str = self.new_polygon_name()
+        self.polygons.append(
+            Polygon(
+                polygon,
+                Role.OTHER,
+                [self.names[edge[1]], self.names[edge[0]], name],
+            )
+        )
+        return polygon
+
+    # Method `Drawing.explicit_angles()`:
+    def explicit_angles(self) -> None:
+        """Give every angle's edges both their corners, so that none
+        relies on the next corner in `points` while corners come and
+        go (#799)."""
+        count: int = len(self.points)
+        dimension: Dimension
+        for dimension in self.dimensions:
+            if dimension.kind != ANGLE:
+                continue
+            first: Edge
+            second: Edge
+            first, second = angle_edges(dimension, count)
+            dimension.start_to = first[1]
+            dimension.end_to = second[1]
 
     # Method `Drawing.remove()`:
     def remove(self, index: int) -> None:
@@ -590,19 +744,53 @@ class Drawing(Outline):
         Arguments:
         * `index` (`int`): The corner.
         """
-        del self.points[index]
-        del self.names[index]
+        # An angle's edge reaching the corner reaches on, to the
+        # corner after it in its polygon (#45, #797).
+        self.explicit_angles()
+        ahead: int = self.neighbours(index)[1]
+        dimension: Dimension
+        for dimension in self.dimensions:
+            if dimension.kind == ANGLE:
+                if dimension.start_to == index:
+                    dimension.start_to = ahead
+                if dimension.end_to == index:
+                    dimension.end_to = ahead
+        # An edge shrunk to a corner goes, as one measuring the corner.
         self.dimensions[:] = [
             dimension
             for dimension in self.dimensions
-            if index not in (dimension.start, dimension.end)
+            if dimension.kind != ANGLE
+            or (
+                dimension.start != dimension.start_to
+                and dimension.end != dimension.end_to
+            )
         ]
-        dimension: Dimension
+        del self.points[index]
+        gone: str = self.names.pop(index)
+        polygon: Polygon
+        for polygon in self.polygons:
+            if gone in polygon.vertices:
+                polygon.vertices.remove(gone)
+        self.dimensions[:] = [
+            dimension
+            for dimension in self.dimensions
+            if index
+            not in (
+                dimension.start,
+                dimension.end,
+                dimension.start_to,
+                dimension.end_to,
+            )
+        ]
         for dimension in self.dimensions:
             if dimension.start > index:
                 dimension.start -= 1
             if dimension.end > index:
                 dimension.end -= 1
+            if dimension.start_to > index:
+                dimension.start_to -= 1
+            if dimension.end_to > index:
+                dimension.end_to -= 1
         self.hides[:] = [
             replace(
                 hide,
@@ -894,15 +1082,18 @@ class OutlineItem(QGraphicsItem):
         * `painter` (`QPainter`): What draws, in drawing steps.
         * `corners` (`list[QPointF]`): The corners.
         """
-        crossed: set[int] = {
-            edge for pair in crossings(self.drawing.points) for edge in pair
+        crossed: set[Edge] = {
+            edge
+            for pair in crossings(self.drawing.points, self.drawing.loops())
+            for edge in pair
         }
         bad: QPen = QPen(QColor(theme.colors().problem), 2 * THICK_PIXELS)
         bad.setCosmetic(True)
         painter.setPen(bad)
-        edge: int
-        for edge in sorted(crossed):
-            painter.drawLine(corners[edge], corners[(edge + 1) % len(corners)])
+        start: int
+        end: int
+        for start, end in sorted(crossed):
+            painter.drawLine(corners[start], corners[end])
 
     # Method `OutlineItem.paint()`:
     def paint(
@@ -924,16 +1115,20 @@ class OutlineItem(QGraphicsItem):
             self.drawing, self.drawing.scale
         )
         strokes: list[Stroke] = outline_strokes(self.drawing, fillets)
+        thick: list[Stroke] = [
+            stroke for stroke in strokes if stroke.weight == Weight.THICK
+        ]
         painter.setPen(pen)
-        painter.drawPath(stroke_path(strokes[0]))
+        stroke: Stroke
+        for stroke in thick:
+            painter.drawPath(stroke_path(stroke))
 
         # Revolved: the mirror half, faint and dashed.
         ghost: QPen = QPen(QColor(theme.colors().quiet), THIN_PIXELS)
         ghost.setCosmetic(True)
         ghost.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(ghost)
-        stroke: Stroke
-        for stroke in strokes[1:]:
+        for stroke in strokes[len(thick) :]:
             painter.drawPath(stroke_path(stroke))
 
         corners: list[QPointF] = [
@@ -950,7 +1145,9 @@ class OutlineItem(QGraphicsItem):
         length: float = ARROW_PIXELS / max(scale, 1e-12)
         painter.setBrush(ink)
         segment: XYSegment
-        for segment in strokes[0].segments:
+        for segment in (
+            segment for stroke in thick for segment in stroke.segments
+        ):
             if isinstance(segment, LineSegment):
                 painter.drawPath(
                     arrowhead(
@@ -979,12 +1176,16 @@ def tool_drawing(drawing: Drawing, values: dict[str, str]) -> Drawing:
     """
     # The outline's own scale, from its defaults.
     scale: float = placed_corners(
-        drawing.points, drawing.letters, drawing.dimensions, drawing.scale
+        drawing.points,
+        drawing.letters,
+        drawing.dimensions,
+        drawing.scale,
+        drawing.loops(),
     )[1]
     tool: Drawing = copy.deepcopy(drawing)
     set_letters(tool.letters, values)
     points: list[tuple[float, float]] = placed_corners(
-        tool.points, tool.letters, tool.dimensions, scale
+        tool.points, tool.letters, tool.dimensions, scale, tool.loops()
     )[0]
 
     # Into the outline's box, never bigger.
@@ -1170,7 +1371,10 @@ def arrowhead(start: QPointF, end: QPointF, length: float) -> QPainterPath:
 
 # Function `crossing()`:
 def crossing(
-    points: list[tuple[float, float]], first: int, second: int
+    points: list[tuple[float, float]],
+    first: int,
+    second: int,
+    reach: tuple[int, int] = (-1, -1),
 ) -> QPointF | None:
     """Return where two edges' lines cross.
 
@@ -1178,12 +1382,14 @@ def crossing(
     * `points` (`list[tuple[float, float]]`): The corners.
     * `first` (`int`): The corner the first edge leaves.
     * `second` (`int`): The corner the second edge leaves.
+    * `reach` (`tuple[int, int]`): The corner each edge reaches
+      (`T.sa~6.11` #797); -1 for the corner after the one it leaves.
 
     Returns:
     * (`QPointF | None`): The crossing; `None` for parallel edges.
     """
     arc: tuple[tuple[float, float], float, float] | None = shared_arc(
-        points, first, second, (1, 1)
+        points, first, second, (1, 1), reach
     )
     return None if arc is None else QPointF(*arc[0])
 
@@ -1205,27 +1411,34 @@ def edge_start(points: list[tuple[float, float]], edge: int) -> QPointF:
 
 
 # Function `edge_way()`:
-def edge_way(points: list[tuple[float, float]], edge: int) -> QPointF:
+def edge_way(
+    points: list[tuple[float, float]], edge: int, to: int = -1
+) -> QPointF:
     """Return an edge's direction, from the corner it leaves (+X or
     +Y, for an axis).
 
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners.
     * `edge` (`int`): The corner the edge leaves, or an axis.
+    * `to` (`int`): The corner it reaches (#797); -1 for the next.
 
     Returns:
-    * (`QPointF`): The next corner less this one.
+    * (`QPointF`): The corner it reaches less this one.
     """
     if edge == X_AXIS:
         return QPointF(1.0, 0.0)
     if edge == Y_AXIS:
         return QPointF(0.0, 1.0)
-    return QPointF(*points[(edge + 1) % len(points)]) - QPointF(*points[edge])
+    there: int = to if to >= 0 else (edge + 1) % len(points)
+    return QPointF(*points[there]) - QPointF(*points[edge])
 
 
 # Function `middle_rays()`:
 def middle_rays(
-    points: list[tuple[float, float]], first: int, second: int
+    points: list[tuple[float, float]],
+    first: int,
+    second: int,
+    reach: tuple[int, int] = (-1, -1),
 ) -> tuple[int, int] | None:
     """Return the rays from two edges' crossing toward their middles,
     each `1` along its edge's direction or `-1` against it (#53).
@@ -1234,26 +1447,33 @@ def middle_rays(
     * `points` (`list[tuple[float, float]]`): The corners.
     * `first` (`int`): The corner the first edge leaves.
     * `second` (`int`): The corner the second edge leaves.
+    * `reach` (`tuple[int, int]`): The corner each edge reaches
+      (`T.sa~6.11` #797); -1 for the corner after the one it leaves.
 
     Returns:
     * (`tuple[int, int] | None`): The two rays; `None` for parallel
       edges.
     """
-    center: QPointF | None = crossing(points, first, second)
+    center: QPointF | None = crossing(points, first, second, reach)
     if center is None:
         return None
     signs: list[int] = []
     edge: int
     other: int
-    for edge, other in ((first, second), (second, first)):
+    to: int
+    other_to: int
+    for edge, other, to, other_to in (
+        (first, second, reach[0], reach[1]),
+        (second, first, reach[1], reach[0]),
+    ):
         # An axis's ray points toward the other edge's side (#65).
         middle: QPointF = (
-            edge_start(points, other) + edge_way(points, other) / 2
+            edge_start(points, other) + edge_way(points, other, other_to) / 2
             if edge in AXES
-            else edge_start(points, edge) + edge_way(points, edge) / 2
+            else edge_start(points, edge) + edge_way(points, edge, to) / 2
         )
         toward: float = QPointF.dotProduct(
-            middle - center, edge_way(points, edge)
+            middle - center, edge_way(points, edge, to)
         )
         signs.append(1 if toward >= 0.0 else -1)
     return signs[0], signs[1]
@@ -1265,6 +1485,7 @@ def edge_arc(
     first: int,
     second: int,
     rays: tuple[int, int],
+    reach: tuple[int, int] = (-1, -1),
 ) -> tuple[QPointF, float, float] | None:
     """Return an angle's arc: where two edges' lines cross, and the
     turn counterclockwise from the first ray to the second
@@ -1276,6 +1497,8 @@ def edge_arc(
     * `second` (`int`): The corner the second edge leaves.
     * `rays` (`tuple[int, int]`): Each ray along (`1`) or against
       (`-1`) its edge's direction.
+    * `reach` (`tuple[int, int]`): The corner each edge reaches
+      (`T.sa~6.11` #797); -1 for the corner after the one it leaves.
 
     Returns:
     * (`tuple[QPointF, float, float] | None`): The crossing, the first
@@ -1283,7 +1506,7 @@ def edge_arc(
       360, counterclockwise); `None` for parallel edges.
     """
     arc: tuple[tuple[float, float], float, float] | None = shared_arc(
-        points, first, second, rays
+        points, first, second, rays, reach
     )
     return None if arc is None else (QPointF(*arc[0]), arc[1], arc[2])
 
@@ -1301,7 +1524,10 @@ def angle_arc(
     Returns:
     * (`tuple[QPointF, float, float] | None`): As `edge_arc()`.
     """
-    return edge_arc(points, dimension.start, dimension.end, dimension.rays)
+    arc: tuple[tuple[float, float], float, float] | None = dimension_arc(
+        points, dimension
+    )
+    return None if arc is None else (QPointF(*arc[0]), arc[1], arc[2])
 
 
 # Function `left_of()`:
@@ -1334,6 +1560,8 @@ class EdgeHandle(QGraphicsEllipseItem):
     Attributes:
     * `editor` (`OutlineView`): The view it is drawn in.
     * `index` (`int`): The corner its edge leaves.
+    * `end` (`int`): The corner its edge reaches, in its polygon
+      (`T.sa~6.11` #797).
     * `mirrored` (`bool`): Whether it sits on the edge's mirror image
       across the Y axis.
     * `before` (`Snapshot | None`): The drawing when a drag began.
@@ -1343,20 +1571,24 @@ class EdgeHandle(QGraphicsEllipseItem):
 
     # Method `EdgeHandle.__init__()`:
     def __init__(
-        self, editor: "OutlineView", index: int, mirrored: bool = False
+        self,
+        editor: "OutlineView",
+        edge: Edge,
+        mirrored: bool = False,
     ) -> None:
         """Make the handle of one edge.
 
         Arguments:
         * `editor` (`OutlineView`): The view it is drawn in.
-        * `index` (`int`): The corner its edge leaves.
+        * `edge` (`Edge`): The corners it leaves and reaches (#797).
         * `mirrored` (`bool`): Whether it sits on the edge's mirror
           image (#475).
         """
         half: float = HANDLE_PIXELS / 2.0
         super().__init__(-half, -half, HANDLE_PIXELS, HANDLE_PIXELS)
         self.editor: OutlineView = editor
-        self.index: int = index
+        self.index: int = edge[0]
+        self.end: int = edge[1]
         self.mirrored: bool = mirrored
         self.before: Snapshot | None = None
         self.added: int = -1
@@ -1374,7 +1606,7 @@ class EdgeHandle(QGraphicsEllipseItem):
         x1: float
         y1: float
         x0, y0 = points[self.index]
-        x1, y1 = points[(self.index + 1) % len(points)]
+        x1, y1 = points[self.end]
         middle: float = (x0 + x1) / 2.0
         self.setPos(-middle if self.mirrored else middle, (y0 + y1) / 2.0)
         length: float = (
@@ -1410,8 +1642,9 @@ class EdgeHandle(QGraphicsEllipseItem):
         if self.editor.drawing.revolve and where.x() < 0.0:
             where.setX(0.0)  # A revolved outline keeps to X >= 0.
         if self.added < 0:
-            self.added = self.index + 1
-            self.editor.drawing.insert(self.added, (where.x(), where.y()))
+            self.added = self.editor.drawing.insert(
+                (where.x(), where.y()), (self.index, self.end)
+            )
         # It snaps as a dragged corner does (#451).
         self.editor.dragged = self.added
         self.editor.drag_corner(self.added, where)
@@ -1431,7 +1664,7 @@ class EdgeHandle(QGraphicsEllipseItem):
             self.before = None
             self.editor.remark(self.added)  # Its marks, and its square.
         elif self.before is not None:
-            self.editor.select_edge(self.index)
+            self.editor.select_edge((self.index, self.end))
         self.before = None
 
 
@@ -2300,8 +2533,9 @@ class OutlineView(QGraphicsView):
     * `chosen_points` (`list[int]`):
       The selected points (`ORIGIN` or corners), in the order clicked.
     * `chosen_dimensions` (`list[int]`): The selected dimensions.
-    * `chosen_edges` (`list[int]`): The selected edges (by the corner
-      each leaves), in the order clicked.
+    * `chosen_edges` (`list[Edge]`): The selected edges, each by the
+      corners it leaves and reaches (an axis as `(X_AXIS, -1)`,
+      `T.sa~6.11` #797), in the order clicked.
     * `wanted` (`bool`): Whether [Dimension] waits for points.
     * `pan_from` (`QPoint | None`):
       Where the pointer was, while empty space is dragged.
@@ -2377,7 +2611,7 @@ class OutlineView(QGraphicsView):
         self.read_only_message: str = READ_ONLY_MESSAGE
         self.chosen_points: list[int] = []
         self.chosen_dimensions: list[int] = []
-        self.chosen_edges: list[int] = []
+        self.chosen_edges: list[Edge] = []
         self.wanted: bool = False
         self.letters_changed: Callable[[], None] = self.update
         self.released: Callable[[], None] = self.update
@@ -2433,7 +2667,9 @@ class OutlineView(QGraphicsView):
         self.tips: list[DimensionHandle] = []
         self.grips: list[StripHandle] = []
         self.measures: list[DimensionItem] = []
-        self.solution: Solution = solve(drawing.points, drawing.dimensions)
+        self.solution: Solution = solve(
+            drawing.points, drawing.dimensions, drawing.loops()
+        )
         self.make_squares()
         self.resize(800, 600)
         self.fit()
@@ -2461,9 +2697,10 @@ class OutlineView(QGraphicsView):
         handle: EdgeHandle
         for handle in self.handles + self.mirror_handles:
             self.scene().removeItem(handle)
-        self.handles = [EdgeHandle(self, index) for index in corners]
+        edges: list[Edge] = self.drawing.edges()
+        self.handles = [EdgeHandle(self, edge) for edge in edges]
         self.mirror_handles = [
-            EdgeHandle(self, index, mirrored=True) for index in corners
+            EdgeHandle(self, edge, mirrored=True) for edge in edges
         ]
         for handle in self.handles + self.mirror_handles:
             self.scene().addItem(handle)
@@ -2586,15 +2823,16 @@ class OutlineView(QGraphicsView):
         self.restyle()
 
     # Method `OutlineView.select_edge()`:
-    def select_edge(self, index: int) -> None:
+    def select_edge(self, edge: Edge) -> None:
         """Add an edge to the selection (as the latest, if it was in).
 
         Arguments:
-        * `index` (`int`): The corner the edge leaves.
+        * `edge` (`Edge`): The corners it leaves and reaches, or an
+          axis and -1.
         """
-        if index in self.chosen_edges:
-            self.chosen_edges.remove(index)
-        self.chosen_edges.append(index)
+        if edge in self.chosen_edges:
+            self.chosen_edges.remove(edge)
+        self.chosen_edges.append(edge)
         self.message = ""
         self.restyle()
 
@@ -2735,7 +2973,7 @@ class OutlineView(QGraphicsView):
             if self.origin in self.items(event.position().toPoint()):
                 self.select_point(ORIGIN)
             elif axis in AXES:
-                self.select_edge(axis)
+                self.select_edge((axis, -1))
             else:
                 self.clear_selection()
             self.pan_from = event.position().toPoint()
@@ -2827,7 +3065,9 @@ class OutlineView(QGraphicsView):
         an outline file is a template (#457)."""
         self.apply_values()
         self.outline.refresh()
-        self.solution = solve(self.drawing.points, self.working())
+        self.solution = solve(
+            self.drawing.points, self.working(), self.drawing.loops()
+        )
         measure: DimensionItem
         for measure in self.measures:
             measure.prepareGeometryChange()
@@ -2849,7 +3089,10 @@ class OutlineView(QGraphicsView):
         if self.dragged < 0:
             return self.drawing.dimensions
         return without_marks(
-            self.drawing.dimensions, self.dragged, len(self.drawing.points)
+            self.drawing.dimensions,
+            self.dragged,
+            len(self.drawing.points),
+            self.drawing.loops(),
         )
 
     # Method `OutlineView.apply_values()`:
@@ -2862,6 +3105,7 @@ class OutlineView(QGraphicsView):
             self.drawing.letters,
             self.working(),
             self.drawing.scale,
+            self.drawing.loops(),
         )[1]
 
     # Method `OutlineView.place_handles()`:
@@ -2893,10 +3137,11 @@ class OutlineView(QGraphicsView):
         y0: float
         x1: float
         y1: float
+        end: int = self.drawing.neighbours(index)[1]
         x0, y0 = points[index]
-        x1, y1 = points[(index + 1) % len(points)]
+        x1, y1 = points[end]
         self.history.remember(self.drawing.snapshot())
-        self.drawing.insert(index + 1, ((x0 + x1) / 2.0, (y0 + y1) / 2.0))
+        self.drawing.insert(((x0 + x1) / 2.0, (y0 + y1) / 2.0), (index, end))
         self.message = ""
         self.make_squares()
 
@@ -2912,10 +3157,45 @@ class OutlineView(QGraphicsView):
                 f"An outline needs at least {LEAST_CORNERS} corners."
             )
             return
+        problem: str = self.removal_problem([index])
+        if problem:
+            self.message = problem
+            return
         self.history.remember(self.drawing.snapshot())
         self.drawing.remove(index)
         self.message = ""
         self.make_squares()
+
+    # Method `OutlineView.removal_problem()`:
+    def removal_problem(self, corners: list[int]) -> str:
+        """Say why corners may not be deleted: one is shared by
+        polygons (`T.sa~6.11` #777), or a polygon would be left with
+        fewer than `LEAST_CORNERS`.
+
+        Arguments:
+        * `corners` (`list[int]`): The corners.
+
+        Returns:
+        * (`str`): The reason, or "" when they may go.
+        """
+        names: list[str] = self.drawing.names
+        corner: int
+        for corner in corners:
+            sharing: list[str] = self.drawing.sharing(corner)
+            if len(sharing) > 1:
+                return (
+                    f"{names[corner]} is a corner of {' and '.join(sharing)}"
+                    ": a shared corner can not be deleted."
+                )
+        going: set[str] = {names[corner] for corner in corners}
+        polygon: Polygon
+        for polygon in self.drawing.polygons:
+            left: int = len(set(polygon.vertices) - going)
+            if left < LEAST_CORNERS:
+                return (
+                    f"{polygon.name} needs at least {LEAST_CORNERS} corners."
+                )
+        return ""
 
     # Method `OutlineView.delete_selected()`:
     def delete_selected(self) -> None:
@@ -2940,6 +3220,11 @@ class OutlineView(QGraphicsView):
             self.message = (
                 f"An outline needs at least {LEAST_CORNERS} corners."
             )
+            self.scene().update()
+            return
+        problem: str = self.removal_problem(corners)
+        if problem:
+            self.message = problem
             self.scene().update()
             return
         self.history.remember(self.drawing.snapshot())
@@ -2976,23 +3261,21 @@ class OutlineView(QGraphicsView):
         alone its length (#231); one corner alone the angle there,
         between its two edges (#232); else points (`dimension_points()`).
         """
-        edges: list[int] = self.chosen_edges
+        edges: list[Edge] = self.chosen_edges
         points: list[int] = self.chosen_points
         if len(edges) >= 2:
             self.angle_selected()
             return
-        if len(edges) == 1 and edges[0] not in AXES and not points:
-            edge: int = edges[0]
-            self.dimension_between(
-                edge, (edge + 1) % len(self.drawing.points), LENGTH
-            )
+        if len(edges) == 1 and edges[0][0] not in AXES and not points:
+            self.dimension_between(edges[0][0], edges[0][1], LENGTH)
             return
         if not edges and len(points) == 1 and points[0] != ORIGIN:
+            # The corner's two edges in its polygon (#797).
             corner: int = real_point(points[0])
-            self.chosen_edges = [
-                (corner - 1) % len(self.drawing.points),
-                corner,
-            ]
+            back: int
+            ahead: int
+            back, ahead = self.drawing.neighbours(corner)
+            self.chosen_edges = [(back, corner), (corner, ahead)]
             self.angle_selected()
             return
         self.dimension_points()
@@ -3005,7 +3288,9 @@ class OutlineView(QGraphicsView):
         axis and a corner (#80): a dimension from the axis, that is,
         from the origin across it (vertical from the X axis).
         """
-        axes: list[int] = [edge for edge in self.chosen_edges if edge in AXES]
+        axes: list[int] = [
+            edge[0] for edge in self.chosen_edges if edge[0] in AXES
+        ]
         corners: list[int] = [
             real_point(point)
             for point in self.chosen_points
@@ -3080,15 +3365,16 @@ class OutlineView(QGraphicsView):
             self.message = "Select two edges' circles for an angle."
             self.scene().update()
             return
-        first: int
-        second: int
+        first: Edge
+        second: Edge
         first, second = self.chosen_edges[-2:]
-        if first in AXES and second in AXES:
+        if first[0] in AXES and second[0] in AXES:
             self.message = "The axes are 90 deg apart: pick an edge."
             self.scene().update()
             return
+        points: list[tuple[float, float]] = self.drawing.points
         rays: tuple[int, int] | None = middle_rays(
-            self.drawing.points, first, second
+            points, first[0], second[0], (first[1], second[1])
         )
         if rays is None:
             self.message = "Those edges are parallel: no angle."
@@ -3099,7 +3385,7 @@ class OutlineView(QGraphicsView):
         # measured counterclockwise from the edge that makes it under
         # 180 degrees, so the value is positive (#57).
         arc: tuple[QPointF, float, float] | None = edge_arc(
-            self.drawing.points, first, second, rays
+            points, first[0], second[0], rays, (first[1], second[1])
         )
         assert arc is not None  # Not parallel: `rays` were found.
         turn: float = arc[2]
@@ -3111,11 +3397,11 @@ class OutlineView(QGraphicsView):
         reach: float = min(
             math.hypot(middle.x(), middle.y())
             for middle in (
-                edge_start(self.drawing.points, edge)
-                + edge_way(self.drawing.points, edge) / 2.0
+                edge_start(points, edge[0])
+                + edge_way(points, edge[0], edge[1]) / 2.0
                 - arc[0]
                 for edge in (first, second)
-                if edge not in AXES
+                if edge[0] not in AXES
             )
         )
         letter: Letter = replace(
@@ -3127,10 +3413,12 @@ class OutlineView(QGraphicsView):
             Dimension(
                 letter.letter,
                 ANGLE,
-                first,
-                second,
+                first[0],
+                second[0],
                 max(reach / 2.0, 2.0 * self.step()),
                 rays=rays,
+                start_to=_reached(first, len(points)),
+                end_to=_reached(second, len(points)),
             )
         )
         self.message = ""
@@ -3223,8 +3511,23 @@ class OutlineView(QGraphicsView):
         * `corners` (`list[int]`): The corners.
         * `choice` (`str`): The letter; `NOTE_CHOICE` for the note
           letter (made the first time: "All undimensioned fillets are
-          radius UDF", #116, #120); "" for sharp.
+          radius UDF", #116, #120); "" for sharp.  Refused, saying why,
+          for a corner of more than one polygon (#798).
         """
+        # A shared corner stays sharp, or its polygons would part
+        # (`T.sa~6.11` #798).
+        shared: list[str] = [
+            self.drawing.names[corner]
+            for corner in corners
+            if choice and len(self.drawing.sharing(corner)) > 1
+        ]
+        if shared:
+            self.message = (
+                f"{', '.join(shared)}: a corner of more than one polygon"
+                " can not be filleted."
+            )
+            self.scene().update()
+            return
         now: dict[int, str] = self.fillets()
         target: str = (
             self.drawing.note_radius or NOTE_CHOICE
@@ -3274,6 +3577,7 @@ class OutlineView(QGraphicsView):
             self.drawing.dimensions,
             corner,
             SNAP_PIXELS / max(self.zoom(), 1e-9),
+            self.drawing.loops(),
         )
         moved.setX(here[0])
         moved.setY(here[1])
@@ -3291,7 +3595,11 @@ class OutlineView(QGraphicsView):
         if not 0 <= corner < len(self.drawing.points):
             return
         self.drawing.dimensions[:] = snapped(
-            self.drawing.points, self.drawing.dimensions, corner, 0.0
+            self.drawing.points,
+            self.drawing.dimensions,
+            corner,
+            0.0,
+            self.drawing.loops(),
         )[1]
         points: list[int] = list(self.chosen_points)
         self.make_squares()
@@ -3547,7 +3855,13 @@ class OutlineView(QGraphicsView):
         self.message = problem
         if not problem and self.drawing.names[corner] != name:
             self.history.remember(self.drawing.snapshot())
+            old: str = self.drawing.names[corner]
             self.drawing.names[corner] = name
+            polygon: Polygon
+            for polygon in self.drawing.polygons:
+                polygon.vertices[:] = [
+                    name if each == old else each for each in polygon.vertices
+                ]
         self.scene().update()
         return not problem
 
@@ -3687,7 +4001,9 @@ class OutlineView(QGraphicsView):
         for handle in self.handles + self.mirror_handles:
             handle.setPen(ring)
             handle.setBrush(
-                chosen if handle.index in self.chosen_edges else hollow
+                chosen
+                if (handle.index, handle.end) in self.chosen_edges
+                else hollow
             )
         # A strip's circles have a paper inside, so the hatching does
         # not run through them (#177); they look hollow all the same.
@@ -3816,6 +4132,36 @@ class OutlineView(QGraphicsView):
         for circle in self.circles + self.tips:
             circle.place()
         self.viewport().update()
+
+    # Method `OutlineView.new_polygon()`:
+    def new_polygon(self) -> None:
+        """[New Polygon] (`T.sa~6.11` #772): on the edge between the
+        last two corners chosen, an equilateral triangle outside its
+        polygon, sharing the two; one change."""
+        corners: list[int] = [
+            real_point(code)
+            for code in self.chosen_points
+            if real_point(code) >= 0
+        ]
+        problem: str = ""
+        if self.read_only:
+            problem = self.read_only_message
+        elif len(corners) < 2:
+            problem = "Choose the two corners of an edge for [New Polygon]."
+        if not problem:
+            before: Snapshot = self.drawing.snapshot()
+            if self.drawing.new_triangle(corners[-2], corners[-1]):
+                self.history.remember(before)
+            else:
+                problem = (
+                    "Those two corners are not an edge of one polygon,"
+                    " outside every other: choose the ends of an edge."
+                )
+        self.message = problem
+        if not problem:
+            self.make_squares()
+            self.restyle()
+        self.scene().update()
 
     # Method `OutlineView.toggle_names()`:
     def toggle_names(self) -> None:
@@ -4004,6 +4350,7 @@ class OutlineView(QGraphicsView):
                         hide.axis,
                         side,
                         self.drawing.revolve,
+                        self.drawing.loops(),
                     ),
                     holes,
                 ):
@@ -4249,7 +4596,7 @@ class OutlineView(QGraphicsView):
         axis: int
         color: str
         for axis, color in ((X_AXIS, scheme.x_axis), (Y_AXIS, scheme.y_axis)):
-            chosen: bool = axis in self.chosen_edges
+            chosen: bool = (axis, -1) in self.chosen_edges
             pen.setColor(lit if chosen else QColor(color))
             pen.setWidthF(3.0 if chosen else THIN_PIXELS)
             # Revolved: the Y axis is the center line, dash-dot.
@@ -4333,8 +4680,8 @@ class OutlineEditor(QWidget):
     * `picture` (`QSvgWidget`): The diagram, in [SVG].
     * `splitter` (`QSplitter`): The drawing over the table.
     * `status` (`QLabel`): The last refusal, under the button tabs.
-    * `letters` (`LettersTable`): The letters' table, its tabs and
-      problems (`outline_letters.py`).
+    * `letters` (`ValuesTable`): The letters' table, its tabs and
+      problems (`outline_values.py`).
     * `view` (`OutlineView`): The drawing area.
     """
 
@@ -4385,20 +4732,20 @@ class OutlineEditor(QWidget):
         self.picture: QSvgWidget = QSvgWidget()
         self.views: QWidget = self.drawing_tabs()
         self.splitter.addWidget(self.views)
-        self.letters: LettersTable = LettersTable(
+        self.values: ValuesTable = ValuesTable(
             self.drawing,
             self.view,
             save=self.save,
             show_message=self.show_message,
             arm=self.arm,
         )
-        self.splitter.addWidget(self.letters)
+        self.splitter.addWidget(self.values)
         self.splitter.setSizes([450, 150])
         layout.addWidget(self.splitter)
         self.vertex_name: QLineEdit = QLineEdit()
         self.make_buttons()
         self.hook_view()
-        self.letters.fill_table()
+        self.values.fill_table()
         self.show_tab(ViewTab.EDIT)
         self.resize(800, 600)
 
@@ -4442,7 +4789,7 @@ class OutlineEditor(QWidget):
             "Grid": self.view.toggle_grid,
             "Snap": self.toggle_snap,
             "Fit": self.view.fit,
-            "Delete": self.letters.delete,
+            "Delete": self.values.delete,
             "Dimension": self.view.dimension_selected,
             "Dim. Kind": self.view.cycle_kind,
             "Show Marks": self.view.toggle_marks,
@@ -4454,7 +4801,8 @@ class OutlineEditor(QWidget):
             "Hide": self.view.start_hide,
             "Undo": self.view.undo,
             "Redo": self.view.redo,
-            "New Letter": self.letters.new_letter,
+            "New Letter": self.values.new_letter,
+            "New Polygon": self.view.new_polygon,
         }
         does_it: Callable[[], None]
         for word, does_it in does.items():
@@ -4637,16 +4985,16 @@ class OutlineEditor(QWidget):
     def hook_view(self) -> None:
         """Have the view tell the window what changed."""
         self.view.scene().changed.connect(self.show_message)
-        self.view.letters_changed = self.letters.fill_table
+        self.view.letters_changed = self.values.fill_table
         self.view.released = self.save
         self.view.cleared = self.cleared
-        self.view.lighted = self.letters.frame_row
+        self.view.lighted = self.values.frame_row
 
     # Method `OutlineEditor.cleared()`:
     def cleared(self) -> None:
         """The drawing's selection is cleared: the table's too, and
         any armed letter (#214)."""
-        self.letters.table.clearSelection()
+        self.values.table.clearSelection()
         self.arm(None)
 
     # Method `OutlineEditor.arm()`:
@@ -4672,7 +5020,7 @@ class OutlineEditor(QWidget):
             )
             if corners:
                 self.view.set_fillets(corners, letter)
-        self.letters.light_armed()
+        self.values.light_armed()
         self.show_message()
 
     # Method `OutlineEditor.toggle_snap()`:
@@ -4715,7 +5063,7 @@ class OutlineEditor(QWidget):
         redraw()
         self.tab_bar.setTabVisible(list(ViewTab).index(ViewTab.EDIT), False)
         self.set_read_only(True)
-        self.letters.show_tool(tool)
+        self.values.show_tool(tool)
 
     # Method `OutlineEditor.set_read_only()`:
     def set_read_only(self, read_only: bool) -> None:
@@ -4769,11 +5117,11 @@ class OutlineEditor(QWidget):
         word: str
         for word in CHANGE_WORDS:
             self.button_actions[word].setEnabled(not read_only)
-        self.letters.new_fillet.setEnabled(not read_only)
+        self.values.new_fillet.setEnabled(not read_only)
         if read_only:
-            self.letters.table.setCurrentCell(-1, -1)
+            self.values.table.setCurrentCell(-1, -1)
             self.arm(None)
-        self.letters.show_rows()
+        self.values.show_rows()
         self.show_message()
 
     # Method `OutlineEditor.save()`:
@@ -4796,6 +5144,26 @@ class OutlineEditor(QWidget):
             picture.write_text(
                 svg(outline_sheet(self.drawing)), encoding="utf-8"
             )
+
+    # Method `OutlineEditor.overlap_problem()`:
+    def overlap_problem(self) -> str:
+        """Say which polygons overlap (`T.sa~6.11` #790), or "".
+
+        Returns:
+        * (`str`): The problem, naming the first pair.
+        """
+        drawing: Drawing = self.view.drawing
+        found: list[tuple[int, int]] = overlaps(
+            drawing.points, drawing.loops()
+        )
+        if not found:
+            return ""
+        first: str = drawing.polygons[found[0][0]].name
+        second: str = drawing.polygons[found[0][1]].name
+        return (
+            f"Polygons {first} and {second} overlap: move a corner so"
+            " they only touch."
+        )
 
     # Method `OutlineEditor.show_message()`:
     def show_message(self, *_regions: object) -> None:
@@ -4820,14 +5188,25 @@ class OutlineEditor(QWidget):
             hint = "Click corners to make them sharp"
         elif self.view.armed is not None:
             hint = f"Click corners to fillet them by {self.view.armed}"
-        # Crossing edges (#242) are a problem too, until undone.
-        problem: str = self.view.message or (
-            "Edges cross (drawn red): move a corner to uncross them."
-            if crossings(self.view.drawing.points)
-            else "A hide strip hides a letter (red in the Overview): "
+        # Crossing edges (#242) and overlapping polygons (#790) are
+        # problems too, until undone.
+        covered: str = (
+            "A hide strip hides a letter (red in the Overview): "
             "move the strip or the letter."
             if self.view.covering()
             else ""
+        )
+        problem: str = (
+            self.view.message
+            or (
+                "Edges cross (drawn red): move a corner to uncross them."
+                if crossings(
+                    self.view.drawing.points, self.view.drawing.loops()
+                )
+                else ""
+            )
+            or self.overlap_problem()
+            or covered
         )
         self.status.setText(problem or hint)
         self.status.setStyleSheet(
@@ -4841,34 +5220,43 @@ class OutlineEditor(QWidget):
         the outline from its real sizes (#445, #448), then any edges
         that the default values make cross (#457)."""
         drawing: Drawing = self.view.drawing
-        lines: list[str] = list(self.letters.letter_lines)
+        lines: list[str] = list(self.values.letter_lines)
         placed: str = placement_problem(
             drawing.points, drawing.dimensions, drawing.revolve
         )
         if placed:
             lines.append(placed)
-        crossed: list[tuple[int, int]] = values_cross(
-            drawing.points, drawing.letters, drawing.dimensions
+        crossed: list[tuple[Edge, Edge]] = values_cross(
+            drawing.points,
+            drawing.letters,
+            drawing.dimensions,
+            drawing.loops(),
         )
         if crossed:
-            lines.append(crossing_problem(crossed))
-        self.letters.problems.setText("\n".join(lines))
+            lines.append(crossing_problem(crossed, drawing.names))
+        lines += letter_scope_problems(drawing)
+        self.values.problems.setText("\n".join(lines))
 
 
 # Function `crossing_problem()`:
-def crossing_problem(crossed: list[tuple[int, int]]) -> str:
+def crossing_problem(
+    crossed: list[tuple[Edge, Edge]], names: list[str]
+) -> str:
     """Return the problem shown when the default values make edges
-    cross (#457), each edge named by the corner it starts from.
+    cross (#457), each edge named by its corners, `V1-V2` (#797).
 
     Arguments:
-    * `crossed` (`list[tuple[int, int]]`): Each pair of edges that
+    * `crossed` (`list[tuple[Edge, Edge]]`): Each pair of edges that
       cross.
+    * `names` (`list[str]`): The corners' names.
 
     Returns:
     * (`str`): The problem.
     """
     pairs: str = "; ".join(
-        f"from corners {first} and {second}" for first, second in crossed
+        f"{names[one[0]]}-{names[one[1]]} and"
+        f" {names[other[0]]}-{names[other[1]]}"
+        for one, other in crossed
     )
     return (
         f"The default values make edges cross (the edges {pairs}): "
@@ -4935,4 +5323,5 @@ def drawing_from_text(text: str, source: str = "") -> Drawing:
         outline.turns,
         outline.holes,
         outline.names,
+        outline.polygons,
     )

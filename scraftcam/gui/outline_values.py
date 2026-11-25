@@ -1,7 +1,10 @@
-"""The outline editor's letters' table (`T.gc~6.10` #637).
+"""The outline editor's Values table (`T.gc~6.10` #637; renamed from
+the letters' table, `T.sa~6.11` #802).
 
 [Dimensions] (every letter) and [Fillets] (only those checked
-"Fillet", #213) over one table of the letters, a row each, with the
+"Fillet", #213) over one table of the letters, a row each, and
+[Polygons] (a row per polygon: name, role, material, corners, #801)
+over its own table, with the
 letters' problems right under it, in red (#141).  Each cell is kept
 and checked at every keystroke (#47).  It edits the editor's
 `Drawing`, and tells the editor (`OutlineEditor`) to save and to show
@@ -31,6 +34,7 @@ from PySide6.QtCore import (  # noqa: E402
 from PySide6.QtGui import QColor, QFont  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractItemView,
+    QComboBox,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -53,7 +57,7 @@ from .letters import (  # noqa: E402
     use_problem,
     value_problem,
 )
-from .outline_file import Hole  # noqa: E402
+from .outline_file import VERTEX_NAME, Hole, Polygon, Role  # noqa: E402
 from .values import (  # noqa: E402
     fillet_problems,
     formula_problem,
@@ -69,12 +73,24 @@ if TYPE_CHECKING:
 # radii (#213).
 DIMENSIONS_TAB: int = 0
 FILLETS_TAB: int = 1
+POLYGONS_TAB: int = 2
+
+# The [Polygons] table's columns (`T.sa~6.11` #801): its name, role
+# and material are typed or chosen; its corners are only shown.
+POLYGON_COLUMNS: tuple[str, ...] = ("Name", "Role", "Material", "Corners")
 
 # The table's first row, shown only in [Fillets]: "No fillet", a
 # fixed entry never edited, deleted or saved (#219, #222); the letters
 # follow it, letter `i` in row `i + LETTER_ROW`.
 LETTER_ROW: int = 1
-NO_FILLET: tuple[str, ...] = ("", "No fillet", "0", "", "(No Edit Allowed)")
+NO_FILLET: tuple[str, ...] = (
+    "",
+    "No fillet",
+    "0",
+    "",
+    "(No Edit Allowed)",
+    "",
+)
 
 # The letters' table: its columns, each with its `Letter` field.
 COLUMNS: tuple[tuple[str, str], ...] = (
@@ -85,12 +101,34 @@ COLUMNS: tuple[tuple[str, str], ...] = (
     ("Value", "default"),
     ("Fillet", "fillet"),  # A check box: a fillet radius (#213).
     ("Help", "help"),
+    # Who sees it (`T.sa~6.11` #783b): `outline` (exported), or
+    # `internal`, or a polygon's name; last, so no column moves.
+    ("Scope", "scope"),
 )
+
+# A letter's scope as the table shows it.
+OUTLINE_SCOPE: str = "outline"
+INTERNAL_SCOPE: str = "internal"
 
 # The table in a tool's panel (`T.toasl~6.8` #735): the outline's
 # default beside this tool's value, which alone may be typed in.
 TOOL_COLUMNS: tuple[str, ...] = ("Letter", "Name", "Default", "This tool")
 TOOL_VALUE: int = 3
+
+
+# Function `scope_of()`:
+def scope_of(letter: Letter) -> str:
+    """Return a letter's scope as the table shows it (#783b).
+
+    Arguments:
+    * `letter` (`Letter`): The letter.
+
+    Returns:
+    * (`str`): Its polygon's name, `internal` or `outline`.
+    """
+    if letter.polygon:
+        return letter.polygon
+    return INTERNAL_SCOPE if letter.internal else OUTLINE_SCOPE
 
 
 # Function `_nothing()`:
@@ -136,18 +174,18 @@ class LiveDelegate(QStyledItemDelegate):
     """Edits the letters' cells, keeping each keystroke (#47).
 
     Attributes:
-    * `letters` (`LettersTable`): The table it edits.
+    * `letters` (`ValuesTable`): The table it edits.
     """
 
     # Method `LiveDelegate.__init__()`:
-    def __init__(self, letters: LettersTable) -> None:
+    def __init__(self, letters: ValuesTable) -> None:
         """Make the delegate of a letters' table.
 
         Arguments:
-        * `letters` (`LettersTable`): The table.
+        * `letters` (`ValuesTable`): The table.
         """
         super().__init__(letters.table)
-        self.letters: LettersTable = letters
+        self.letters: ValuesTable = letters
 
     # Method `LiveDelegate.createEditor()`:
     def createEditor(
@@ -193,11 +231,129 @@ class LiveDelegate(QStyledItemDelegate):
         super().setEditorData(editor, index)
 
 
-# Class `LettersTable`:
+# Class `PolygonsTable`:
+class PolygonsTable(QTableWidget):
+    """The Values table's [Polygons] (`T.sa~6.11` #801): a row per
+    polygon, its name and material typed, its role chosen, its
+    corners shown.
+
+    Attributes:
+    * `values` (`ValuesTable`): The Values table it is in, for its
+      drawing, view, saving and messages.
+    """
+
+    # Method `PolygonsTable.__init__()`:
+    def __init__(self, values: ValuesTable) -> None:
+        """Make the empty table.
+
+        Arguments:
+        * `values` (`ValuesTable`): The Values table it is in.
+        """
+        super().__init__(0, len(POLYGON_COLUMNS))
+        self.values: ValuesTable = values
+        self.setHorizontalHeaderLabels(list(POLYGON_COLUMNS))
+        self.horizontalHeader().setStretchLastSection(True)
+        self.verticalHeader().setVisible(False)
+        self.itemChanged.connect(self.edited)
+
+    # Method `PolygonsTable.fill()`:
+    def fill(self) -> None:
+        """Show every polygon, a row each."""
+        drawing: Drawing = self.values.drawing
+        read_only: bool = self.values.read_only
+        self.blockSignals(True)
+        self.setRowCount(len(drawing.polygons))
+        loops: list[list[int]] = drawing.loops()
+        row: int
+        polygon: Polygon
+        for row, polygon in enumerate(drawing.polygons):
+            self.setItem(row, 0, QTableWidgetItem(polygon.name))
+            role: QComboBox = QComboBox()
+            role.addItems([each.value for each in Role])
+            role.setCurrentText(polygon.role.value)
+            role.setEnabled(not read_only)
+            role.currentTextChanged.connect(self.role_chooser(row))
+            self.setCellWidget(row, 1, role)
+            self.setItem(row, 2, QTableWidgetItem(polygon.material))
+            corners: QTableWidgetItem = QTableWidgetItem(
+                " ".join(drawing.names[at] for at in loops[row])
+            )
+            corners.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.setItem(row, 3, corners)
+        triggers: type[QAbstractItemView.EditTrigger] = (
+            QAbstractItemView.EditTrigger
+        )
+        self.setEditTriggers(
+            triggers.NoEditTriggers
+            if read_only
+            else triggers.DoubleClicked
+            | triggers.SelectedClicked
+            | triggers.EditKeyPressed
+        )
+        self.blockSignals(False)
+
+    # Method `PolygonsTable.role_chooser()`:
+    def role_chooser(self, row: int) -> Callable[[str], None]:
+        """Return what a role choice in a row does.
+
+        Arguments:
+        * `row` (`int`): The polygon's row.
+
+        Returns:
+        * (`Callable[[str], None]`): Sets its polygon's role and saves.
+        """
+
+        # Function `chosen()`:
+        def chosen(text: str) -> None:
+            """Set the polygon's role.
+
+            Arguments:
+            * `text` (`str`): The role chosen.
+            """
+            self.values.drawing.polygons[row].role = Role(text)
+            self.values.save()
+
+        return chosen
+
+    # Method `PolygonsTable.edited()`:
+    def edited(self, item: QTableWidgetItem) -> None:
+        """Keep a polygon's typed name or material: a name must be a
+        name and not another polygon's; its letters keep to it.
+
+        Arguments:
+        * `item` (`QTableWidgetItem`): The cell.
+        """
+        drawing: Drawing = self.values.drawing
+        polygon: Polygon = drawing.polygons[item.row()]
+        text: str = item.text().strip()
+        if item.column() == 2:
+            polygon.material = text
+        elif item.column() == 0 and text != polygon.name:
+            names: list[str] = [each.name for each in drawing.polygons]
+            if not VERTEX_NAME.fullmatch(text) or text in names:
+                self.values.view.message = (
+                    f"{text!r} is not a name for a polygon: a letter, then"
+                    " letters, digits or _, not another polygon's."
+                )
+                self.fill()
+                self.values.show_message()
+                return
+            letter: Letter
+            for letter in drawing.letters:
+                if letter.polygon == polygon.name:
+                    letter.polygon = text
+            polygon.name = text
+        self.values.view.message = ""
+        self.values.save()
+        self.values.show_message()
+
+
+# Class `ValuesTable`:
 # The table's widgets and its state, each signal answered by a method.
 # pylint: disable-next=too-many-instance-attributes
-class LettersTable(QWidget):
-    """The letters' table, its tabs, and its problems.
+class ValuesTable(QWidget):
+    """The Values table: the letters' and the polygons' tables, their
+    tabs, and the letters' problems.
 
     Attributes:
     * `drawing` (`Drawing`): The outline whose letters it shows.
@@ -214,6 +370,8 @@ class LettersTable(QWidget):
     * `tabs` (`QTabBar`): [Dimensions] and [Fillets], over the table.
     * `new_fillet` (`QPushButton`): [New Fillet Dimension], shown
       in [Fillets] only (#214).
+    * `polygon_table` (`PolygonsTable`): [Polygons], shown in place
+      of `table` (#801).
     * `problems` (`QLabel`): The problems, a line each, red, right
       under the table (#141).
     * `letter_lines` (`list[str]`): The letters' problems, a line
@@ -225,7 +383,7 @@ class LettersTable(QWidget):
       shown beside the defaults (#735); `None` for an outline.
     """
 
-    # Method `LettersTable.__init__()`:
+    # Method `ValuesTable.__init__()`:
     def __init__(
         self,
         drawing: Drawing,
@@ -258,6 +416,7 @@ class LettersTable(QWidget):
         self.letter_lines: list[str] = []
         self.tabs: QTabBar = QTabBar()
         self.new_fillet: QPushButton = QPushButton("New Fillet Dimension")
+        self.polygon_table: PolygonsTable = PolygonsTable(self)
 
         # The tabs over the table, the problems under it (#141).
         self.table.setHorizontalHeaderLabels([title for title, _ in COLUMNS])
@@ -282,11 +441,14 @@ class LettersTable(QWidget):
         stack.setContentsMargins(0, 0, 0, 0)
         self.tabs.addTab("Dimensions")
         self.tabs.addTab("Fillets")
+        self.tabs.addTab("Polygons")
         self.tabs.currentChanged.connect(self.show_rows)
         self.new_fillet.clicked.connect(self.add_fillet)
         self.new_fillet.setVisible(False)
+        self.polygon_table.setVisible(False)
         stack.addWidget(self.tabs)
         stack.addWidget(self.table)
+        stack.addWidget(self.polygon_table)
         stack.addWidget(self.new_fillet, 0, Qt.AlignmentFlag.AlignLeft)
         stack.addWidget(self.problems)
 
@@ -299,7 +461,7 @@ class LettersTable(QWidget):
         self.table.cellEntered.connect(self.hover_row)
         self.table.viewport().installEventFilter(self)
 
-    # Method `LettersTable.eventFilter()`:
+    # Method `ValuesTable.eventFilter()`:
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """Put the lit letter out when the pointer leaves the table.
 
@@ -317,7 +479,7 @@ class LettersTable(QWidget):
             self.view.light_letter("")
         return False
 
-    # Method `LettersTable.hover_row()`:
+    # Method `ValuesTable.hover_row()`:
     def hover_row(self, row: int, _column: int) -> None:
         """Light the uses of the letter pointed at (#224).
 
@@ -330,7 +492,7 @@ class LettersTable(QWidget):
             else self.drawing.letters[row - LETTER_ROW].letter
         )
 
-    # Method `LettersTable.frame_row()`:
+    # Method `ValuesTable.frame_row()`:
     def frame_row(self, corner: int) -> None:
         """Make the row of the letter rounding a corner pointed at bold
         (#224); every other row plain.
@@ -354,7 +516,7 @@ class LettersTable(QWidget):
                     item.setFont(font)
         self.table.blockSignals(False)
 
-    # Method `LettersTable.row_clicked()`:
+    # Method `ValuesTable.row_clicked()`:
     def row_clicked(self, row: int, _column: int) -> None:
         """A click on a [Fillets] row arms it, or disarms it if armed
         (#214).
@@ -371,7 +533,7 @@ class LettersTable(QWidget):
         )
         self.arm(None if letter == self.view.armed else letter)
 
-    # Method `LettersTable.light_armed()`:
+    # Method `ValuesTable.light_armed()`:
     def light_armed(self) -> None:
         """Select the armed letter's row, and only it."""
         self.table.clearSelection()
@@ -385,7 +547,7 @@ class LettersTable(QWidget):
         ]
         self.table.selectRow(rows[-1] if armed else 0)
 
-    # Method `LettersTable.show_rows()`:
+    # Method `ValuesTable.show_rows()`:
     def show_rows(self) -> None:
         """Show every letter in [Dimensions], only the fillet radii in
         [Fillets], with [New Fillet Dimension] there (#213, #214)."""
@@ -421,7 +583,16 @@ class LettersTable(QWidget):
         if not fillets:
             self.arm(None)
 
-    # Method `LettersTable.add_fillet()`:
+        # [Polygons] shows its own table in place of the letters'.
+        polygons: bool = (
+            self.tool is None and self.tabs.currentIndex() == POLYGONS_TAB
+        )
+        self.table.setVisible(not polygons)
+        self.polygon_table.setVisible(polygons)
+        if polygons:
+            self.polygon_table.fill()
+
+    # Method `ValuesTable.add_fillet()`:
     def add_fillet(self) -> None:
         """[New Fillet Dimension]: a new letter, checked "Fillet",
         ready to be named (#214)."""
@@ -435,7 +606,7 @@ class LettersTable(QWidget):
         self.fill_table()
         self.table.setCurrentCell(len(self.drawing.letters), 1)
 
-    # Method `LettersTable.fill_table()`:
+    # Method `ValuesTable.fill_table()`:
     def fill_table(self) -> None:
         """Show every letter, a row each, its problems marked.
 
@@ -469,7 +640,7 @@ class LettersTable(QWidget):
         self.view.setFocus()
         self.check_letters()
 
-    # Method `LettersTable.show_tool()`:
+    # Method `ValuesTable.show_tool()`:
     def show_tool(self, tool: ToolValues) -> None:
         """Show a tool's own values beside the defaults (#735).
 
@@ -483,7 +654,7 @@ class LettersTable(QWidget):
         self.table.setHorizontalHeaderLabels(list(TOOL_COLUMNS))
         self.fill_table()
 
-    # Method `LettersTable.fill_tool_table()`:
+    # Method `ValuesTable.fill_tool_table()`:
     def fill_tool_table(self, tool: ToolValues) -> None:
         """Show each letter: its name, its default, this tool's value.
 
@@ -520,7 +691,7 @@ class LettersTable(QWidget):
         self.table.blockSignals(False)
         self.show_rows()
 
-    # Method `LettersTable.cell()`:
+    # Method `ValuesTable.cell()`:
     @staticmethod
     def cell(letter: Letter, attribute: str) -> QTableWidgetItem:
         """Return a letter's cell: its text, or for "Fillet" a check
@@ -536,6 +707,8 @@ class LettersTable(QWidget):
         """
         if attribute == "default" and letter.formula:
             return QTableWidgetItem(f"= {letter.formula}")
+        if attribute == "scope":
+            return QTableWidgetItem(scope_of(letter))
         if attribute != "fillet":
             return QTableWidgetItem(getattr(letter, attribute))
         item: QTableWidgetItem = QTableWidgetItem()
@@ -547,7 +720,7 @@ class LettersTable(QWidget):
         )
         return item
 
-    # Method `LettersTable.new_letter()`:
+    # Method `ValuesTable.new_letter()`:
     def new_letter(self) -> None:
         """Add a row for the first free letter, ready to be named; in
         [Fillets], a fillet radius (#214)."""
@@ -558,7 +731,7 @@ class LettersTable(QWidget):
         self.fill_table()
         self.table.setCurrentCell(len(self.drawing.letters), 1)
 
-    # Method `LettersTable.letter_edited()`:
+    # Method `ValuesTable.letter_edited()`:
     def letter_edited(self, item: QTableWidgetItem) -> None:
         """Keep a finished cell's text in its letter, then check them.
 
@@ -592,7 +765,35 @@ class LettersTable(QWidget):
         else:
             self.keep(item.row(), item.column(), item.text())
 
-    # Method `LettersTable.tool_edited()`:
+    # Method `ValuesTable.keep_scope()`:
+    def keep_scope(self, letter: Letter, scope: str) -> None:
+        """Set who sees a letter (#783b): `outline` (or nothing),
+        `internal`, or a polygon's name; anything else is refused,
+        saying why, and the cell shows the scope kept.
+
+        Arguments:
+        * `letter` (`Letter`): The letter.
+        * `scope` (`str`): The scope typed.
+        """
+        polygons: list[str] = [
+            polygon.name for polygon in self.drawing.polygons
+        ]
+        if scope in ("", OUTLINE_SCOPE, INTERNAL_SCOPE):
+            letter.polygon = ""
+            letter.internal = scope == INTERNAL_SCOPE
+        elif scope in polygons:
+            letter.polygon = scope
+            letter.internal = True
+        else:
+            self.view.message = (
+                f"{scope!r} is not {OUTLINE_SCOPE}, {INTERNAL_SCOPE} or a"
+                f" polygon ({', '.join(polygons)})."
+            )
+        self.fill_table()
+        self.show_message()
+        self.save()
+
+    # Method `ValuesTable.tool_edited()`:
     def tool_edited(self, tool: ToolValues, item: QTableWidgetItem) -> None:
         """Write a tool's finished value into its file (#736), then
         draw and show it, or say why not.
@@ -612,7 +813,7 @@ class LettersTable(QWidget):
         self.fill_table()
         self.problems.setText(problem)
 
-    # Method `LettersTable.delete()`:
+    # Method `ValuesTable.delete()`:
     def delete(self) -> None:
         """[Delete]: the selected corners and dimensions; with none,
         the letter armed in [Fillets] or the table's current row,
@@ -648,7 +849,7 @@ class LettersTable(QWidget):
         self.fill_table()
         self.save()
 
-    # Method `LettersTable._uses()`:
+    # Method `ValuesTable._uses()`:
     def _uses(self, letter: str, fillets: bool = False) -> str:
         """Return what uses a letter, in words ("" for nothing).
 
@@ -680,7 +881,7 @@ class LettersTable(QWidget):
         ]
         return " and ".join(words)
 
-    # Method `LettersTable.keep()`:
+    # Method `ValuesTable.keep()`:
     def keep(self, row: int, column: int, text: str) -> None:
         """Keep a cell's text in its letter, then check the letters.
 
@@ -702,6 +903,9 @@ class LettersTable(QWidget):
         attribute: str = COLUMNS[column][1]
         letter: Letter = self.drawing.letters[row - LETTER_ROW]
         kept: str = text.strip()
+        if attribute == "scope":
+            self.keep_scope(letter, kept)
+            return
         if attribute == "letter":
             self.rename(row, kept)
             refresh_formulas(self.drawing.letters)
@@ -717,7 +921,7 @@ class LettersTable(QWidget):
         self.check_letters()
         self.save()
 
-    # Method `LettersTable.rename()`:
+    # Method `ValuesTable.rename()`:
     def rename(self, row: int, name: str) -> None:
         """Rename a letter, and everything that uses it with it (#441):
         its dimensions, holes, the fillets' note letter and the
@@ -760,7 +964,7 @@ class LettersTable(QWidget):
             if other.formula:
                 other.formula = pattern.sub(name, other.formula)
 
-    # Method `LettersTable.check_letters()`:
+    # Method `ValuesTable.check_letters()`:
     def check_letters(self) -> None:
         """Mark each bad letter or default, and show the first problem."""
         self.table.blockSignals(True)
@@ -814,7 +1018,7 @@ class LettersTable(QWidget):
         self.letter_lines = problems
         self.show_message()
 
-    # Method `LettersTable.fillet_trouble()`:
+    # Method `ValuesTable.fillet_trouble()`:
     def fillet_trouble(self) -> dict[str, str]:
         """Find the fillets too big for their edges (#127), mark them
         in the drawing, and return each one's problem by letter.
@@ -823,7 +1027,10 @@ class LettersTable(QWidget):
         * (`dict[str, str]`): The first problem of each fillet letter.
         """
         self.view.trouble = fillet_problems(
-            self.drawing.points, self.drawing.letters, self.drawing.dimensions
+            self.drawing.points,
+            self.drawing.letters,
+            self.drawing.dimensions,
+            self.drawing.loops(),
         )
         self.view.follow()  # The drawing follows the values (#148).
         letters: dict[int, str] = {

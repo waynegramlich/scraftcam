@@ -1,5 +1,5 @@
 kind = "outline"
-version = 5
+version = 6
 revolve = true
 turns = 1
 
@@ -61,6 +61,11 @@ at = [1.0, 7.5]
 name = "V7"
 at = [0.0, 7.5]
 
+[[polygons]]
+name = "outline"
+role = "other"
+vertices = ["V1", "V2", "V3", "V4", "V5", "V6", "V7"]
+
 [[dimensions]]
 letter = "OAL"
 kind = "vertical"
@@ -72,8 +77,8 @@ along = 0.8285714285714286
 [[dimensions]]
 letter = "HPA"
 kind = "angle"
-from = "V1"
-to = "V7"
+from = "V1-V2"
+to = "V7-V1"
 offset = 2.23606797749979
 along = 0.5
 rays = [1, -1]

@@ -1,5 +1,6 @@
 """Tests of `scraftcam.gui.outline_file`: outlines as TOML."""
 
+import re
 import unittest
 
 from scraftcam.gui.dimensions import (
@@ -18,6 +19,9 @@ from scraftcam.gui.outline_file import (
     Hole,
     Outline,
     OutlineError,
+    Polygon,
+    Role,
+    letter_scope_problems,
     outline_from_text,
     outline_text,
 )
@@ -56,7 +60,7 @@ class OutlineFileTest(unittest.TestCase):
         """What is written reads back the same, and writes the same."""
         text: str = outline_text(HALF_DRILL)
         self.assertTrue(
-            text.startswith('kind = "outline"\nversion = 5\nrevolve = true')
+            text.startswith('kind = "outline"\nversion = 6\nrevolve = true')
         )
         self.assertIn('to = "y_axis"', text)
         self.assertIn('from = "origin"', text)
@@ -85,14 +89,14 @@ class OutlineFileTest(unittest.TestCase):
         self.assertEqual(outline_text(back), text)
 
     def test_old_version(self) -> None:
-        """Only version 5 is read; older files were converted once
+        """Only version 6 is read; older files were converted once
         (#773), and one without a version is refused too."""
         text: str = outline_text(HALF_DRILL)
         self.assertEqual(outline_from_text(text), HALF_DRILL)
         old: str
-        for old in ("version = 4", "version = 7", ""):
+        for old in ("version = 5", "version = 7", ""):
             with self.assertRaises(OutlineError) as caught:
-                outline_from_text(text.replace("version = 5", old))
+                outline_from_text(text.replace("version = 6", old))
             self.assertIn("version", str(caught.exception))
 
     def test_names(self) -> None:
@@ -104,7 +108,7 @@ class OutlineFileTest(unittest.TestCase):
         self.assertIn('name = "V1"', text)
         self.assertNotIn("[[points]]", text)
         self.assertIn('below = "V2"', text)
-        renamed: Outline = outline_from_text(text.replace('"V2"', '"Tip"'))
+        renamed: Outline = outline_from_text(re.sub(r"\bV2\b", "Tip", text))
         self.assertEqual(renamed.names[1], "Tip")
         self.assertEqual(renamed.hides, HALF_DRILL.hides)
         bad: str
@@ -117,6 +121,78 @@ class OutlineFileTest(unittest.TestCase):
         )
         filled: Outline = Outline([(0.0, 0.0)] * 3, names=["Tip"])
         self.assertEqual(filled.names, ["Tip", "V1", "V2"])
+
+    def test_polygons(self) -> None:
+        """Polygons are written and read with their names, roles,
+        materials and vertices (#765); a new outline has one through
+        every corner; a bad one is refused, naming why."""
+        self.assertEqual(
+            HALF_DRILL.polygons,
+            [Polygon("outline", Role.OTHER, ["V1", "V2", "V3", "V4"])],
+        )
+        split: Outline = outline_from_text(outline_text(HALF_DRILL))
+        split.polygons = [
+            Polygon("flutes", Role.CUTTING, ["V1", "V2", "V3"], "hss"),
+            Polygon("shank", Role.SUPPORT, ["V3", "V2", "V1"]),
+        ]
+        text: str = outline_text(split)
+        self.assertIn('material = "hss"', text)
+        self.assertEqual(outline_from_text(text), split)
+        problem: str
+        broken: str
+        for broken, problem in (
+            (text.replace('role = "support"', 'role = "holder"'), "role ="),
+            (text.replace('name = "shank"', 'name = "flutes"'), "used twice"),
+            (
+                text.replace('["V3", "V2", "V1"]', '["V3", "V9", "V1"]'),
+                "needs vertices",
+            ),
+            (text.replace("[[polygons]]", "[[polygon]]"), "at least one"),
+        ):
+            with self.assertRaises(OutlineError) as caught:
+                outline_from_text(broken)
+            self.assertIn(problem, str(caught.exception))
+
+    def test_letter_scopes(self) -> None:
+        """A polygon's letter is written with its polygon and read back
+        internal; an outline's own may be internal; a polygon letter
+        measuring another polygon's corners, a formula using another
+        polygon's letter, and an internal tool field are refused
+        (#783b)."""
+        split: Outline = outline_from_text(outline_text(HALF_DRILL))
+        split.polygons = [
+            Polygon("flutes", Role.CUTTING, ["V1", "V2", "V3"]),
+            Polygon("shank", Role.SUPPORT, ["V3", "V4", "V1"]),
+        ]
+        split.letters += [
+            Letter("F", "Flute", "1 in", "", polygon="flutes"),
+            Letter("G", "Gap", "1 in", "", internal=True),
+        ]
+        split.dimensions.append(Dimension("F", LENGTH, 0, 1))
+        text: str = outline_text(split)
+        self.assertIn('polygon = "flutes"', text)
+        self.assertIn("internal = true", text)
+        back: Outline = outline_from_text(text)
+        self.assertTrue(back.letters[-2].internal)
+        self.assertEqual(back.letters[-2].polygon, "flutes")
+        self.assertEqual(letter_scope_problems(back), [])
+        problem: str
+        broken: Outline
+        for problem in ("measures corners", "formula uses F", "never"):
+            broken = outline_from_text(text)
+            if problem == "measures corners":
+                broken.dimensions[-1].end = 3
+            elif problem == "never":
+                broken.letters[0].internal = True
+                broken.letters[0].key = "diameter"
+            else:
+                broken.letters[-1].formula = "F * 2"
+            self.assertIn(problem, " ".join(letter_scope_problems(broken)))
+        with self.assertRaises(OutlineError) as caught:
+            outline_from_text(
+                text.replace('polygon = "flutes"', 'polygon = "x"')
+            )
+        self.assertIn("'x' is not one", str(caught.exception))
 
     def test_text_sizes(self) -> None:
         """A text height and font steps are written only when set,
@@ -221,7 +297,7 @@ class OutlineFileTest(unittest.TestCase):
             outline_from_text('kind = "tool"', "x")
         with self.assertRaises(OutlineError):
             outline_from_text(
-                'kind = "outline"\nversion = 5\n[[vertices]]\nat = [1]', "x"
+                'kind = "outline"\nversion = 6\n[[vertices]]\nat = [1]', "x"
             )
         lengthy: Outline = Outline(
             [(0.0, 0.0)], [], [Dimension("L", LENGTH, 0, 0)]
@@ -240,7 +316,7 @@ class OutlineFileTest(unittest.TestCase):
         (#93, #95)."""
         bad: str = (
             'kind = "outline"\n'
-            "version = 5\n"
+            "version = 6\n"
             "revolve = true\n"
             '[letters.A]\nname = "a"\ndefault = "1 in"\nhelp = ""\n'
             '[letters.B]\nname = "b"\n'

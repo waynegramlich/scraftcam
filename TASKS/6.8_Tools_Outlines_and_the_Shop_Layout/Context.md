@@ -111,7 +111,7 @@ SHOP_DIR/
   click opens the editor read only as a tool's [Outline] does; the
   panel title's tooltip is the path from the shop's top (#730-#733).
 * #S6 a tool's [Outline] tab has one table, Letter, Name, Default,
-  This tool (`LettersTable.show_tool()`); a value edit writes only
+  This tool (`ValuesTable.show_tool()`, was `LettersTable`); a value edit writes only
   the tool's file (#735, #736).  Tools are drawn in true
   proportions at the outline's scale, shrunk into its box only when
   bigger (`outline_editor.tool_drawing()`, `tool_svg()`); each

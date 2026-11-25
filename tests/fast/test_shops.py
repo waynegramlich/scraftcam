@@ -936,6 +936,20 @@ class TestOutlineLetters(CopiedShop):
         self.assertTrue(any("never given" in each for each in self.problems()))
         self.change(self.DRILL, 'HPA = "59 deg"\n', "")
 
+        # An internal letter is the outline's own too: not asked of a
+        # drill, and never given (`T.sa~6.11` #783b2).
+        self.change(
+            self.OUTLINE,
+            "[letters.OAL]",
+            '[letters.G]\nname = "Gap"\ndefault = "1 in"\nhelp = ""\n'
+            "internal = true\n\n[letters.OAL]",
+        )
+        self.change(self.DRILL, 'D = "15/64 in"', 'D = "15/64 in"\nG = "1 in"')
+        given: list[str] = self.problems()
+        self.assertTrue(any("never given" in each for each in given))
+        self.assertFalse(any("is missing" in each for each in given))
+        self.change(self.DRILL, 'G = "1 in"\n', "")
+
         # The shop's own new letter: every drill must give it, as a
         # length (#721, #723).
         self.change(

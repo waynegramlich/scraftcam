@@ -47,6 +47,8 @@ from .dimensions import (
     X_AXIS,
     Y_AXIS,
     Dimension,
+    Edge,
+    angle_edges,
     is_mark,
     mark_edge,
 )
@@ -110,7 +112,11 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
     if text_height <= 0.0:
         text_height = outline.text_height
     if text_height <= 0.0:
-        text_height = starting_height((strokes[0],))
+        text_height = starting_height(
+            tuple(
+                stroke for stroke in strokes if stroke.weight == Weight.THICK
+            )
+        )
 
     # The holes, each with its center mark (#290).
     scale: float = _scale(outline)
@@ -372,20 +378,25 @@ def outline_strokes(
     outline: Outline, fillets: dict[int, Fillet]
 ) -> list[Stroke]:
     """Return the outline's own strokes, shared by the SVG and the
-    editor (#S4): first one thick closed stroke, corners rounded;
-    then, when revolved, the mirror half, thin and dashed, each
-    segment not on the axis reflected across it (#294).
+    editor (#S4): first a thick closed stroke per polygon (#765),
+    corners rounded; then, when revolved, the mirror half, thin and
+    dashed, each segment not on the axis reflected across it (#294).
 
     Arguments:
     * `outline` (`Outline`): The outline.
     * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
 
     Returns:
-    * (`list[Stroke]`): The outline, then the mirror half's strokes.
+    * (`list[Stroke]`): The polygons, then the mirror half's strokes.
     """
-    # The outline, then its mirror image.
-    segments: tuple[XYSegment, ...] = _rounded(outline.points, fillets)
-    strokes: list[Stroke] = [Stroke(segments, Weight.THICK)]
+    # The polygons, then their mirror image.
+    strokes: list[Stroke] = [
+        Stroke(_rounded(outline.points, loop, fillets), Weight.THICK)
+        for loop in outline.loops()
+    ]
+    segments: tuple[XYSegment, ...] = tuple(
+        segment for stroke in strokes for segment in stroke.segments
+    )
     if outline.revolve:
         strokes.extend(
             Stroke(
@@ -525,9 +536,12 @@ def fillet_arcs(
 
         # The radius, then where it meets the edges either side.
         corner: int = dimension.start
+        before: int
+        after: int
+        before, after = outline.neighbours(corner)
         here: Point = points[corner]
-        back: Point = points[corner - 1]
-        ahead: Point = points[(corner + 1) % len(points)]
+        back: Point = points[before]
+        ahead: Point = points[after]
         value: float = values.get(dimension.letter, 0.0)
         radius: float = (
             value * scale
@@ -591,24 +605,26 @@ def _tangent_arc(
 
 # Function `_rounded()`:
 def _rounded(
-    points: list[Point], fillets: dict[int, Fillet]
+    points: list[Point], loop: list[int], fillets: dict[int, Fillet]
 ) -> tuple[XYSegment, ...]:
-    """Return the outline's segments: edges between fillets, and arcs.
+    """Return a polygon's segments: edges between fillets, and arcs.
 
     Arguments:
-    * `points` (`list[Point]`): The corners.
+    * `points` (`list[Point]`): Every corner.
+    * `loop` (`list[int]`): The polygon's corners, in order (#765).
     * `fillets` (`dict[int, Fillet]`): The rounded corners.
 
     Returns:
-    * (`tuple[XYSegment, ...]`): The closed outline, from corner 0.
+    * (`tuple[XYSegment, ...]`): The closed polygon, from its first
+      corner.
     """
     # Each edge runs from its corner's arc's end to the next one's
     # start (or the sharp corners themselves).
-    count: int = len(points)
     found: list[XYSegment] = []
+    spot: int
     corner: int
-    for corner in range(count):
-        following: int = (corner + 1) % count
+    for spot, corner in enumerate(loop):
+        following: int = loop[(spot + 1) % len(loop)]
         begin: Point = (
             fillets[corner].arc.end if corner in fillets else points[corner]
         )
@@ -689,7 +705,7 @@ def _scale(outline: Outline) -> float:
     """
     # The ratios of the coordinates the values fix.
     real: tuple[dict[int, float], dict[int, float]] | None = real_coordinates(
-        outline.points, outline.letters, outline.dimensions
+        outline.points, outline.letters, outline.dimensions, outline.loops()
     )
     return 0.0 if real is None else first_scale(outline.points, real)
 
@@ -873,9 +889,7 @@ def _angle(
     # The arc about where the edges' lines cross; parallel lines draw
     # nothing.
     points: list[Point] = outline.points
-    arc: tuple[Point, float, float] | None = edge_arc(
-        points, dimension.start, dimension.end, dimension.rays
-    )
+    arc: tuple[Point, float, float] | None = dimension_arc(points, dimension)
     if arc is None:
         return []
     vertex: Point = arc[0]
@@ -960,12 +974,36 @@ def _along(start: Point, way: Point, distance: float) -> Point:
     return (start[0] + way[0] * distance, start[1] + way[1] * distance)
 
 
+# Function `dimension_arc()`:
+def dimension_arc(
+    points: list[Point], dimension: Dimension
+) -> tuple[Point, float, float] | None:
+    """Return an angle dimension's arc (see `edge_arc()`), its edges
+    reaching the corners it names (#797).
+
+    Arguments:
+    * `points` (`list[Point]`): The corners.
+    * `dimension` (`Dimension`): The angle.
+
+    Returns:
+    * (`tuple[Point, float, float] | None`): As `edge_arc()`.
+    """
+    return edge_arc(
+        points,
+        dimension.start,
+        dimension.end,
+        dimension.rays,
+        (dimension.start_to, dimension.end_to),
+    )
+
+
 # Function `edge_arc()`:
 def edge_arc(
     points: list[Point],
     first: int,
     second: int,
     rays: tuple[int, int],
+    reach: tuple[int, int] = (-1, -1),
 ) -> tuple[Point, float, float] | None:
     """Return an angle's arc, for the SVG and the editor alike (#295):
     where two edges' lines cross, and the turn counterclockwise from
@@ -977,6 +1015,8 @@ def edge_arc(
     * `second` (`int`): The corner the second edge leaves, or an axis.
     * `rays` (`tuple[int, int]`): Each ray along (`1`) or against
       (`-1`) its edge's direction.
+    * `reach` (`tuple[int, int]`): The corner each edge reaches
+      (`T.sa~6.11` #797); -1 for the corner after the one it leaves.
 
     Returns:
     * (`tuple[Point, float, float] | None`): The crossing, the first
@@ -984,8 +1024,8 @@ def edge_arc(
       360, counterclockwise); `None` for parallel edges.
     """
     # Each edge's start and direction (an axis from the origin).
-    way_a: Point = _edge_way(points, first)
-    way_b: Point = _edge_way(points, second)
+    way_a: Point = _edge_way(points, first, reach[0])
+    way_b: Point = _edge_way(points, second, reach[1])
     a0: Point = _edge_start(points, first)
     b0: Point = _edge_start(points, second)
 
@@ -1026,16 +1066,17 @@ def _edge_start(points: list[Point], edge: int) -> Point:
 
 
 # Function `_edge_way()`:
-def _edge_way(points: list[Point], edge: int) -> Point:
+def _edge_way(points: list[Point], edge: int, to: int = -1) -> Point:
     """Return an edge's direction from the corner it leaves (+X or +Y
     for an axis).
 
     Arguments:
     * `points` (`list[Point]`): The corners.
     * `edge` (`int`): The corner the edge leaves, or an axis.
+    * `to` (`int`): The corner it reaches (#797); -1 for the next.
 
     Returns:
-    * (`Point`): The next corner less this one.
+    * (`Point`): The corner it reaches less this one.
     """
     # The axes run from the origin.
     if edge == X_AXIS:
@@ -1043,7 +1084,7 @@ def _edge_way(points: list[Point], edge: int) -> Point:
     if edge == Y_AXIS:
         return (0.0, 1.0)
     here: Point = points[edge]
-    there: Point = points[(edge + 1) % len(points)]
+    there: Point = points[to if to >= 0 else (edge + 1) % len(points)]
     return (there[0] - here[0], there[1] - here[1])
 
 
@@ -1066,16 +1107,16 @@ def _mark(
     points: list[Point] = outline.points
     count: int = len(points)
     if dimension.kind == ANGLE:
-        corner: int = (
-            dimension.end
-            if (dimension.start + 1) % count == dimension.end
-            else dimension.start
-        )
+        # Its edges by their corners (#797): the one they share, and
+        # each one's far end.
+        edges: tuple[Edge, Edge] = angle_edges(dimension, count)
+        shared: set[int] = set(edges[0]) & set(edges[1])
+        corner: int = shared.pop() if shared else edges[0][0]
+        ends: list[int] = [
+            edge[1] if edge[0] == corner else edge[0] for edge in edges
+        ]
         return right_angle(
-            points[corner],
-            points[(corner - 1) % count],
-            points[(corner + 1) % count],
-            height,
+            points[corner], points[ends[0]], points[ends[1]], height
         )
 
     # Across an edge: out from its middle; else out from its corner;
@@ -1111,11 +1152,11 @@ def _mark_box(
     count: int = len(points)
     level: bool = dimension.kind == VERTICAL
     inside: Point = _middle(points)
-    edge: int = mark_edge(dimension, count)
-    if edge >= 0:
+    edge: Edge | None = mark_edge(dimension, count, outline.loops())
+    if edge is not None:
         return edge_mark(
-            points[edge],
-            points[(edge + 1) % count],
+            points[edge[0]],
+            points[edge[1]],
             inside,
             level=level,
             height=height,

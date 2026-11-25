@@ -11,7 +11,7 @@ from scraftcam.exposed import steps
 from scraftcam.gui import outline_exposed, tutorial
 from scraftcam.gui.outline_editor import Drawing, OutlineEditor, ViewTab
 from scraftcam.gui.outline_file import outline_text
-from scraftcam.gui.outline_letters import ToolValues
+from scraftcam.gui.outline_values import ToolValues
 from scraftcam.gui.tree import FILE, Node
 from scraftcam.gui.tree import OUTLINE as OUTLINE_KIND
 from scraftcam.gui.views import Panel, item_text, outline_of
@@ -84,7 +84,7 @@ class OutlineTabTest(unittest.TestCase):
 
         self.panel.set_editing(True)
         self.assertTrue(editor.read_only)
-        tool: ToolValues | None = editor.letters.tool
+        tool: ToolValues | None = editor.values.tool
         assert tool is not None
         self.assertTrue(tool.editing)
         outline_exposed.drag(handle, "Vertex V2", to="(1, 1)")
@@ -148,7 +148,7 @@ class OutlineTabTest(unittest.TestCase):
         self.panel.show_node(Node(TOOL, FILE, self.tool, ""), "in")
         first: OutlineEditor | None = self.panel.outline
         assert first is not None
-        self.assertIsNotNone(first.letters.tool)
+        self.assertIsNotNone(first.values.tool)
 
         # The outline itself: no tool's values, and it may be changed.
         self.panel.show_node(Node("end_mill", OUTLINE_KIND, outline, ""), "in")
@@ -156,7 +156,7 @@ class OutlineTabTest(unittest.TestCase):
         assert shape is not None
         shape.show_tab(ViewTab.EDIT)
         self.assertIsNot(shape, first)
-        self.assertIsNone(shape.letters.tool)
+        self.assertIsNone(shape.values.tool)
         self.assertFalse(shape.read_only)
 
         # Another tool shows its own values.
@@ -164,7 +164,7 @@ class OutlineTabTest(unittest.TestCase):
         self.panel.show_node(Node(OTHER_TOOL, FILE, other, ""), "in")
         second: OutlineEditor | None = self.panel.outline
         assert second is not None
-        tool: ToolValues | None = second.letters.tool
+        tool: ToolValues | None = second.values.tool
         assert tool is not None
         self.assertEqual(tool.values["D"], "1/2 in")
 
@@ -176,7 +176,7 @@ class OutlineTabTest(unittest.TestCase):
         self.panel.show_node(Node(TOOL, FILE, self.tool, ""), "in")
         editor: OutlineEditor | None = self.panel.outline
         assert editor is not None
-        table: QTableWidget = editor.letters.table
+        table: QTableWidget = editor.values.table
 
         # Function `cell()`:
         def cell(row: int, column: int) -> QTableWidgetItem:
@@ -217,7 +217,7 @@ class OutlineTabTest(unittest.TestCase):
         self.assertIn('D = "3/8 in"', self.tool.read_text(encoding="utf-8"))
         self.assertEqual(outline.read_text(encoding="utf-8"), kept)
         cell(d_row, 3).setText("90 deg")
-        self.assertTrue(editor.letters.problems.text())
+        self.assertTrue(editor.values.problems.text())
         self.assertIn('D = "3/8 in"', self.tool.read_text(encoding="utf-8"))
 
     def test_hold_editor(self) -> None:

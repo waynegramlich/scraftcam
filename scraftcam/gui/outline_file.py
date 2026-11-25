@@ -55,6 +55,7 @@ import json
 import re
 import tomllib
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from .dimensions import (
     ANGLE,
@@ -70,7 +71,7 @@ from .dimensions import (
 )
 from .hides import Hide
 from .letters import Letter
-from .values import refresh_formulas
+from .values import formula_names, refresh_formulas
 
 # The words a file uses for the points that are not corners.
 ENDS: dict[int, str] = {
@@ -85,9 +86,9 @@ AXES: tuple[str, ...] = ("x", "y")
 
 # The file format's version: 2 since marks (#233), 3 since text sizes
 # (`T.sfoe~6.4` #280), 4 since holes (#290), 5 since named vertices
-# (`T.sa~6.11` #787).  Only version 5 is read: the shipped outlines
-# were converted once (#773).
-VERSION: int = 5
+# (`T.sa~6.11` #787), 6 since several polygons (#765).  Only the
+# latest is read: the shipped outlines are converted once (#773).
+VERSION: int = 6
 
 # A vertex's name (#787): a letter, then letters, digits or `_`.
 VERTEX_NAME: re.Pattern[str] = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
@@ -149,6 +150,52 @@ class Hole:
     depth: str = field(init=True, default="")
 
 
+# Class `Role`:
+class Role(StrEnum):
+    """What a polygon is for (`T.sa~6.11` #767a).
+
+    Attributes:
+    * `CUTTING`: It cuts (a tool's flutes).
+    * `SUPPORT`: It holds (a shank, a body).
+    * `KEEP_OUT`: Where no cutter may go (#783g).
+    * `OTHER`: Anything else.
+    """
+
+    CUTTING = "cutting"
+    SUPPORT = "support"
+    KEEP_OUT = "keep_out"
+    OTHER = "other"
+
+
+# Class `Polygon`:
+@dataclass(slots=True)
+class Polygon:
+    """One named polygon of an outline (`T.sa~6.11` #765), drawn
+    through vertices of the outline's one pool, which polygons may
+    share (#787).
+
+    Attributes:
+    * `name` (`str`): Its name, unique in its outline (#767).
+    * `role` (`Role`): What it is for (#767a).
+    * `vertices` (`list[str]`): Its corners' names, in order.
+    * `material` (`str`): Its material's short name ("" for none,
+      #768).
+
+    Constructor:
+    * `Polygon(name, role, vertices, material)`
+    """
+
+    # Constructor arguments:
+    name: str = field(init=True)
+    role: Role = field(init=True)
+    vertices: list[str] = field(init=True, default_factory=list)
+    material: str = field(init=True, default="")
+
+
+# The name of the polygon a drawing starts with.
+FIRST_POLYGON: str = "outline"
+
+
 # Class `Outline`:
 # One attribute per field of the file, which has nine.
 @dataclass(slots=True)
@@ -171,10 +218,12 @@ class Outline:  # pylint: disable=too-many-instance-attributes
       is shown turned, 0 to 3, letters upright (#300).
     * `names` (`list[str]`): Each corner's name, beside `points`
       (#787); missing ones are given `V1`, `V2`, ... unused.
+    * `polygons` (`list[Polygon]`): The polygons (#765); with none
+      given, one through every corner in order.
 
     Constructor:
     * `Outline(points, letters, dimensions, revolve, note_radius,
-      hides, text_height, turns, holes, names)`
+      hides, text_height, turns, holes, names, polygons)`
     """
 
     # Constructor arguments:
@@ -188,11 +237,23 @@ class Outline:  # pylint: disable=too-many-instance-attributes
     turns: int = field(init=True, default=0)
     holes: list[Hole] = field(init=True, default_factory=list)
     names: list[str] = field(init=True, default_factory=list)
+    polygons: list[Polygon] = field(init=True, default_factory=list)
 
     # Method `Outline.__post_init__()`:
     def __post_init__(self) -> None:
-        """Name the corners that have no name yet."""
+        """Name the corners that have no name yet; with no polygons,
+        make one through every corner."""
         self.fill_names()
+        self.fill_polygons()
+
+    # Method `Outline.fill_polygons()`:
+    def fill_polygons(self) -> None:
+        """With corners but no polygons, make one through them all,
+        in order (#765)."""
+        if self.points and not self.polygons:
+            self.polygons.append(
+                Polygon(FIRST_POLYGON, Role.OTHER, list(self.names))
+            )
 
     # Method `Outline.fill_names()`:
     def fill_names(self) -> None:
@@ -203,6 +264,108 @@ class Outline:  # pylint: disable=too-many-instance-attributes
         del self.names[len(self.points) :]
         while len(self.names) < len(self.points):
             self.names.append(self.new_name())
+
+    # Method `Outline.reset_corners()`:
+    def reset_corners(self, points: list[tuple[float, float]]) -> None:
+        """Start over with new corners: fresh names and one polygon
+        through them all, in order (#765).
+
+        Arguments:
+        * `points` (`list[tuple[float, float]]`): The corners.
+        """
+        self.points[:] = points
+        self.names.clear()
+        self.polygons.clear()
+        self.fill_names()
+        self.fill_polygons()
+
+    # Method `Outline.loops()`:
+    def loops(self) -> list[list[int]]:
+        """Return each polygon's corners, as indices into `points`, in
+        its own order (#765, #799).
+
+        Returns:
+        * (`list[list[int]]`): A list of corners per polygon.
+        """
+        self.fill_polygons()
+        where: dict[str, int] = {
+            name: index for index, name in enumerate(self.names)
+        }
+        return [
+            [where[name] for name in polygon.vertices if name in where]
+            for polygon in self.polygons
+        ]
+
+    # Method `Outline.sharing()`:
+    def sharing(self, corner: int) -> list[str]:
+        """Return the names of the polygons through a corner (#777,
+        #798).
+
+        Arguments:
+        * `corner` (`int`): The corner's index.
+
+        Returns:
+        * (`list[str]`): The polygons' names, in order.
+        """
+        name: str = self.names[corner]
+        return [
+            polygon.name
+            for polygon in self.polygons
+            if name in polygon.vertices
+        ]
+
+    # Method `Outline.edges()`:
+    def edges(self) -> list[tuple[int, int]]:
+        """Return every polygon's edges, a shared one once (#797).
+
+        Returns:
+        * (`list[tuple[int, int]]`): Each edge's corners, as walked.
+        """
+        edges: list[tuple[int, int]] = []
+        seen: set[frozenset[int]] = set()
+        loop: list[int]
+        for loop in self.loops():
+            spot: int
+            corner: int
+            for spot, corner in enumerate(loop):
+                edge: tuple[int, int] = (corner, loop[(spot + 1) % len(loop)])
+                if frozenset(edge) not in seen:
+                    seen.add(frozenset(edge))
+                    edges.append(edge)
+        return edges
+
+    # Method `Outline.new_polygon_name()`:
+    def new_polygon_name(self) -> str:
+        """Return a name for a new polygon: `P2`, `P3`, ... unused.
+
+        Returns:
+        * (`str`): The name.
+        """
+        used: set[str] = {polygon.name for polygon in self.polygons}
+        number: int = 2
+        while f"P{number}" in used:
+            number += 1
+        return f"P{number}"
+
+    # Method `Outline.neighbours()`:
+    def neighbours(self, corner: int) -> tuple[int, int]:
+        """Return the corners before and after one, in the first
+        polygon through it (a fillet's corner is in only one, #798).
+
+        Arguments:
+        * `corner` (`int`): The corner's index.
+
+        Returns:
+        * (`tuple[int, int]`): The corners before and after it; the
+          neighbours in `points` when no polygon has it.
+        """
+        loop: list[int]
+        for loop in self.loops():
+            if corner in loop:
+                spot: int = loop.index(corner)
+                return loop[spot - 1], loop[(spot + 1) % len(loop)]
+        count: int = len(self.points)
+        return (corner - 1) % count, (corner + 1) % count
 
     # Method `Outline.new_name()`:
     def new_name(self) -> str:
@@ -235,6 +398,92 @@ class Outline:  # pylint: disable=too-many-instance-attributes
         return ENDS[index] if index in ENDS else self.names[index]
 
 
+# Function `letter_scope_problems()`:
+def letter_scope_problems(outline: Outline) -> list[str]:
+    """Return what breaks the letters' scopes (`T.sa~6.11` #783b): a
+    polygon's letter is seen only by its own polygon's corners,
+    dimensions and letters; an outline's own formula never uses one;
+    a tool's field (`key`) is never internal.
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+
+    Returns:
+    * (`list[str]`): The problems, a line each.
+    """
+    owners: dict[str, str] = {
+        letter.letter: letter.polygon for letter in outline.letters
+    }
+    problems: list[str] = _letter_problems(outline.letters, owners)
+    corners: dict[str, set[int]] = {
+        polygon.name: set(loop)
+        for polygon, loop in zip(
+            outline.polygons, outline.loops(), strict=True
+        )
+    }
+    letter: Letter
+    for letter in outline.letters:
+        if letter.polygon and letter.polygon not in corners:
+            problems.append(
+                f"{letter.letter}: polygon {letter.polygon!r} is not one"
+            )
+    dimension: Dimension
+    for dimension in outline.dimensions:
+        owner: str = owners.get(dimension.letter, "")
+        if not owner or owner not in corners:
+            continue
+        ends: set[int] = {
+            end
+            for end in (
+                dimension.start,
+                dimension.end,
+                dimension.start_to,
+                dimension.end_to,
+            )
+            if end >= 0
+        }
+        if not ends <= corners[owner]:
+            problems.append(
+                f"{dimension.letter}: polygon {owner}'s letter measures"
+                " corners of another"
+            )
+    return problems
+
+
+# Function `_letter_problems()`:
+def _letter_problems(
+    letters: list[Letter], owners: dict[str, str]
+) -> list[str]:
+    """Return what breaks the letters' own scopes (#783b): a tool's
+    field never internal, a formula never using another polygon's
+    letter.
+
+    Arguments:
+    * `letters` (`list[Letter]`): The letters.
+    * `owners` (`dict[str, str]`): Each letter's polygon ("" for the
+      outline's own).
+
+    Returns:
+    * (`list[str]`): The problems, a line each.
+    """
+    problems: list[str] = []
+    letter: Letter
+    for letter in letters:
+        if letter.key and (letter.internal or letter.polygon):
+            problems.append(
+                f"{letter.letter}: a tool's field ({letter.key}) is never"
+                " internal"
+            )
+        name: str
+        for name in formula_names(letter.formula):
+            if owners.get(name, "") not in ("", letter.polygon):
+                problems.append(
+                    f"{letter.letter}: its formula uses {name}, polygon"
+                    f" {owners[name]}'s"
+                )
+    return problems
+
+
 # Function `outline_text()`:
 def outline_text(outline: Outline) -> str:
     """Return an outline as TOML text, its fields in a fixed order.
@@ -260,20 +509,7 @@ def outline_text(outline: Outline) -> str:
     # The letters, a table each, in the order of the table.
     letter: Letter
     for letter in outline.letters:
-        lines += ["", f"[letters.{letter.letter}]"]
-        if letter.key:
-            lines.append(f"key = {_string(letter.key)}")
-        lines += [
-            f"name = {_string(letter.name)}",
-            (
-                f"formula = {_string(letter.formula)}"
-                if letter.formula
-                else f"default = {_string(letter.default)}"
-            ),
-            f"help = {_string(letter.help)}",
-        ]
-        if letter.fillet:
-            lines.append("fillet = true")
+        lines += _letter_lines(letter)
 
     # The corners, named (#787), then the dimensions.
     outline.fill_names()
@@ -287,6 +523,22 @@ def outline_text(outline: Outline) -> str:
             f"name = {_string(name)}",
             f"at = [{_number(x)}, {_number(y)}]",
         ]
+    outline.fill_polygons()
+    polygon: Polygon
+    for polygon in outline.polygons:
+        lines += [
+            "",
+            "[[polygons]]",
+            f"name = {_string(polygon.name)}",
+            f"role = {_string(polygon.role.value)}",
+        ]
+        if polygon.material:
+            lines.append(f"material = {_string(polygon.material)}")
+        lines.append(
+            "vertices = ["
+            + ", ".join(_string(name) for name in polygon.vertices)
+            + "]"
+        )
     dimension: Dimension
     for dimension in outline.dimensions:
         lines += _dimension_lines(dimension, outline)
@@ -297,6 +549,37 @@ def outline_text(outline: Outline) -> str:
     for hole in outline.holes:
         lines += _hole_lines(hole)
     return "\n".join(lines) + "\n"
+
+
+# Function `_letter_lines()`:
+def _letter_lines(letter: Letter) -> list[str]:
+    """Return a letter's table, its optional fields only when set.
+
+    Arguments:
+    * `letter` (`Letter`): The letter.
+
+    Returns:
+    * (`list[str]`): Its lines, a blank one first.
+    """
+    lines: list[str] = ["", f"[letters.{letter.letter}]"]
+    if letter.key:
+        lines.append(f"key = {_string(letter.key)}")
+    lines += [
+        f"name = {_string(letter.name)}",
+        (
+            f"formula = {_string(letter.formula)}"
+            if letter.formula
+            else f"default = {_string(letter.default)}"
+        ),
+        f"help = {_string(letter.help)}",
+    ]
+    if letter.fillet:
+        lines.append("fillet = true")
+    if letter.polygon:
+        lines.append(f"polygon = {_string(letter.polygon)}")
+    elif letter.internal:
+        lines.append("internal = true")
+    return lines
 
 
 # Function `_dimension_lines()`:
@@ -315,8 +598,8 @@ def _dimension_lines(dimension: Dimension, outline: Outline) -> list[str]:
         "[[dimensions]]",
         f"letter = {_string(dimension.letter)}",
         f"kind = {_string(dimension.kind)}",
-        f"from = {_string(outline.name(dimension.start))}",
-        f"to = {_string(outline.name(dimension.end))}",
+        f"from = {_string(_end_name(outline, dimension, 0))}",
+        f"to = {_string(_end_name(outline, dimension, 1))}",
         f"offset = {_number(dimension.offset)}",
         f"along = {_number(dimension.along)}",
     ]
@@ -336,6 +619,28 @@ def _dimension_lines(dimension: Dimension, outline: Outline) -> list[str]:
         )
         lines.append(f"places = [{places}]")
     return lines
+
+
+# Function `_end_name()`:
+def _end_name(outline: Outline, dimension: Dimension, which: int) -> str:
+    """Return a dimension's end as a file names it: a corner, or for
+    an angle an edge as `V2-V3` (#797), or a word.
+
+    Arguments:
+    * `outline` (`Outline`): Its outline, for the corners' names.
+    * `dimension` (`Dimension`): The dimension.
+    * `which` (`int`): 0 for `from`, 1 for `to`.
+
+    Returns:
+    * (`str`): The name.
+    """
+    end: int = (dimension.start, dimension.end)[which]
+    if dimension.kind != ANGLE or end in ENDS:
+        return outline.name(end)
+    reached: int = (dimension.start_to, dimension.end_to)[which]
+    if reached < 0:
+        reached = (end + 1) % len(outline.points)
+    return f"{outline.name(end)}-{outline.name(reached)}"
 
 
 # Function `_hide_lines()`:
@@ -509,6 +814,14 @@ class _Reader:
                 outline.dimensions.append(dimension)
         self.hides(data.get("hides", []), outline)
         self.holes(data.get("holes", []), outline)
+        # The file's polygons, not the one a new outline is given.
+        outline.polygons.clear()
+        self.polygons(data.get("polygons"), outline)
+        problem: str
+        for problem in letter_scope_problems(outline):
+            self.note("letters", problem)
+
+        self.angle_edges(outline)
 
         return outline
 
@@ -558,6 +871,77 @@ class _Reader:
                     float(table.get("over", 1.0)),
                 )
             )
+
+    # Method `_Reader.angle_edges()`:
+    @staticmethod
+    def angle_edges(outline: Outline) -> None:
+        """Keep an angle's edge to the corner after it in `points` as
+        -1, as the editor makes it and draws it (#797).
+
+        Arguments:
+        * `outline` (`Outline`): Its angles changed in place.
+        """
+        count: int = len(outline.points)
+        dimension: Dimension
+        for dimension in outline.dimensions:
+            if dimension.kind == ANGLE and count:
+                if dimension.start_to == (dimension.start + 1) % count:
+                    dimension.start_to = -1
+                if dimension.end_to == (dimension.end + 1) % count:
+                    dimension.end_to = -1
+
+    # Method `_Reader.polygons()`:
+    def polygons(self, found: object, outline: Outline) -> None:
+        """Read the polygons (#765): at least one; each a unique
+        `name`, a `role`, maybe a `material`, and 3 or more of the
+        outline's vertices by name, none twice.
+
+        Arguments:
+        * `found` (`object`): The file's `polygons`.
+        * `outline` (`Outline`): Given the good ones.
+        """
+        if not isinstance(found, list) or not found:
+            self.note("polygons", "needs at least one [[polygons]] table")
+            return
+        roles: str = ", ".join(role.value for role in Role)
+        index: int
+        table: object
+        for index, table in enumerate(found):
+            where: str = f"polygons[{index}]"
+            if not isinstance(table, dict):
+                self.note(where, "is not a table")
+                continue
+            name: object = table.get("name")
+            role: object = table.get("role")
+            material: object = table.get("material", "")
+            vertices: object = table.get("vertices")
+            if not isinstance(name, str) or not VERTEX_NAME.fullmatch(name):
+                self.note(
+                    where,
+                    f"name = {name!r}: not a letter, then"
+                    " letters, digits or _",
+                )
+            elif any(each.name == name for each in outline.polygons):
+                self.note(where, f"name = {name!r}: is used twice")
+            elif not isinstance(role, str) or role not in tuple(Role):
+                self.note(where, f"role = {role!r}: not one of {roles}")
+            elif not isinstance(material, str):
+                self.note(where, "material is not a name")
+            elif not (
+                isinstance(vertices, list)
+                and len(vertices) >= 3
+                and all(vertex in self.corners for vertex in vertices)
+                and len(set(vertices)) == len(vertices)
+            ):
+                self.note(
+                    where,
+                    "needs vertices: 3 or more of the"
+                    " vertices' names, none twice",
+                )
+            else:
+                outline.polygons.append(
+                    Polygon(name, Role(role), list(vertices), material)
+                )
 
     # Method `_Reader.holes()`:
     def holes(self, found: object, outline: Outline) -> None:
@@ -693,7 +1077,19 @@ class _Reader:
             key: object = (
                 table.get("key", "") if isinstance(table, dict) else ""
             )
-            if not isinstance(key, str) or (
+            polygon: object = (
+                table.get("polygon", "") if isinstance(table, dict) else ""
+            )
+            internal: object = (
+                table.get("internal", False)
+                if isinstance(table, dict)
+                else False
+            )
+            if not isinstance(polygon, str):
+                self.note(f"letters.{name}.polygon", "is not a name")
+            elif not isinstance(internal, bool):
+                self.note(f"letters.{name}.internal", "is not true or false")
+            elif not isinstance(key, str) or (
                 key and not re.fullmatch("[a-z][a-z0-9_]*", key)
             ):
                 self.note(f"letters.{name}.key", "is not a field's name")
@@ -711,6 +1107,8 @@ class _Reader:
                         fillet,
                         formula,
                         key=key,
+                        polygon=polygon,
+                        internal=internal or bool(polygon),
                     )
                 )
             else:
@@ -748,7 +1146,7 @@ class _Reader:
         }:
             # A mark is letterless (#233).
             self.note(where, f"letter {letter!r} is not in [letters]")
-        ends: list[int] = [
+        ends: list[tuple[int, int]] = [
             self.end(where, key, table.get(key), kind == ANGLE)
             for key in ("from", "to")
         ]
@@ -781,14 +1179,16 @@ class _Reader:
         return Dimension(
             str(letter),
             str(kind),
-            ends[0],
-            ends[1],
+            ends[0][0],
+            ends[1][0],
             float(numbers[0]),  # type: ignore[arg-type]  # Checked.
             float(numbers[1]),  # type: ignore[arg-type]  # Checked.
             places,
             (int(rays[0]), int(rays[1])),  # type: ignore[index]  # Checked.
             int(step),  # type: ignore[call-overload]  # Checked.
             (float(moved[0]), float(moved[1])),
+            ends[0][1],
+            ends[1][1],
         )
 
     # Method `_Reader.end()`:
@@ -798,9 +1198,10 @@ class _Reader:
         key: str,
         value: object,
         angle: bool,
-    ) -> int:
-        """Read one end of a dimension: a corner (or an edge, for an
-        angle) by name, `"origin"`, or, for an angle, an axis.
+    ) -> tuple[int, int]:
+        """Read one end of a dimension: a corner by name or
+        `"origin"`; for an angle, an edge by its corners' names,
+        `"V2-V3"` (#797), or an axis.
 
         Arguments:
         * `where` (`str`): The entry, for messages.
@@ -809,22 +1210,35 @@ class _Reader:
         * `angle` (`bool`): Whether the dimension is an angle.
 
         Returns:
-        * (`int`): The end (`ORIGIN` when bad: the problem is noted).
+        * (`tuple[int, int]`): The end, and for an angle's edge the
+          corner it reaches (else -1); `ORIGIN` when bad (the problem
+          is noted).
         """
         allowed: tuple[str, ...] = (
             ("x_axis", "y_axis") if angle else ("origin",)
         )
         if isinstance(value, str) and value in allowed:
-            return {word: end for end, word in ENDS.items()}[value]
-        corner: int | None = self.corner(value)
-        if corner is not None:
-            return corner
+            return {word: end for end, word in ENDS.items()}[value], -1
+        if angle:
+            names: list[str] = (
+                value.split("-") if isinstance(value, str) else []
+            )
+            corners: list[int] = [
+                self.corners[name] for name in names if name in self.corners
+            ]
+            if len(names) == 2 and len(corners) == 2:
+                return corners[0], corners[1]
+        else:
+            corner: int | None = self.corner(value)
+            if corner is not None:
+                return corner, -1
         self.note(
             where,
-            f"{key} = {value!r}: not a corner's name"
-            f" or {' or '.join(allowed)}",
+            f"{key} = {value!r}: not "
+            + ("an edge's corners, V1-V2," if angle else "a corner's name")
+            + f" or {' or '.join(allowed)}",
         )
-        return ORIGIN
+        return ORIGIN, -1
 
     # Method `_Reader.corner()`:
     def corner(self, value: object) -> int | None:

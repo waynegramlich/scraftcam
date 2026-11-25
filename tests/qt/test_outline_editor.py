@@ -12,25 +12,29 @@ from PySide6.QtGui import QColor, QWheelEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QGraphicsSceneMouseEvent,
     QLineEdit,
     QTableWidgetItem,
     QToolButton,
+    QWidget,
 )
 
 from scraftcam.diagram import TEXT, Stroke, Weight
 from scraftcam.geometry import ArcSegment, LineSegment
-from scraftcam.gui import outline_cuts, outline_editor, outline_letters, theme
+from scraftcam.gui import outline_cuts, outline_editor, outline_values, theme
 from scraftcam.gui.dimensions import (
     ANGLE,
     DIAMETER,
     HORIZONTAL,
     LENGTH,
     ORIGIN,
+    RADIUS,
     VERTICAL,
     X_AXIS,
     Y_AXIS,
     Dimension,
+    Edge,
     drawn_marks,
     placement_problem,
     tip_on_origin,
@@ -43,10 +47,18 @@ from scraftcam.gui.outline_editor import (
     READ_ONLY_MESSAGE,
     Drawing,
     OutlineEditor,
+    Snapshot,
     ViewTab,
     drawing_from,
+    drawing_from_text,
 )
-from scraftcam.gui.outline_file import PLAIN, Hole, outline_text
+from scraftcam.gui.outline_file import (
+    PLAIN,
+    Hole,
+    Polygon,
+    Role,
+    outline_text,
+)
 from scraftcam.gui.values import crossings
 from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
@@ -56,11 +68,27 @@ from tests import qt_app
 def cell(editor: OutlineEditor, row: int, column: int) -> QTableWidgetItem:
     """Return a letter's cell (`row` counts letters, past the fixed
     "No fillet" row; it must be there)."""
-    item: QTableWidgetItem | None = editor.letters.table.item(
-        outline_letters.LETTER_ROW + row, column
+    item: QTableWidgetItem | None = editor.values.table.item(
+        outline_values.LETTER_ROW + row, column
     )
     assert item is not None
     return item
+
+
+def edge_of(view: outline_editor.OutlineView, edge: int) -> Edge:
+    """Return the edge leaving a corner, to the next in `points`, or
+    an axis (`T.sa~6.11` #797).
+
+    Arguments:
+    * `view` (`OutlineView`): The view.
+    * `edge` (`int`): The corner, or `X_AXIS` / `Y_AXIS`.
+
+    Returns:
+    * (`Edge`): The corners it leaves and reaches, or the axis and -1.
+    """
+    if edge in (X_AXIS, Y_AXIS):
+        return edge, -1
+    return edge, (edge + 1) % len(view.drawing.points)
 
 
 class GridTest(unittest.TestCase):
@@ -289,10 +317,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(view.drawing.dimensions, [])
         self.assertEqual(view.drawing.letters, [])
         self.assertEqual(len(view.drawing.points), 3)
-        self.assertEqual(self.editor.letters.table.rowCount(), 1)
+        self.assertEqual(self.editor.values.table.rowCount(), 1)
         view.undo()
         self.assertEqual(len(view.drawing.dimensions), 2)
-        self.assertEqual(self.editor.letters.table.rowCount(), 3)
+        self.assertEqual(self.editor.values.table.rowCount(), 3)
 
     def test_drawn_letter(self) -> None:
         """A dimension's letter spot and click area are where its
@@ -467,11 +495,11 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         none = view.handles[1].brush().style()
         at: QPoint = view.mapFromScene(view.handles[1].scenePos())
         QTest.mouseClick(port, Qt.MouseButton.LeftButton, pos=at)
-        self.assertEqual(view.chosen_edges, [1])
+        self.assertEqual(view.chosen_edges, [(1, 2)])
         self.assertNotEqual(view.handles[1].brush().style(), none)
-        view.select_edge(2)
-        view.select_edge(1)
-        self.assertEqual(view.chosen_edges, [2, 1])
+        view.select_edge(edge_of(view, 2))
+        view.select_edge(edge_of(view, 1))
+        self.assertEqual(view.chosen_edges, [(2, 0), (1, 2)])
         view.clear_selection()
         self.assertEqual(view.chosen_edges, [])
         self.assertEqual(view.handles[1].brush().style(), none)
@@ -482,8 +510,8 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         view = self.editor.view
         button = self.editor.buttons["Dimension"]
-        view.select_edge(0)
-        view.select_edge(1)
+        view.select_edge(edge_of(view, 0))
+        view.select_edge(edge_of(view, 1))
         button.click()
         self.assertEqual(len(view.drawing.dimensions), 1)
         self.assertEqual(view.drawing.dimensions[0].kind, ANGLE)
@@ -496,10 +524,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertGreater(view.drawing.dimensions[0].offset, 0.0)
         self.editor.buttons["Dim. Kind"].click()
         self.assertEqual(view.drawing.dimensions[0].kind, ANGLE)
-        view.drawing.points[:] = [(0, 0), (4, 0), (4, 2), (0, 2)]
+        view.drawing.reset_corners([(0, 0), (4, 0), (4, 2), (0, 2)])
         view.make_squares()
-        view.select_edge(0)
-        view.select_edge(2)
+        view.select_edge(edge_of(view, 0))
+        view.select_edge(edge_of(view, 2))
         button.click()
         self.assertIn("parallel", view.message)
         self.assertFalse(view.grab().isNull())
@@ -518,12 +546,12 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view = self.editor.view
         tip = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (-2.0, 8.0), (-2.0, 1.2)]
         for first, second in ((4, 0), (0, 4)):
-            view.drawing.points[:] = tip
+            view.drawing.reset_corners(tip)
             view.drawing.dimensions.clear()
             view.drawing.letters.clear()
             view.make_squares()
-            view.select_edge(first)
-            view.select_edge(second)
+            view.select_edge(edge_of(view, first))
+            view.select_edge(edge_of(view, second))
             self.editor.buttons["Dimension"].click()
             self.assertEqual(view.drawing.letters[-1].default, "118 deg")
 
@@ -542,36 +570,41 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_angle_edges_change(self) -> None:
         """An angle keeps to its edges as corners come and go (#45)."""
         drawing: Drawing = Drawing()
-        drawing.points[:] = [(0, 0), (4, 0), (4, 4), (0, 4), (-2, 2)]
+        drawing.reset_corners([(0, 0), (4, 0), (4, 4), (0, 4), (-2, 2)])
         drawing.dimensions.append(Dimension("A", ANGLE, 0, 2))
 
-        # A corner splitting an edge before the second: it shifts.
-        drawing.insert(2, (4, 2))
-        self.assertEqual(
-            (drawing.dimensions[0].start, drawing.dimensions[0].end), (0, 3)
-        )
-
-        # The first edge's far corner gone: the edge reaches on.
-        drawing.remove(1)
+        # A corner splitting an edge before the second: it goes last
+        # (#799), so nothing shifts.
+        self.assertEqual(drawing.insert((4, 2), (1, 2)), 5)
         self.assertEqual(
             (drawing.dimensions[0].start, drawing.dimensions[0].end), (0, 2)
         )
 
-        # A corner an edge leaves gone: the angle goes with it.
-        drawing.remove(2)
+        # The first edge's far corner (V2) gone: the edge reaches on,
+        # to the next in its polygon, the new V6 (now 4); V3 is now 1.
+        drawing.remove(1)
+        angle: Dimension = drawing.dimensions[0]
+        self.assertEqual(
+            (angle.start, angle.start_to, angle.end, angle.end_to),
+            (0, 4, 1, 2),
+        )
+        self.assertEqual(drawing.names[4], "V6")
+
+        # A corner an edge leaves (V3) gone: the angle goes with it.
+        drawing.remove(1)
         self.assertEqual(drawing.dimensions, [])
 
     def test_letter_uses(self) -> None:
         """A letter whose value does not fit its dimension is red."""
         view = self.editor.view
-        view.select_edge(0)
-        view.select_edge(1)
+        view.select_edge(edge_of(view, 0))
+        view.select_edge(edge_of(view, 1))
         self.editor.buttons["Dimension"].click()
-        self.editor.letters.check_letters()
-        self.assertEqual(self.editor.letters.letter_lines, [])
+        self.editor.values.check_letters()
+        self.assertEqual(self.editor.values.letter_lines, [])
         view.drawing.letters[0].default = "2 in"
-        self.editor.letters.check_letters()
-        self.assertIn("measures an angle", self.editor.letters.problems.text())
+        self.editor.values.check_letters()
+        self.assertIn("measures an angle", self.editor.values.problems.text())
 
     def test_axis_angle(self) -> None:
         """A click on an axis selects it; an angle from it to an edge:
@@ -579,15 +612,17 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         (#76)."""
 
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (-1, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (-1, 8)]
+        )
         view.make_squares()
         view.fit()
         port = view.viewport()
         at: QPoint = view.mapFromScene(QPointF(0.0, 4.0))
         QTest.mouseClick(port, Qt.MouseButton.LeftButton, pos=at)
-        self.assertEqual(view.chosen_edges, [Y_AXIS])
+        self.assertEqual(view.chosen_edges, [(Y_AXIS, -1)])
         self.assertFalse(view.grab().isNull())
-        view.select_edge(0)
+        view.select_edge(edge_of(view, 0))
         self.editor.buttons["Dimension"].click()
         self.assertEqual(view.drawing.letters[-1].default, "59 deg")
         self.assertFalse(view.grab().isNull())
@@ -595,8 +630,8 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         # Dragged past a ray, the letter goes outside it (#321).
         view.circles[0].drag_angle(dimension, QPointF(9.0, -9.0))
         self.assertFalse(0.0 <= dimension.along <= 1.0)
-        view.select_edge(X_AXIS)
-        view.select_edge(Y_AXIS)
+        view.select_edge(edge_of(view, X_AXIS))
+        view.select_edge(edge_of(view, Y_AXIS))
         self.editor.buttons["Dimension"].click()
         self.assertIn("pick an edge", view.message)
         view.clear_selection()
@@ -607,7 +642,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """An axis and a corner, then [Dimension]: measured across the
         axis from the origin (#80)."""
         view = self.editor.view
-        view.select_edge(X_AXIS)
+        view.select_edge(edge_of(view, X_AXIS))
         view.select_point(2)
         self.editor.buttons["Dimension"].click()
         dimension = view.drawing.dimensions[-1]
@@ -617,7 +652,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         )
         view.clear_selection()
         view.select_point(1)
-        view.select_edge(Y_AXIS)
+        view.select_edge(edge_of(view, Y_AXIS))
         self.editor.buttons["Dimension"].click()
         self.assertEqual(view.drawing.dimensions[-1].kind, HORIZONTAL)
 
@@ -630,7 +665,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         button.click()
         self.assertFalse(view.drawing.revolve)
         self.assertIn("X >= 0", view.message)
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        )
         view.make_squares()
         button.click()
         self.assertTrue(view.drawing.revolve)
@@ -795,7 +832,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             drawing = outline_editor.drawing_from(path)
             self.assertEqual(drawing.points, editor.drawing.points)
             editor.view.dimension_between(-1, 1)
-            editor.letters.keep(outline_letters.LETTER_ROW, 2, "3 in")
+            editor.values.keep(outline_values.LETTER_ROW, 2, "3 in")
             self.assertEqual(
                 outline_editor.drawing_from(path).letters[0].default, "3 in"
             )
@@ -813,7 +850,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view = self.editor.view
         self.assertNotIn("Fillet", self.editor.buttons)
         self.assertEqual(self.editor.buttons["Fit"].text(), "Fit")
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.make_squares()
         view.set_fillets([1, 2], outline_editor.NOTE_CHOICE)
         self.assertEqual(view.drawing.note_radius, "UDF")
@@ -850,7 +889,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """Once the drawing has a scale, a fillet is its value to scale,
         and follows a changed value (#142.3)."""
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.make_squares()
         view.set_fillets([1], outline_editor.NOTE_CHOICE)
         view.drawing.scale = 0.5
@@ -864,33 +905,33 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         "Fillet", with [New Fillet Dimension] (#213, #214, #219)."""
 
         editor = self.editor
-        hidden = editor.letters.table.isRowHidden
+        hidden = editor.values.table.isRowHidden
         editor.drawing.letters[:] = [
             Letter("W", "Width", "6 in", ""),
             Letter("R2", "Big", "1/4 in", "", fillet=True),
         ]
-        editor.letters.fill_table()
+        editor.values.fill_table()
         self.assertEqual(
             [hidden(row) for row in range(3)], [True, False, False]
         )
-        self.assertTrue(editor.letters.new_fillet.isHidden())
-        editor.letters.tabs.setCurrentIndex(outline_letters.FILLETS_TAB)
+        self.assertTrue(editor.values.new_fillet.isHidden())
+        editor.values.tabs.setCurrentIndex(outline_values.FILLETS_TAB)
         self.assertEqual(
             [hidden(row) for row in range(3)], [False, True, False]
         )
-        fixed = editor.letters.table.item(0, 4)
+        fixed = editor.values.table.item(0, 4)
         assert fixed is not None
         self.assertEqual(fixed.text(), "(No Edit Allowed)")
         self.assertFalse(fixed.flags() & Qt.ItemFlag.ItemIsEditable)
-        self.assertFalse(editor.letters.new_fillet.isHidden())
-        editor.letters.new_fillet.click()
+        self.assertFalse(editor.values.new_fillet.isHidden())
+        editor.values.new_fillet.click()
         self.assertEqual(editor.drawing.letters[-1].letter, "A")
         self.assertTrue(editor.drawing.letters[-1].fillet)
         self.assertFalse(hidden(3))
         editor.buttons["New Letter"].click()
         self.assertTrue(editor.drawing.letters[-1].fillet)
         self.assertNotIn("No fillet", outline_text(editor.drawing))
-        editor.letters.tabs.setCurrentIndex(outline_letters.DIMENSIONS_TAB)
+        editor.values.tabs.setCurrentIndex(outline_values.DIMENSIONS_TAB)
         self.assertFalse(hidden(1))
 
     def test_arm_and_paint(self) -> None:
@@ -900,35 +941,37 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         row again, empty space or [Dimensions] disarms (#214)."""
         editor = self.editor
         view = editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.letters[:] = [
             Letter("R2", "Big", "1/4 in", "", fillet=True)
         ]
         view.make_squares()
-        editor.letters.fill_table()
-        editor.letters.tabs.setCurrentIndex(outline_letters.FILLETS_TAB)
+        editor.values.fill_table()
+        editor.values.tabs.setCurrentIndex(outline_values.FILLETS_TAB)
         view.select_point(1)
-        editor.letters.row_clicked(1, 1)
+        editor.values.row_clicked(1, 1)
         self.assertEqual(view.armed, "R2")
         self.assertEqual(view.fillets(), {1: "R2"})
         self.assertIn("by R2", editor.status.text())
-        self.assertEqual(editor.letters.table.selectedItems()[0].row(), 1)
+        self.assertEqual(editor.values.table.selectedItems()[0].row(), 1)
         done = len(view.history.done)
         view.squares[2].paint_fillet()
         self.assertEqual(view.fillets(), {1: "R2", 2: "R2"})
         self.assertEqual(len(view.history.done), done + 1)
-        editor.letters.row_clicked(0, 1)
+        editor.values.row_clicked(0, 1)
         self.assertEqual(view.armed, "")
         view.squares[2].paint_fillet()
         self.assertEqual(view.fillets(), {})
         self.assertIn("sharp", editor.status.text())
-        editor.letters.row_clicked(0, 1)
+        editor.values.row_clicked(0, 1)
         self.assertIsNone(view.armed)
-        editor.letters.row_clicked(1, 1)
+        editor.values.row_clicked(1, 1)
         view.clear_selection()
         self.assertIsNone(view.armed)
-        editor.letters.row_clicked(1, 1)
-        editor.letters.tabs.setCurrentIndex(outline_letters.DIMENSIONS_TAB)
+        editor.values.row_clicked(1, 1)
+        editor.values.tabs.setCurrentIndex(outline_values.DIMENSIONS_TAB)
         self.assertIsNone(view.armed)
         self.assertEqual(editor.status.text(), "")
         # Undone: R2 armed again on corner 1, then the sharp corner 2.
@@ -943,7 +986,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         stay; undo brings them back (#451)."""
         view = self.editor.view
         view.snap_on = False
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.5), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.5), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.dimensions.clear()
         view.make_squares()
         view.fit()
@@ -1024,7 +1069,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         view = self.editor.view
         view.snap_on = False
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 0.0), (2.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 0.0), (2.0, 8.0), (0, 8)]
+        )
         view.drawing.revolve = True
         view.drawing.dimensions[:] = [
             Dimension("D", DIAMETER, ORIGIN, 1, -2.0, 0.5)
@@ -1046,7 +1093,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         (#451)."""
         editor = self.editor
         view = editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.dimensions[:] = [Dimension("", VERTICAL, 0, 1)]
         view.make_squares()
         self.assertEqual(editor.buttons["Show Marks"].text(), "Show Marks")
@@ -1060,34 +1109,37 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertFalse(view.measures[0].isVisible())
 
     def test_corners_keep_hides(self) -> None:
-        """Inserting or deleting a corner renumbers the hide strips'
-        corners; a strip placed from a deleted corner goes (#446)."""
+        """A new corner, made last (#799), renumbers no hide strip;
+        deleting one renumbers them, and a strip placed from a deleted
+        corner goes (#446)."""
         drawing: Drawing = Drawing()
-        drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 9.0), (0.0, 9.0)]
+        drawing.reset_corners([(0.0, 0.0), (6.0, 0.0), (6.0, 9.0), (0.0, 9.0)])
         drawing.hides[:] = [Hide(HIDE_Y, 1, 2, 2.0, 2.0)]
-        drawing.insert(1, (3.0, 0.0))
-        self.assertEqual(
-            (drawing.hides[0].below, drawing.hides[0].above), (2, 3)
-        )
-        drawing.remove(1)
+        drawing.insert((3.0, 0.0), (0, 1))
         self.assertEqual(
             (drawing.hides[0].below, drawing.hides[0].above), (1, 2)
         )
-        drawing.remove(2)
+        drawing.remove(0)
+        self.assertEqual(
+            (drawing.hides[0].below, drawing.hides[0].above), (0, 1)
+        )
+        drawing.remove(1)
         self.assertEqual(drawing.hides, [])
 
     def test_revolve_marks_tip(self) -> None:
         """[Revolve] marks a corner on the origin as the tip, and the
         problems say when a revolved tip is off the origin (#448)."""
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
+        )
         view.drawing.dimensions.clear()
         view.make_squares()
         self.editor.buttons["Revolve"].click()
         self.assertTrue(view.drawing.revolve)
         self.assertTrue(tip_on_origin(view.drawing.dimensions))
         qt_app.process_events()
-        self.assertNotIn("tip goes", self.editor.letters.problems.text())
+        self.assertNotIn("tip goes", self.editor.values.problems.text())
         view.undo()
         view.drawing.points[0] = (0.0, 1.0)
         view.make_squares()
@@ -1095,14 +1147,16 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         qt_app.process_events()
         self.assertTrue(view.drawing.revolve)
         self.assertIn(
-            "tip goes on the origin", self.editor.letters.problems.text()
+            "tip goes on the origin", self.editor.values.problems.text()
         )
 
     def test_right_angle(self) -> None:
         """A right angle from an older file (a letterless angle) is
         taken as 90 degrees by the solver (#236)."""
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.dimensions[:] = [
             Dimension("", VERTICAL, ORIGIN, 0),
             Dimension("", HORIZONTAL, ORIGIN, 0),
@@ -1131,12 +1185,12 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             Letter("R2", "Big", "1/4 in", "", fillet=True),
             Letter("S", "Spare", "1/8 in", "", fillet=True),
         ]
-        editor.letters.fill_table()
+        editor.values.fill_table()
         view.set_fillets([0, 1], "R2")
-        editor.letters.tabs.setCurrentIndex(outline_letters.FILLETS_TAB)
-        editor.letters.row_clicked(outline_letters.LETTER_ROW, 1)
+        editor.values.tabs.setCurrentIndex(outline_values.FILLETS_TAB)
+        editor.values.row_clicked(outline_values.LETTER_ROW, 1)
         view.clear_selection()
-        editor.letters.row_clicked(outline_letters.LETTER_ROW, 1)
+        editor.values.row_clicked(outline_values.LETTER_ROW, 1)
         delete = editor.buttons["Delete"]
         delete.click()
         self.assertIn("R2 is used by 2 fillets", editor.status.text())
@@ -1150,8 +1204,8 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("it stays a fillet radius", editor.status.text())
 
         # The spare letter goes, by its row; undo brings it back.
-        editor.letters.tabs.setCurrentIndex(outline_letters.DIMENSIONS_TAB)
-        editor.letters.table.setCurrentCell(outline_letters.LETTER_ROW + 1, 0)
+        editor.values.tabs.setCurrentIndex(outline_values.DIMENSIONS_TAB)
+        editor.values.table.setCurrentCell(outline_values.LETTER_ROW + 1, 0)
         view.setFocus()
         delete.click()
         self.assertEqual(
@@ -1169,18 +1223,18 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view = editor.view
         view.dimension_between(ORIGIN, 1, HORIZONTAL)
         view.drawing.letters.append(Letter("R2", "", "1/16 in", "", True))
-        editor.letters.fill_table()
+        editor.values.fill_table()
         view.set_fillets([2], "R2")
         thin: float = view.measures[0].pen().widthF()
-        editor.letters.hover_row(outline_letters.LETTER_ROW, 0)
+        editor.values.hover_row(outline_values.LETTER_ROW, 0)
         self.assertEqual(view.lit_letter, "A")
         self.assertGreater(view.measures[0].pen().widthF(), thin)
         self.assertFalse(view.corner_lit(2))
-        editor.letters.hover_row(outline_letters.LETTER_ROW + 1, 0)
+        editor.values.hover_row(outline_values.LETTER_ROW + 1, 0)
         self.assertTrue(view.corner_lit(2))
         self.assertEqual(view.squares[2].scale(), outline_editor.LIT_SCALE)
-        editor.letters.eventFilter(
-            editor.letters.table.viewport(), QEvent(QEvent.Type.Leave)
+        editor.values.eventFilter(
+            editor.values.table.viewport(), QEvent(QEvent.Type.Leave)
         )
         self.assertEqual(view.lit_letter, "")
         self.assertEqual(view.squares[2].scale(), 1.0)
@@ -1194,7 +1248,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         # A refused delete shows what uses the letter.
         view.clear_selection()
-        editor.letters.table.setCurrentCell(outline_letters.LETTER_ROW + 1, 0)
+        editor.values.table.setCurrentCell(outline_values.LETTER_ROW + 1, 0)
         view.setFocus()
         editor.buttons["Delete"].click()
         self.assertEqual(view.lit_letter, "R2")
@@ -1204,14 +1258,18 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         (#242)."""
         editor = self.editor
         view = editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 4.0), (6.0, 0.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 4.0), (6.0, 0.0), (0, 4)]
+        )
         view.make_squares()
         editor.show_message()
         crossed = crossings(view.drawing.points)
-        self.assertEqual(crossed, [(0, 2)])
+        self.assertEqual(crossed, [((0, 1), (2, 3))])
         self.assertIn("Edges cross", editor.status.text())
         self.assertFalse(view.grab().isNull())
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         editor.show_message()
         self.assertEqual(editor.status.text(), "")
 
@@ -1223,11 +1281,11 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             Dimension("", VERTICAL, 0, 1),
             Dimension("", HORIZONTAL, ORIGIN, 2),
         ]
-        drawing.insert(2, (5.0, 2.0))
+        drawing.insert((5.0, 2.0), (1, 2))
         self.assertEqual(len(drawing.dimensions), 2)
-        drawing.insert(1, (3.0, 0.0))
+        drawing.insert((3.0, 0.0), (0, 1))
         self.assertEqual(len(drawing.dimensions), 1)
-        self.assertEqual(drawing.dimensions[0].end, 4)
+        self.assertEqual(drawing.dimensions[0].end, 2)
         editor = OutlineEditor(drawing)
         editor.view.toggle_marks()
         self.assertTrue(editor.view.circles[0].isVisible())
@@ -1278,7 +1336,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         editor = self.editor
         view = editor.view
         view.marks_shown = True
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.dimensions[:] = [
             Dimension("", VERTICAL, 0, 1),
             Dimension("", HORIZONTAL, ORIGIN, 3),
@@ -1313,7 +1373,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         """A fillet too big for its edges is red in the table, under it,
         and on its corner (#127, #139, #141)."""
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.dimensions[:] = drawn_marks(view.drawing.points)
         view.make_squares()
         view.dimension_between(-1, 1, HORIZONTAL)
@@ -1322,17 +1384,17 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view.drawing.letters[1].default = "1/2 in"
         view.clear_selection()
         view.set_fillets([2], outline_editor.NOTE_CHOICE)
-        self.editor.letters.check_letters()
+        self.editor.values.check_letters()
         self.assertEqual(view.trouble, {})
-        self.assertEqual(self.editor.letters.letter_lines, [])
+        self.assertEqual(self.editor.values.letter_lines, [])
         view.drawing.letters[2].default = "3/4 in"
-        self.editor.letters.check_letters()
+        self.editor.values.check_letters()
         self.assertEqual(sorted(view.trouble), [2])
         self.assertIn(
             "UDF need 3/4 in of a 1/2 in edge.",
-            self.editor.letters.problems.text(),
+            self.editor.values.problems.text(),
         )
-        self.assertNotIn("UDF: UDF", self.editor.letters.problems.text())
+        self.assertNotIn("UDF: UDF", self.editor.values.problems.text())
         self.assertEqual(view.squares[2].pen().color().name(), "#c00000")
         self.assertFalse(view.grab().isNull())
 
@@ -1341,11 +1403,11 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         fires no button's key (`n` of `in` is [Dimension]'s)."""
 
         view = self.editor.view
-        table = self.editor.letters.table
+        table = self.editor.values.table
         view.dimension_between(-1, 1)
         qt_app.process_events()
         spot = table.visualRect(
-            table.model().index(outline_letters.LETTER_ROW, 2)
+            table.model().index(outline_values.LETTER_ROW, 2)
         ).center()
         QTest.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=spot)
         qt_app.process_events()
@@ -1372,15 +1434,17 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         dimensions and the formulas naming it (`T.tfo~6.5` #441)."""
         editor = self.editor
         view = editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.dimensions[:] = drawn_marks(view.drawing.points)
         view.make_squares()
         view.dimension_between(-1, 1, HORIZONTAL)
         view.dimension_between(-1, 2, VERTICAL)
-        editor.letters.keep(outline_letters.LETTER_ROW + 1, 2, "= A / 2")
+        editor.values.keep(outline_values.LETTER_ROW + 1, 2, "= A / 2")
         typed: str
         for typed in ("O", "OA", "OAL"):
-            editor.letters.keep(outline_letters.LETTER_ROW, 0, typed)
+            editor.values.keep(outline_values.LETTER_ROW, 0, typed)
         lettered: list[str] = [
             dimension.letter
             for dimension in view.drawing.dimensions
@@ -1391,9 +1455,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         # A name taken, or blank, while typing: the uses wait for a
         # good one.
-        editor.letters.keep(outline_letters.LETTER_ROW, 0, "B")
-        editor.letters.keep(outline_letters.LETTER_ROW, 0, "")
-        editor.letters.keep(outline_letters.LETTER_ROW, 0, "W")
+        editor.values.keep(outline_values.LETTER_ROW, 0, "B")
+        editor.values.keep(outline_values.LETTER_ROW, 0, "")
+        editor.values.keep(outline_values.LETTER_ROW, 0, "W")
         lettered = [
             dimension.letter
             for dimension in view.drawing.dimensions
@@ -1408,26 +1472,26 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         editor = self.editor
         view = editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.dimensions[:] = drawn_marks(view.drawing.points)
         view.make_squares()
         view.dimension_between(-1, 1, HORIZONTAL)
         view.dimension_between(-1, 2, VERTICAL)
-        editor.letters.keep(outline_letters.LETTER_ROW, 2, "1 in")
-        editor.letters.keep(outline_letters.LETTER_ROW + 1, 2, "1/2 in")
+        editor.values.keep(outline_values.LETTER_ROW, 2, "1 in")
+        editor.values.keep(outline_values.LETTER_ROW + 1, 2, "1/2 in")
         drawn: list[tuple[float, float]] = list(view.drawing.points)
         self.assertEqual(drawn[2], (6.0, 4.0))
         scale: float = view.drawing.scale
         self.assertGreater(scale, 0.0)
-        editor.letters.keep(outline_letters.LETTER_ROW, 2, "2 in")
+        editor.values.keep(outline_values.LETTER_ROW, 2, "2 in")
         self.assertEqual(view.drawing.points, drawn)
         self.assertEqual(view.drawing.scale, scale)
         for bad in ("-2 in", "0 in", "2 i"):
-            editor.letters.keep(outline_letters.LETTER_ROW, 2, bad)
+            editor.values.keep(outline_values.LETTER_ROW, 2, bad)
             self.assertEqual(view.drawing.points, drawn)
-        self.assertIn(
-            "A: '2 i' is not a value", editor.letters.problems.text()
-        )
+        self.assertIn("A: '2 i' is not a value", editor.values.problems.text())
 
         # Nothing holds a dimensioned corner when dragged (#457).
         view.squares[1].setPos(view.squares[1].pos() + QPointF(5.0, 0.0))
@@ -1438,24 +1502,26 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         out again when `A` changes (`T.tfo~6.5` #430)."""
         editor = self.editor
         view = editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (6.0, 0.0), (6.0, 4.0), (0, 4)]
+        )
         view.drawing.dimensions[:] = drawn_marks(view.drawing.points)
         view.make_squares()
         view.dimension_between(-1, 1, HORIZONTAL)
         view.dimension_between(-1, 2, VERTICAL)
-        editor.letters.keep(outline_letters.LETTER_ROW, 2, "1 in")
-        editor.letters.keep(outline_letters.LETTER_ROW + 1, 2, "= A / 2")
+        editor.values.keep(outline_values.LETTER_ROW, 2, "1 in")
+        editor.values.keep(outline_values.LETTER_ROW + 1, 2, "= A / 2")
         height: Letter = view.drawing.letters[1]
         self.assertEqual((height.formula, height.default), ("A / 2", "0.5 in"))
-        editor.letters.keep(outline_letters.LETTER_ROW, 2, "2 in")
+        editor.values.keep(outline_values.LETTER_ROW, 2, "2 in")
         self.assertEqual(height.default, "1 in")
         self.assertAlmostEqual(view.drawing.points[2][1], 4.0)
-        editor.letters.fill_table()
+        editor.values.fill_table()
         self.assertEqual(cell(editor, 1, 2).text(), "= A / 2")
         self.assertEqual(cell(editor, 1, 2).toolTip(), "= 1 in")
-        editor.letters.keep(outline_letters.LETTER_ROW + 1, 2, "= Q / 2")
-        self.assertIn("no letter Q", editor.letters.problems.text())
-        editor.letters.keep(outline_letters.LETTER_ROW + 1, 2, "3 in")
+        editor.values.keep(outline_values.LETTER_ROW + 1, 2, "= Q / 2")
+        self.assertIn("no letter Q", editor.values.problems.text())
+        editor.values.keep(outline_values.LETTER_ROW + 1, 2, "3 in")
         self.assertEqual((height.formula, height.default), ("", "3 in"))
 
     def test_hide_covers(self) -> None:
@@ -1463,7 +1529,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         named in the bar; moved off, it is not (#182)."""
         editor = self.editor
         view = editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        )
         view.make_squares()
         view.fit()
         # A mark under a strip is not covered (#451); a letter is.
@@ -1530,7 +1598,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         editor = self.editor
         view = editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        )
         view.make_squares()
         view.fit()
         port = view.viewport()
@@ -1570,7 +1640,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         not over a corner; only in the overview; one change (#173)."""
 
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.2), (2.0, 8.0), (0, 8)]
+        )
         view.make_squares()
         self.editor.show_tab(ViewTab.DRAWING)
         view.lay_hide(QRectF(-1.0, 3.0, 4.0, 3.0))
@@ -1642,7 +1714,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         for looking (#170, #171)."""
 
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.2), (2.0, 40), (0, 40)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.2), (2.0, 40), (0, 40)]
+        )
         view.make_squares()
         self.editor.show_tab(ViewTab.DRAWING)
         view.lay_hide(QRectF(-1.0, 5.0, 4.0, 30.0))
@@ -1778,7 +1852,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         letters table; the corners stay as drawn (#457)."""
         editor = self.editor
         drawing: Drawing = editor.view.drawing
-        drawing.points[:] = [(0, 0), (4, 0), (4, 4), (0, 4), (1, 2)]
+        drawing.reset_corners([(0, 0), (4, 0), (4, 4), (0, 4), (1, 2)])
         drawing.dimensions[:] = drawn_marks(drawing.points) + [
             Dimension("W", HORIZONTAL, ORIGIN, 1),
             Dimension("H", VERTICAL, ORIGIN, 2),
@@ -1790,10 +1864,10 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
             Letter("N", "", "1 in", ""),
         ]
         editor.show_problems()
-        self.assertNotIn("cross", editor.letters.problems.text())
+        self.assertNotIn("cross", editor.values.problems.text())
         drawing.letters[2].default = "5 in"
         editor.show_problems()
-        self.assertIn("make edges cross", editor.letters.problems.text())
+        self.assertIn("make edges cross", editor.values.problems.text())
         self.assertEqual(drawing.points[4], (1, 2))
 
     def test_drag_is_one_change(self) -> None:
@@ -1820,24 +1894,24 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def test_letters_table(self) -> None:
         """[New Letter] adds a row; edits are kept and checked."""
         editor = self.editor
-        self.assertEqual(editor.letters.table.rowCount(), 1)
+        self.assertEqual(editor.values.table.rowCount(), 1)
         self.assertEqual(editor.buttons["New Letter"].text(), "New Letter")
         editor.buttons["New Letter"].click()
         editor.buttons["New Letter"].click()
-        self.assertEqual(editor.letters.table.rowCount(), 3)
+        self.assertEqual(editor.values.table.rowCount(), 3)
         self.assertEqual(cell(editor, 1, 0).text(), "B")
         cell(editor, 0, 1).setText("Overall width")
         self.assertEqual(editor.drawing.letters[0].name, "Overall width")
         cell(editor, 1, 0).setText(" a ")
         self.assertEqual(editor.drawing.letters[1].letter, "a")
-        self.assertIn("only in case", editor.letters.problems.text())
+        self.assertIn("only in case", editor.values.problems.text())
         self.assertIn("only in case", cell(editor, 1, 0).toolTip())
         cell(editor, 1, 0).setText("H")
-        self.assertEqual(editor.letters.letter_lines, [])
+        self.assertEqual(editor.values.letter_lines, [])
         cell(editor, 1, 2).setText("2")
-        self.assertIn("H: '2' is not a value", editor.letters.problems.text())
+        self.assertIn("H: '2' is not a value", editor.values.problems.text())
         cell(editor, 1, 2).setText("2-1/4 in")
-        self.assertEqual(editor.letters.letter_lines, [])
+        self.assertEqual(editor.values.letter_lines, [])
         self.assertEqual(cell(editor, 1, 2).toolTip(), "")
 
     def test_fillet_column(self) -> None:
@@ -1851,15 +1925,15 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(box.checkState(), Qt.CheckState.Unchecked)
         box.setCheckState(Qt.CheckState.Checked)
         self.assertTrue(editor.drawing.letters[0].fillet)
-        self.assertEqual(editor.letters.letter_lines, [])
+        self.assertEqual(editor.values.letter_lines, [])
         cell(editor, 0, 2).setText("30 deg")
         self.assertIn(
-            "a fillet radius is a length", editor.letters.problems.text()
+            "a fillet radius is a length", editor.values.problems.text()
         )
         self.assertIn("a fillet radius", cell(editor, 0, 3).toolTip())
         cell(editor, 0, 3).setCheckState(Qt.CheckState.Unchecked)
         self.assertFalse(editor.drawing.letters[0].fillet)
-        self.assertEqual(editor.letters.letter_lines, [])
+        self.assertEqual(editor.values.letter_lines, [])
         editor.view.note_letter()
         self.assertTrue(editor.drawing.letters[-1].fillet)
 
@@ -1869,18 +1943,18 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         editor = self.editor
         editor.buttons["New Letter"].click()
         # [New Letter] edits the Name cell; on to the Value cell.
-        editor.letters.table.setCurrentCell(1, 2)
+        editor.values.table.setCurrentCell(1, 2)
         qt_app.process_events()
-        entry: object = editor.letters.table.focusWidget()
+        entry: object = editor.values.table.focusWidget()
         assert isinstance(entry, QLineEdit)
         entry.selectAll()
         QTest.keyClicks(entry, "6")
         self.assertEqual(editor.drawing.letters[0].default, "6")
-        self.assertIn("is not a value", editor.letters.problems.text())
+        self.assertIn("is not a value", editor.values.problems.text())
         self.assertIn("is not a value", entry.toolTip())
         QTest.keyClicks(entry, " in")
         self.assertEqual(editor.drawing.letters[0].default, "6 in")
-        self.assertEqual(editor.letters.letter_lines, [])
+        self.assertEqual(editor.values.letter_lines, [])
         self.assertEqual(entry.styleSheet(), "")
 
     def test_dimension_from_selection(self) -> None:
@@ -1890,7 +1964,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         view = self.editor.view
         button = self.editor.buttons["Dimension"]
         self.assertNotIn("Angle", self.editor.buttons)
-        view.select_edge(0)
+        view.select_edge(edge_of(view, 0))
         button.click()
         made = view.drawing.dimensions[-1]
         self.assertEqual((made.kind, made.start, made.end), (LENGTH, 0, 1))
@@ -1900,8 +1974,8 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         made = view.drawing.dimensions[-1]
         self.assertEqual((made.kind, {made.start, made.end}), (ANGLE, {0, 1}))
         view.clear_selection()
-        view.select_edge(X_AXIS)
-        view.select_edge(1)
+        view.select_edge(edge_of(view, X_AXIS))
+        view.select_edge(edge_of(view, 1))
         button.click()
         made = view.drawing.dimensions[-1]
         self.assertEqual(made.kind, ANGLE)
@@ -1989,7 +2063,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         view = self.editor.view
         view.snap_on = False
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
+        )
         view.drawing.revolve = True
         view.make_squares()
         view.fit()
@@ -2038,7 +2114,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(len(view.drawing.points), 5)
         x: float
         y: float
-        x, y = view.drawing.points[2]
+        x, y = view.drawing.points[-1]  # Made last (#799).
         self.assertAlmostEqual(x, 4.0, delta=0.1)
         self.assertAlmostEqual(y, 4.0, delta=0.1)
         self.assertEqual(len(view.mirror_squares), 5)
@@ -2058,7 +2134,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         wider than tall, from the mirrored one (#479)."""
 
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.0), (2.0, 8.0), (0, 8)]
+        )
         view.drawing.revolve = True
         view.make_squares()
         mirror = outline_editor.mirror_code
@@ -2096,7 +2174,9 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
 
         view = self.editor.view
         view.snap_on = False
-        view.drawing.points[:] = [(0.0, 0.0), (2.0, 1.0), (3.0, 8.0), (0, 8)]
+        view.drawing.reset_corners(
+            [(0.0, 0.0), (2.0, 1.0), (3.0, 8.0), (0, 8)]
+        )
         view.drawing.revolve = True
         view.drawing.dimensions[:] = [
             Dimension("D", DIAMETER, ORIGIN, 1, -2.0, 0.5)
@@ -2139,7 +2219,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         press reaches the circle (#483)."""
 
         view = self.editor.view
-        view.drawing.points[:] = [(0.0, 0.0), (4.0, 0.0), (4.0, 3.0)]
+        view.drawing.reset_corners([(0.0, 0.0), (4.0, 0.0), (4.0, 3.0)])
         view.drawing.dimensions[:] = [Dimension("L", LENGTH, 0, 1, 1.0)]
         view.make_squares()
         view.fit()
@@ -2239,7 +2319,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(len(view.drawing.points), 4)
         x: float
         y: float
-        x, y = view.drawing.points[1]
+        x, y = view.drawing.points[-1]  # Made last (#799).
         self.assertLess(y, -3.0)
         self.assertAlmostEqual(y / view.step(), round(y / view.step()))
         self.assertEqual(len(view.handles), 4)
@@ -2258,7 +2338,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         )
         editor: OutlineEditor = OutlineEditor(drawing)
         self.assertEqual(cell(editor, 0, 2).text(), "6 in")
-        self.assertIn("pi: 'pi' is kept", editor.letters.problems.text())
+        self.assertIn("pi: 'pi' is kept", editor.values.problems.text())
         editor.close()
         editor.deleteLater()
 
@@ -2313,6 +2393,305 @@ class FitTest(unittest.TestCase):
                 self.assertTrue(
                     seen.contains(measure.boundingRect()), measure.index
                 )
+        editor.deleteLater()
+        qt_app.process_events()
+
+
+class PolygonsTest(unittest.TestCase):
+    """A drawing's polygons follow its corners (`T.sa~6.11` #765)."""
+
+    def test_follow(self) -> None:
+        """A new corner joins the polygons with the edge it splits, a
+        deleted one leaves them, and [Undo] brings them back."""
+        drawing: Drawing = Drawing()
+        self.assertEqual(drawing.polygons[0].vertices, ["V1", "V2", "V3"])
+        other: Polygon = Polygon("cap", Role.SUPPORT, ["V3", "V2", "V1"])
+        drawing.polygons.append(other)
+        before: Snapshot = drawing.snapshot()
+        self.assertEqual(drawing.insert((2.0, 0.0), (1, 2)), 3)
+        self.assertEqual(
+            drawing.polygons[0].vertices, ["V1", "V2", "V4", "V3"]
+        )
+        self.assertEqual(other.vertices, ["V3", "V4", "V2", "V1"])
+        drawing.remove(0)
+        self.assertEqual(drawing.polygons[0].vertices, ["V2", "V4", "V3"])
+        self.assertEqual(other.vertices, ["V3", "V4", "V2"])
+        drawing.restore(before)
+        self.assertEqual(drawing.polygons[1].vertices, ["V3", "V2", "V1"])
+        self.assertEqual(drawing.names, ["V1", "V2", "V3"])
+
+    def test_shared_delete(self) -> None:
+        """A corner of two polygons is not deleted, naming them (#777);
+        nor one that would leave a polygon under 3 corners."""
+        # A square, and a triangle sharing three of its corners.
+        editor: OutlineEditor = OutlineEditor(
+            Drawing([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+        )
+        drawing: Drawing = editor.drawing
+        drawing.polygons.append(
+            Polygon("cap", Role.SUPPORT, ["V1", "V2", "V3"])
+        )
+        editor.view.delete(1)
+        self.assertEqual(
+            editor.view.message,
+            "V2 is a corner of outline and cap: a shared corner can not"
+            " be deleted.",
+        )
+        self.assertEqual(len(drawing.points), 4)
+
+        # Two triangles meeting at V3: deleting V1 would leave two.
+        drawing.points.append((2.0, 6.0))
+        drawing.fill_names()
+        drawing.polygons[:] = [
+            Polygon("left", Role.SUPPORT, ["V1", "V2", "V3"]),
+            Polygon("top", Role.SUPPORT, ["V3", "V4", "V5"]),
+        ]
+        editor.view.delete(0)
+        self.assertEqual(editor.view.message, "left needs at least 3 corners.")
+        editor.deleteLater()
+        qt_app.process_events()
+
+    def test_polygons_cross(self) -> None:
+        """Edges of two polygons that cross are found, each by its
+        corners (#797); a shared edge is not a crossing."""
+        points: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (2.0, 6.0),
+            (2.0, -2.0),
+        ]
+        self.assertEqual(crossings(points, [[0, 1, 2, 3], [3, 2, 4]]), [])
+        self.assertEqual(
+            crossings(points, [[0, 1, 2, 3], [4, 5, 2]]),
+            [((0, 1), (4, 5)), ((0, 1), (5, 2)), ((2, 3), (4, 5))],
+        )
+
+    def test_edge_handles(self) -> None:
+        """Every polygon's edges have a handle, a shared one once, and
+        a corner pulled out of an edge joins only that edge's polygons
+        (#797)."""
+        # A square, and a roof on its top edge V3-V4.
+        editor: OutlineEditor = OutlineEditor(
+            Drawing(
+                [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (2.0, 6.0)]
+            )
+        )
+        drawing: Drawing = editor.drawing
+        drawing.polygons[:] = [
+            Polygon("box", Role.SUPPORT, ["V1", "V2", "V3", "V4"]),
+            Polygon("roof", Role.OTHER, ["V4", "V3", "V5"]),
+        ]
+        editor.view.make_squares()
+        self.assertEqual(
+            sorted((each.index, each.end) for each in editor.view.handles),
+            [(0, 1), (1, 2), (2, 3), (2, 4), (3, 0), (4, 3)],
+        )
+        drawing.insert((3.0, 5.0), (2, 4))
+        self.assertEqual(
+            drawing.polygons[0].vertices, ["V1", "V2", "V3", "V4"]
+        )
+        self.assertEqual(
+            drawing.polygons[1].vertices, ["V4", "V3", "V6", "V5"]
+        )
+        editor.deleteLater()
+        qt_app.process_events()
+
+    def test_angle_edges(self) -> None:
+        """An angle measures the edges it names, `V5-V3` going the
+        way of its polygon not the pool's (#797), and is written and
+        read back so."""
+        # A square, and a roof on its top edge V3-V4.
+        drawing: Drawing = Drawing(
+            [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (2.0, 6.0)]
+        )
+        drawing.polygons[:] = [
+            Polygon("box", Role.SUPPORT, ["V1", "V2", "V3", "V4"]),
+            Polygon("roof", Role.OTHER, ["V4", "V3", "V5"]),
+        ]
+        drawing.letters.append(Letter("A", "Pitch", "45 deg", ""))
+        drawing.dimensions.append(
+            Dimension("A", ANGLE, 4, X_AXIS, start_to=3, rays=(1, 1))
+        )
+        text: str = outline_text(drawing)
+        self.assertIn('from = "V5-V4"', text)
+        back: Drawing = drawing_from_text(text)
+        self.assertEqual(back.dimensions[-1].start_to, 3)
+        arc: tuple[QPointF, float, float] | None = outline_editor.angle_arc(
+            back.points, back.dimensions[-1]
+        )
+        assert arc is not None
+        self.assertAlmostEqual(arc[1], -135.0)
+
+    def test_angle_from_handles(self) -> None:
+        """An angle made from a roof edge's handle and the X axis keeps
+        the edge it was given, `V5-V4` (#797)."""
+        editor: OutlineEditor = OutlineEditor(
+            Drawing(
+                [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (2.0, 6.0)]
+            )
+        )
+        drawing: Drawing = editor.drawing
+        drawing.polygons[:] = [
+            Polygon("box", Role.SUPPORT, ["V1", "V2", "V3", "V4"]),
+            Polygon("roof", Role.OTHER, ["V4", "V3", "V5"]),
+        ]
+        editor.view.make_squares()
+        editor.view.select_edge((4, 3))
+        editor.view.select_edge((X_AXIS, -1))
+        editor.view.angle_selected()
+        angle: Dimension = drawing.dimensions[-1]
+        self.assertEqual(
+            {(angle.start, angle.start_to), (angle.end, angle.end_to)},
+            {(4, 3), (X_AXIS, -1)},
+        )
+        self.assertEqual(drawing.letters[-1].default, "45 deg")
+        editor.deleteLater()
+        qt_app.process_events()
+
+    def test_made_last(self) -> None:
+        """A corner pulled out of an edge goes last in the file's
+        vertices, in the order made, and comes back the same, its
+        polygon and angle keeping their edges (#799)."""
+        drawing: Drawing = Drawing()
+        drawing.reset_corners([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+        drawing.letters.append(Letter("A", "Slope", "90 deg", ""))
+        drawing.dimensions.append(Dimension("A", ANGLE, 0, 1))
+        drawing.insert((2.0, -1.0), (0, 1))
+        text: str = outline_text(drawing)
+        self.assertLess(text.index('name = "V4"'), text.index('name = "V5"'))
+        self.assertIn('vertices = ["V1", "V5", "V2", "V3", "V4"]', text)
+        self.assertIn('from = "V1-V5"', text)
+        back: Drawing = drawing_from_text(text)
+        self.assertEqual(back.points, drawing.points)
+        self.assertEqual(back.polygons, drawing.polygons)
+        self.assertEqual(back.dimensions[0].start_to, 4)
+
+    def test_new_polygon(self) -> None:
+        """[New Polygon] makes an equilateral triangle outside the
+        chosen edge, sharing its corners (#772); two corners not an
+        edge are refused, saying why; [Undo] takes it back."""
+        editor: OutlineEditor = OutlineEditor(
+            Drawing([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+        )
+        view = editor.view
+        view.chosen_points = [0, 2]
+        editor.buttons["New Polygon"].click()
+        self.assertIn("not an edge", view.message)
+        self.assertEqual(len(editor.drawing.polygons), 1)
+        view.chosen_points = [0, 1]
+        editor.buttons["New Polygon"].click()
+        self.assertEqual(view.message, "")
+        self.assertEqual(
+            editor.drawing.polygons[1],
+            Polygon("P2", Role.OTHER, ["V2", "V1", "V5"]),
+        )
+        x: float
+        y: float
+        x, y = editor.drawing.points[4]
+        self.assertAlmostEqual(x, 2.0)
+        self.assertAlmostEqual(y, -4.0 * math.sqrt(3.0) / 2.0)
+        self.assertEqual(len(view.squares), 5)
+        self.assertEqual(editor.overlap_problem(), "")
+
+        # Overlapping: said in red in the status line (#790).
+        editor.drawing.points[4] = (2.0, 1.0)
+        editor.show_message()
+        self.assertIn("Polygons outline and P2 overlap", editor.status.text())
+        view.undo()
+        self.assertEqual(len(editor.drawing.polygons), 1)
+        self.assertEqual(len(editor.drawing.points), 4)
+        editor.deleteLater()
+        qt_app.process_events()
+
+    def test_scope_column(self) -> None:
+        """The letters table's last column shows each letter's scope;
+        typing a polygon's name or `internal` sets it, anything else
+        is refused, saying why (#783b)."""
+        drawing: Drawing = Drawing()
+        drawing.letters.append(Letter("W", "Width", "1 in", ""))
+        editor: OutlineEditor = OutlineEditor(drawing)
+        scope: int = len(outline_values.COLUMNS) - 1
+        self.assertEqual(cell(editor, 0, scope).text(), "outline")
+        editor.values.keep(1, scope, "outline")
+        editor.values.keep(1, scope, " internal ")
+        self.assertTrue(drawing.letters[0].internal)
+        editor.values.keep(1, scope, "outline")
+        self.assertEqual(cell(editor, 0, scope).text(), "outline")
+        editor.values.keep(1, scope, "shank")
+        self.assertIn("'shank' is not outline", editor.view.message)
+        editor.values.keep(1, scope, "outline")
+        drawing.polygons[0].name = "shank"
+        editor.values.keep(1, scope, "shank")
+        self.assertEqual(drawing.letters[0].polygon, "shank")
+        self.assertEqual(cell(editor, 0, scope).text(), "shank")
+        editor.deleteLater()
+        qt_app.process_events()
+
+    def test_polygons_tab(self) -> None:
+        """[Polygons] shows a row per polygon in place of the letters;
+        a name, a role and a material are kept, a bad or used name is
+        refused, and a polygon's letters follow its new name (#801)."""
+        drawing: Drawing = Drawing(
+            [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (2.0, 6.0)]
+        )
+        drawing.polygons[:] = [
+            Polygon("box", Role.SUPPORT, ["V1", "V2", "V3", "V4"]),
+            Polygon("roof", Role.OTHER, ["V4", "V3", "V5"]),
+        ]
+        drawing.letters.append(Letter("R", "Rise", "1 in", "", polygon="roof"))
+        editor: OutlineEditor = OutlineEditor(drawing)
+        values: outline_values.ValuesTable = editor.values
+        table: outline_values.PolygonsTable = values.polygon_table
+        values.tabs.setCurrentIndex(outline_values.POLYGONS_TAB)
+        self.assertFalse(values.table.isVisibleTo(values))
+        self.assertTrue(table.isVisibleTo(values))
+        self.assertEqual(table.rowCount(), 2)
+        corners: QTableWidgetItem | None = table.item(1, 3)
+        assert corners is not None
+        self.assertEqual(corners.text(), "V4 V3 V5")
+
+        # The role chosen, the material and the name typed.
+        role: QWidget | None = table.cellWidget(1, 1)
+        assert isinstance(role, QComboBox)
+        role.setCurrentText("cutting")
+        self.assertEqual(drawing.polygons[1].role, Role.CUTTING)
+        table.setItem(1, 2, QTableWidgetItem("hss"))
+        self.assertEqual(drawing.polygons[1].material, "hss")
+        table.setItem(1, 0, QTableWidgetItem("box"))
+        self.assertIn("'box' is not a name", editor.view.message)
+        self.assertEqual(drawing.polygons[1].name, "roof")
+        table.setItem(1, 0, QTableWidgetItem("cap"))
+        self.assertEqual(drawing.polygons[1].name, "cap")
+        self.assertEqual(drawing.letters[-1].polygon, "cap")
+        values.tabs.setCurrentIndex(outline_values.DIMENSIONS_TAB)
+        self.assertTrue(values.table.isVisibleTo(values))
+        editor.deleteLater()
+        qt_app.process_events()
+
+    def test_shared_fillet(self) -> None:
+        """A corner of two polygons is not filleted, saying why (#798);
+        one of only one polygon is."""
+        # A square, and a triangle sharing three of its corners.
+        editor: OutlineEditor = OutlineEditor(
+            Drawing([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)])
+        )
+        drawing: Drawing = editor.drawing
+        drawing.letters.append(Letter("R", "Radius", "1 mm", ""))
+        drawing.polygons.append(
+            Polygon("cap", Role.SUPPORT, ["V1", "V2", "V3"])
+        )
+        editor.view.set_fillets([0], "R")
+        self.assertIn("V1: a corner of more than one", editor.view.message)
+        self.assertFalse(
+            any(each.kind == RADIUS for each in drawing.dimensions)
+        )
+        editor.view.set_fillets([3], "R")
+        self.assertEqual(editor.view.message, "")
+        self.assertTrue(
+            any(each.kind == RADIUS for each in drawing.dimensions)
+        )
         editor.deleteLater()
         qt_app.process_events()
 

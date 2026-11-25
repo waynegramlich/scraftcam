@@ -358,7 +358,13 @@ def _breaks(
         for side in strip(outline.points, hide):
             at: float = side + shift_at(along, side)
             spans: list[tuple[float, float]] = minus(
-                inside_spans(outline.points, hide.axis, side, outline.revolve),
+                inside_spans(
+                    outline.points,
+                    hide.axis,
+                    side,
+                    outline.revolve,
+                    outline.loops(),
+                ),
                 holes,
             )
             start: float

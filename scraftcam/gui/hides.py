@@ -143,9 +143,11 @@ def inside_spans(
     axis: int,
     at: float,
     mirror: bool = False,
+    loops: list[list[int]] | None = None,
 ) -> list[tuple[float, float]]:
     """Return where a line across the part is inside the outline: a
-    long break line runs only there, edge to edge (#185).
+    long break line runs only there, edge to edge (#185); inside any
+    of its polygons (`T.sa~6.11` #765).
 
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners.
@@ -154,14 +156,20 @@ def inside_spans(
     * `at` (`float`): Where the line is, along the axis.
     * `mirror` (`bool`): Whether the outline is revolved, its mirror
       half counted too.
+    * `loops` (`list[list[int]] | None`): Each polygon's corners;
+      `None` for one through them all, in order.
 
     Returns:
     * (`list[tuple[float, float]]`): The stretches inside, across the
       axis, in order, joined where they touch.
     """
-    outlines: list[list[tuple[float, float]]] = [points]
+    if loops is None:
+        loops = [list(range(len(points)))]
+    outlines: list[list[tuple[float, float]]] = [
+        [points[corner] for corner in loop] for loop in loops
+    ]
     if mirror:
-        outlines.append([(-x, y) for x, y in points])
+        outlines += [[(-x, y) for x, y in each] for each in outlines]
     spans: list[tuple[float, float]] = []
     outline: list[tuple[float, float]]
     for outline in outlines:

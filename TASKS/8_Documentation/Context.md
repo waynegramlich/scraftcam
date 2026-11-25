@@ -39,3 +39,7 @@ numbers are shared by every task; the next is in
 * `T.sa~6.11` #S1: outline files are format 5, corners named
   `[[vertices]]`; older files are refused (#773).  The [Draw] tab's
   "Vertex:" field renames the chosen corner (#795).
+* `T.sa~6.11` #S2: several polygons per outline ([New Polygon],
+  overlaps refused, shared corners), letters' scopes (outline,
+  internal, a polygon's); the letters' table is now the Values
+  table, with a [Polygons] tab.

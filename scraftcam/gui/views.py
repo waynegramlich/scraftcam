@@ -58,7 +58,7 @@ from .machines import (
     is_machines_directory,
     machine_item,
 )
-from .outline_letters import ToolValues
+from .outline_values import ToolValues
 from .templates import (
     FollowUp,
     FollowUpView,
@@ -684,12 +684,12 @@ class Panel(QFrame):
         """
         self.editing = editing
         tool: ToolValues | None = (
-            None if self.outline is None else self.outline.letters.tool
+            None if self.outline is None else self.outline.values.tool
         )
         if tool is not None and self.outline is not None:
             # A tool's values may be typed in; its outline, never.
             tool.editing = editing
-            self.outline.letters.show_rows()
+            self.outline.values.show_rows()
         row: Row
         for row in self.rows:
             entry: Entry | None = self.entries.get(row.schema.key)

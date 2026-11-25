@@ -33,8 +33,9 @@ ANGLE_LIMITS: tuple[float, float] = (0.1, 179.9)
 
 
 # Class `Letter`:
+# One attribute per field of a letter's table in its file.
 @dataclass(slots=True)
-class Letter:
+class Letter:  # pylint: disable=too-many-instance-attributes
     """One letter of an outline, and what it means.
 
     Attributes:
@@ -51,9 +52,16 @@ class Letter:
     * `key` (`str`): The field of a tool of the outline's kind that
       this letter is (`diameter`), which scraftcam's own code reads,
       or "" (`T.toasl~6.8` #720; keyword only).
+    * `polygon` (`str`): The polygon whose letter it is, seen only by
+      that polygon's corners and dimensions; "" for the outline's own
+      (`T.sa~6.11` #783b; keyword only).
+    * `internal` (`bool`): Whether an outline's own letter is kept
+      inside it, not set by a tool or an assembly; a polygon's letter
+      is always internal (#783b2; keyword only).
 
     Constructor:
-    * `Letter(letter, name, default, help, fillet, formula, key="")`
+    * `Letter(letter, name, default, help, fillet, formula, key="",
+      polygon="", internal=False)`
     """
 
     # Constructor arguments:
@@ -64,6 +72,8 @@ class Letter:
     fillet: bool = field(init=True, default=False)
     formula: str = field(init=True, default="")
     key: str = field(init=True, default="", kw_only=True)
+    polygon: str = field(init=True, default="", kw_only=True)
+    internal: bool = field(init=True, default=False, kw_only=True)
 
 
 # Function `value_problem()`:

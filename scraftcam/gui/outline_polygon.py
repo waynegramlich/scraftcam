@@ -114,8 +114,13 @@ def _polygon(outline: Outline, name: str) -> RoundedPolygon:
     label: str = name or "outline"
     if outline.holes:
         raise ValueError(f"{label}: holes are not made into solids yet (#290)")
+    if len(outline.polygons) > 1:
+        raise ValueError(
+            f"{label}: several polygons are not made into solids yet"
+            " (`T.sa~6.11` #S4)"
+        )
     corners: list[tuple[float, float]] | None = real_corners(
-        outline.points, outline.letters, outline.dimensions
+        outline.points, outline.letters, outline.dimensions, outline.loops()
     )
     if corners is None:
         raise ValueError(

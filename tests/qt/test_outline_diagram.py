@@ -26,6 +26,8 @@ from scraftcam.gui.outline_file import (
     PLAIN,
     Hole,
     Outline,
+    Polygon,
+    Role,
     outline_from_text,
 )
 from scraftcam.shops import EXAMPLE_SHOP
@@ -486,6 +488,46 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
         writes good SVG."""
         outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
         ET.fromstring(svg(outline_sheet(outline)))
+
+
+class PolygonStrokesTest(unittest.TestCase):
+    """Several polygons draw as several strokes (`T.sa~6.11` #765)."""
+
+    def test_two_squares(self) -> None:
+        """Two squares sharing an edge are two thick closed strokes,
+        and a fillet rounds its corner between that corner's own
+        polygon's neighbours, not the pool's."""
+        # V1-V4 the left square, V3, V4, V5, V6 the right one.
+        outline: Outline = Outline(
+            [
+                (0.0, 0.0),
+                (0.0, 2.0),
+                (2.0, 2.0),
+                (2.0, 0.0),
+                (4.0, 0.0),
+                (4.0, 2.0),
+            ],
+            [Letter("R", "Radius", "0.5 mm", "")],
+            [Dimension("R", RADIUS, 4, 4)],
+            polygons=[
+                Polygon("left", Role.SUPPORT, ["V1", "V2", "V3", "V4"]),
+                Polygon("right", Role.CUTTING, ["V4", "V3", "V6", "V5"]),
+            ],
+        )
+        self.assertEqual(outline.loops(), [[0, 1, 2, 3], [3, 2, 5, 4]])
+        self.assertEqual(outline.neighbours(4), (5, 3))
+        fillets: dict[int, outline_diagram.Fillet] = (
+            outline_diagram.fillet_arcs(outline)
+        )
+        strokes: list[Stroke] = outline_diagram.outline_strokes(
+            outline, fillets
+        )
+        self.assertEqual(len(strokes), 2)
+        self.assertTrue(all(each.weight is Weight.THICK for each in strokes))
+        self.assertEqual(len(strokes[0].segments), 4)
+        self.assertTrue(
+            any(isinstance(each, ArcSegment) for each in strokes[1].segments)
+        )
 
 
 if __name__ == "__main__":

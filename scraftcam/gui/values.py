@@ -17,7 +17,17 @@ import re
 from collections.abc import Callable
 
 from ..model import MM_PER, Angle, Length
-from .dimensions import ANGLE, RADIUS, Dimension, Solution, solve
+from .dimensions import (
+    ANGLE,
+    RADIUS,
+    Dimension,
+    Edge,
+    Loops,
+    Solution,
+    edges_at,
+    ring_edges,
+    solve,
+)
 from .letters import ANGLE_UNITS, Letter, use_problem, value_problem
 
 # The functions a formula may use, and the units it may name.
@@ -325,6 +335,7 @@ def real_corners(
     points: list[tuple[float, float]],
     letters: list[Letter],
     dimensions: list[Dimension],
+    loops: Loops = None,
 ) -> list[tuple[float, float]] | None:
     """Return the corners at their real places (mm), from the letters.
 
@@ -332,12 +343,14 @@ def real_corners(
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
     * `letters` (`list[Letter]`): The letters.
     * `dimensions` (`list[Dimension]`): The dimensions.
+    * `loops` (`Loops`): Each polygon's corners (`T.sa~6.11` #765),
+      or `None` for one ring through them all.
 
     Returns:
     * (`list[tuple[float, float]] | None`): The corners; `None` while a
       corner is not dimensioned or a value is bad.
     """
-    solution: Solution = solve(points, dimensions)
+    solution: Solution = solve(points, dimensions, loops)
     if solution.missing(len(points)):
         return None
     values: dict[str, float] = letter_values(letters)
@@ -358,6 +371,7 @@ def fillet_problems(
     points: list[tuple[float, float]],
     letters: list[Letter],
     dimensions: list[Dimension],
+    loops: Loops = None,
 ) -> dict[int, str]:
     """Return each fillet too big for an edge, with what is wrong in
     the fillet letter's unit (#127).
@@ -366,29 +380,30 @@ def fillet_problems(
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
     * `letters` (`list[Letter]`): The letters.
     * `dimensions` (`list[Dimension]`): The dimensions.
+    * `loops` (`Loops`): Each polygon's corners (`T.sa~6.11` #765),
+      or `None` for one ring through them all.
 
     Returns:
     * (`dict[int, str]`): By corner, the problem; empty while the real
       corners cannot be worked out.
     """
     real: list[tuple[float, float]] | None = real_corners(
-        points, letters, dimensions
+        points, letters, dimensions, loops
     )
     if real is None:
         return {}
     fillets: dict[int, str]
     reach: dict[int, float]
-    fillets, reach = _fillets(real, letters, dimensions)
+    fillets, reach = _fillets(real, letters, dimensions, loops)
     units: dict[str, str] = {
         letter.letter: letter.default.split()[-1] for letter in letters
     }
     problems: dict[int, str] = {}
     corner: int
-    here: tuple[float, float]
-    for corner, here in enumerate(real):
-        after: int = (corner + 1) % len(real)
+    after: int
+    for corner, after in ring_edges(len(real), loops):
         need: float = reach.get(corner, 0.0) + reach.get(after, 0.0)
-        edge: float = math.dist(here, real[after])
+        edge: float = math.dist(real[corner], real[after])
         if need <= edge + FIT_SLACK:
             continue
         ends: list[int] = [end for end in (corner, after) if end in fillets]
@@ -406,6 +421,7 @@ def _fillets(
     real: list[tuple[float, float]],
     letters: list[Letter],
     dimensions: list[Dimension],
+    loops: Loops,
 ) -> tuple[dict[int, str], dict[int, float]]:
     """Return each fillet's letter, and how far from its corner it
     meets its edges.
@@ -414,6 +430,7 @@ def _fillets(
     * `real` (`list[tuple[float, float]]`): The real corners (mm).
     * `letters` (`list[Letter]`): The letters.
     * `dimensions` (`list[Dimension]`): The dimensions.
+    * `loops` (`Loops`): Each polygon's corners, or `None`.
 
     Returns:
     * (`tuple[dict[int, str], dict[int, float]]`): By corner, its
@@ -426,7 +443,7 @@ def _fillets(
         if dimension.kind == RADIUS and dimension.letter in values
     }
     return fillets, {
-        corner: _reach(real, corner, values[letter])
+        corner: _reach(real, corner, values[letter], loops)
         for corner, letter in fillets.items()
     }
 
@@ -455,21 +472,33 @@ def _too_big(
 
 # Function `_reach()`:
 def _reach(
-    real: list[tuple[float, float]], corner: int, radius: float
+    real: list[tuple[float, float]],
+    corner: int,
+    radius: float,
+    loops: Loops,
 ) -> float:
-    """Return how far from its corner a fillet meets its edges.
+    """Return how far from its corner a fillet meets its edges, its
+    neighbours those of its polygon (a filleted corner is in one,
+    #798).
 
     Arguments:
     * `real` (`list[tuple[float, float]]`): The real corners (mm).
     * `corner` (`int`): The rounded corner.
     * `radius` (`float`): Its radius (mm).
+    * `loops` (`Loops`): Each polygon's corners, or `None`.
 
     Returns:
     * (`float`): The distance (mm); 0 for a straight corner.
     """
+    edges: list[Edge] = edges_at(corner, len(real), loops)
+    if len(edges) != 2:
+        return 0.0
+    ends: list[int] = [
+        edge[0] if edge[1] == corner else edge[1] for edge in edges
+    ]
     here: tuple[float, float] = real[corner]
-    back: tuple[float, float] = real[corner - 1]
-    ahead: tuple[float, float] = real[(corner + 1) % len(real)]
+    back: tuple[float, float] = real[ends[0]]
+    ahead: tuple[float, float] = real[ends[1]]
     first: float = math.atan2(back[1] - here[1], back[0] - here[0])
     second: float = math.atan2(ahead[1] - here[1], ahead[0] - here[0])
     half: float = abs((second - first + math.pi) % (2 * math.pi) - math.pi) / 2
@@ -483,6 +512,7 @@ def real_coordinates(
     points: list[tuple[float, float]],
     letters: list[Letter],
     dimensions: list[Dimension],
+    loops: Loops = None,
 ) -> tuple[dict[int, float], dict[int, float]] | None:
     """Return each coordinate the dimensions fix, at its real place
     (mm), corners not fully fixed included (#153).
@@ -491,12 +521,14 @@ def real_coordinates(
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
     * `letters` (`list[Letter]`): The letters.
     * `dimensions` (`list[Dimension]`): The dimensions.
+    * `loops` (`Loops`): Each polygon's corners (`T.sa~6.11` #765),
+      or `None` for one ring through them all.
 
     Returns:
     * (`tuple[dict[int, float], dict[int, float]] | None`): X and Y
       by corner; `None` when a formula cannot be worked out (#154).
     """
-    solution: Solution = solve(points, dimensions)
+    solution: Solution = solve(points, dimensions, loops)
     values: dict[str, float] = letter_values(letters)
     try:
         return (
@@ -573,6 +605,7 @@ def placed_corners(
     letters: list[Letter],
     dimensions: list[Dimension],
     scale: float = 0.0,
+    loops: Loops = None,
 ) -> tuple[list[tuple[float, float]], float]:
     """Return the corners where the letters' values put them, to scale
     (#148, #153, #299): a coordinate the dimensions do not fix stays
@@ -585,6 +618,8 @@ def placed_corners(
     * `dimensions` (`list[Dimension]`): The dimensions.
     * `scale` (`float`):
       Drawing steps per mm; 0 picks one (`first_scale()`).
+    * `loops` (`Loops`): Each polygon's corners (`T.sa~6.11` #765),
+      or `None` for one ring through them all.
 
     Returns:
     * (`tuple[list[tuple[float, float]], float]`): The corners (a new
@@ -594,7 +629,7 @@ def placed_corners(
     if not dimensions or letters_bad(letters, dimensions):
         return list(points), scale
     real: tuple[dict[int, float], dict[int, float]] | None = real_coordinates(
-        points, letters, dimensions
+        points, letters, dimensions, loops
     )
     if real is None:
         return list(points), scale
@@ -605,7 +640,7 @@ def placed_corners(
 
     # Each fixed coordinate to scale, unless the edges would cross.
     placed: list[tuple[float, float]] = _to_scale(points, real, scale)
-    if crosses(placed):
+    if crosses(placed, loops):
         return list(points), scale
     return placed, scale
 
@@ -615,7 +650,8 @@ def values_cross(
     points: list[tuple[float, float]],
     letters: list[Letter],
     dimensions: list[Dimension],
-) -> list[tuple[int, int]]:
+    loops: list[list[int]] | None = None,
+) -> list[tuple[Edge, Edge]]:
     """Return the edges that cross when the letters' values place the
     corners (#457): a template is drawn as drawn, so its defaults are
     checked here instead of by moving its corners.
@@ -624,23 +660,25 @@ def values_cross(
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
     * `letters` (`list[Letter]`): The letters.
     * `dimensions` (`list[Dimension]`): The dimensions.
+    * `loops` (`list[list[int]] | None`): Each polygon's corners;
+      `None` for one through them all.
 
     Returns:
-    * (`list[tuple[int, int]]`): Each pair of edges that cross (none
-      when the values cannot place the corners at all).
+    * (`list[tuple[Edge, Edge]]`): Each pair of edges that cross
+      (none when the values cannot place the corners at all).
     """
     # Nothing to check without good values and fixed coordinates.
     if not dimensions or letters_bad(letters, dimensions):
         return []
     real: tuple[dict[int, float], dict[int, float]] | None = real_coordinates(
-        points, letters, dimensions
+        points, letters, dimensions, loops
     )
     if real is None:
         return []
     scale: float = first_scale(points, real)
     if scale <= 0.0:
         return []
-    return crossings(_to_scale(points, real, scale))
+    return crossings(_to_scale(points, real, scale), loops)
 
 
 # Function `_to_scale()`:
@@ -670,46 +708,165 @@ def _to_scale(
 
 
 # Function `crosses()`:
-def crosses(points: list[tuple[float, float]]) -> bool:
+def crosses(
+    points: list[tuple[float, float]],
+    loops: list[list[int]] | None = None,
+) -> bool:
     """Return whether an outline's edges cross (not at shared corners).
 
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners.
+    * `loops` (`list[list[int]] | None`): Each polygon's corners;
+      `None` for one through them all.
 
     Returns:
     * (`bool`): Whether two edges not side by side cross.
     """
-    return bool(crossings(points))
+    return bool(crossings(points, loops))
 
 
 # Function `crossings()`:
-def crossings(points: list[tuple[float, float]]) -> list[tuple[int, int]]:
-    """Return each pair of edges that cross (#242), not counting side
-    by side ones meeting at their shared corner.
+def crossings(
+    points: list[tuple[float, float]],
+    loops: list[list[int]] | None = None,
+) -> list[tuple[Edge, Edge]]:
+    """Return each pair of edges that cross (#242), of one polygon or
+    two (`T.sa~6.11` #765), not counting edges meeting at a corner.
 
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners.
+    * `loops` (`list[list[int]] | None`): Each polygon's corners
+      (`Outline.loops()`); `None` for one through them all, in order.
 
     Returns:
-    * (`list[tuple[int, int]]`): The pairs, each edge by the corner it
-      leaves, the lower first.
+    * (`list[tuple[Edge, Edge]]`): The pairs, each edge by its two
+      corners (#797), in the polygons' order.
     """
-    count: int = len(points)
+    # Every edge once (a shared one is the same edge), in order.
+    edges: list[Edge] = ring_edges(len(points), loops)
+
+    # Each pair not meeting at a corner.
+    pairs: list[tuple[Edge, Edge]] = []
+    first: int
+    one: Edge
+    for first, one in enumerate(edges):
+        other: Edge
+        for other in edges[first + 1 :]:
+            if set(one) & set(other):
+                continue
+            if _segments_cross(
+                points[one[0]],
+                points[one[1]],
+                points[other[0]],
+                points[other[1]],
+            ):
+                pairs.append((one, other))
+    return pairs
+
+
+# Function `overlaps()`:
+def overlaps(
+    points: list[tuple[float, float]], loops: list[list[int]]
+) -> list[tuple[int, int]]:
+    """Return each pair of polygons that overlap (`T.sa~6.11` #790):
+    their edges cross, or a corner of one, not shared, lies inside
+    the other.  Polygons may share corners and edges, side by side.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `loops` (`list[list[int]]`): Each polygon's corners.
+
+    Returns:
+    * (`list[tuple[int, int]]`): The pairs, by polygon index, the
+      lower first.
+    """
     pairs: list[tuple[int, int]] = []
     first: int
-    for first in range(count):
+    one: list[int]
+    for first, one in enumerate(loops):
         second: int
-        for second in range(first + 2, count):
-            if first == 0 and second == count - 1:
-                continue  # Side by side, around the end.
-            if _segments_cross(
-                points[first],
-                points[(first + 1) % count],
-                points[second],
-                points[(second + 1) % count],
+        for second in range(first + 1, len(loops)):
+            other: list[int] = loops[second]
+            if crossings(points, [one, other]) or any(
+                _within(points, inner, outer)
+                for inner, outer in ((one, other), (other, one))
             ):
                 pairs.append((first, second))
     return pairs
+
+
+# Function `_within()`:
+def _within(
+    points: list[tuple[float, float]], inner: list[int], outer: list[int]
+) -> bool:
+    """Return whether part of one polygon lies inside another: a
+    corner not shared, or the middle of an edge not shared (#790).
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `inner` (`list[int]`): The polygon that may be inside.
+    * `outer` (`list[int]`): The other.
+
+    Returns:
+    * (`bool`): Whether any of it is strictly inside.
+    """
+    shared: set[frozenset[int]] = {
+        frozenset(edge) for edge in ring_edges(len(points), [outer])
+    }
+    middles: list[tuple[float, float]] = [
+        (
+            (points[edge[0]][0] + points[edge[1]][0]) / 2.0,
+            (points[edge[0]][1] + points[edge[1]][1]) / 2.0,
+        )
+        for edge in ring_edges(len(points), [inner])
+        if frozenset(edge) not in shared
+    ]
+    loose: list[tuple[float, float]] = [
+        points[corner] for corner in inner if corner not in outer
+    ]
+    return any(_inside(point, points, outer) for point in loose + middles)
+
+
+# Function `_inside()`:
+def _inside(
+    point: tuple[float, float],
+    points: list[tuple[float, float]],
+    loop: list[int],
+) -> bool:
+    """Return whether a point is inside a polygon, not on its edges
+    (even-odd).
+
+    Arguments:
+    * `point` (`tuple[float, float]`): The point.
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `loop` (`list[int]`): The polygon's corners.
+
+    Returns:
+    * (`bool`): Whether it is strictly inside.
+    """
+    x: float
+    y: float
+    x, y = point
+    inside: bool = False
+    spot: int
+    corner: int
+    for spot, corner in enumerate(loop):
+        ax: float
+        ay: float
+        bx: float
+        by: float
+        ax, ay = points[corner]
+        bx, by = points[loop[(spot + 1) % len(loop)]]
+        # On the edge: not inside.
+        if (
+            abs((bx - ax) * (y - ay) - (by - ay) * (x - ax)) <= 1e-9
+            and min(ax, bx) - 1e-9 <= x <= max(ax, bx) + 1e-9
+            and min(ay, by) - 1e-9 <= y <= max(ay, by) + 1e-9
+        ):
+            return False
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
 
 
 # Function `_segments_cross()`:

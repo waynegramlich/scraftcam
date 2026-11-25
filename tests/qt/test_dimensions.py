@@ -1,6 +1,7 @@
 """Tests of `scraftcam.gui.dimensions`: chains of dimensions."""
 
 import unittest
+from dataclasses import replace
 
 from scraftcam.gui.dimensions import (
     ANGLE,
@@ -9,8 +10,10 @@ from scraftcam.gui.dimensions import (
     LENGTH,
     ORIGIN,
     VERTICAL,
+    X_AXIS,
     Y_AXIS,
     Dimension,
+    Edge,
     Formula,
     Solution,
     _angle_way,
@@ -155,6 +158,38 @@ class DimensionsTest(unittest.TestCase):
         # Without P, corner 2 is known in neither coordinate: it waits.
         self.assertNotIn(2, marked(triangle, dimensions[:2]).y)
 
+    def test_polygons(self) -> None:
+        """An angle on a second polygon's edge, `V3-V5`, not the next
+        corner in `points`, places its far corner (`T.sa~6.11` #797);
+        taken as the next in `points` it is one too many instead."""
+        # A 4 x 4 box from the origin, a roof on its top edge.
+        house: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (2.0, 6.0),
+        ]
+        loops: list[list[int]] = [[0, 1, 2, 3], [3, 2, 4]]
+        dimensions: list[Dimension] = [
+            Dimension("", VERTICAL, ORIGIN, 0),
+            Dimension("", HORIZONTAL, ORIGIN, 0),
+            Dimension("W", HORIZONTAL, ORIGIN, 1),
+            Dimension("", HORIZONTAL, 1, 2),
+            Dimension("H", VERTICAL, ORIGIN, 2),
+            Dimension("", VERTICAL, 2, 3),
+            Dimension("", VERTICAL, 0, 1),
+            Dimension("", HORIZONTAL, 3, 0),
+            Dimension("P", HORIZONTAL, ORIGIN, 4),
+            Dimension("A", ANGLE, X_AXIS, 2, rays=(-1, 1), end_to=4),
+        ]
+        solution = solve(house, dimensions, loops)
+        self.assertEqual(solution.missing(5), [])
+        self.assertIn("tan(", str(solution.y[4]))
+        self.assertEqual(solution.extra, [])
+        dimensions[-1] = replace(dimensions[-1], end_to=-1)
+        self.assertNotIn(4, solve(house, dimensions, loops).y)
+
     def test_angle(self) -> None:
         """Half a drill point: an angle from the Y axis directs the tip
         edge, and the shoulder's X then gives its Y."""
@@ -176,7 +211,7 @@ class DimensionsTest(unittest.TestCase):
 
         # The direction carried on to a second angle; a third between
         # edges already directed is one too many (#230).
-        ways: dict[int, str] = {Y_AXIS: "90 deg"}
+        ways: dict[Edge, str] = {(Y_AXIS, -1): "90 deg"}
         known: tuple[dict[int, Formula], dict[int, Formula]] = ({}, {})
         extra: list[int] = []
 
@@ -185,7 +220,8 @@ class DimensionsTest(unittest.TestCase):
             return _angle_way(half, dimension, ways, known, extra, index)
 
         self.assertTrue(way(Dimension("B", ANGLE, Y_AXIS, 1, rays=(-1, 1)), 0))
-        self.assertEqual(ways[1], "90 deg + B + 180 deg")
+        self.assertEqual(ways[(1, 2)], "90 deg + B + 180 deg")
+        self.assertEqual(ways[(2, 1)], "90 deg + B + 180 deg + 180 deg")
         self.assertEqual(extra, [])
         self.assertTrue(way(Dimension("C", ANGLE, Y_AXIS, 1, rays=(1, 1)), 1))
         self.assertEqual(extra, [1])
@@ -226,11 +262,12 @@ class DimensionsTest(unittest.TestCase):
         marks: list[Dimension] = drawn_marks(square)
         self.assertTrue(all(is_mark(mark) for mark in marks))
         self.assertEqual(
-            [mark_edge(mark, 4) for mark in marks], [-1] * 4 + [1, 2]
+            [mark_edge(mark, 4) for mark in marks],
+            [None] * 4 + [(1, 2), (2, 3)],
         )
         self.assertEqual(solve(square, given + marks).missing(4), [])
         self.assertFalse(is_mark(given[0]))
-        self.assertEqual(mark_edge(given[0], 4), -1)
+        self.assertIsNone(mark_edge(given[0], 4))
 
         # A level edge directs a slanted one through an angle.
         slant: list[tuple[float, float]] = [

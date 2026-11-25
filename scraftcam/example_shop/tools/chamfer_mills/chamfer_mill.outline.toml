@@ -1,5 +1,5 @@
 kind = "outline"
-version = 5
+version = 6
 revolve = true
 
 [letters.D]
@@ -60,6 +60,11 @@ at = [3.0, 40.0]
 [[vertices]]
 name = "V6"
 at = [0.0, 40.0]
+
+[[polygons]]
+name = "outline"
+role = "other"
+vertices = ["V1", "V2", "V3", "V4", "V5", "V6"]
 
 [[dimensions]]
 letter = ""
@@ -136,7 +141,7 @@ along = 0.5
 [[dimensions]]
 letter = "HA"
 kind = "angle"
-from = "V2"
+from = "V2-V3"
 to = "y_axis"
 offset = 5.0
 along = 0.5

@@ -9,7 +9,13 @@ from pathlib import Path
 from scraftcam.geometry import Corner
 from scraftcam.gui.dimensions import RADIUS, Dimension
 from scraftcam.gui.letters import Letter
-from scraftcam.gui.outline_file import Hole, Outline, outline_from_text
+from scraftcam.gui.outline_file import (
+    Hole,
+    Outline,
+    Polygon,
+    Role,
+    outline_from_text,
+)
 from scraftcam.gui.outline_polygon import (
     outline_polygon,
     outline_revolved,
@@ -99,10 +105,19 @@ class TestOutlinePolygon(unittest.TestCase):
             polygon_from_file(DRILL)
 
     def test_refused(self) -> None:
-        """Holes, and corners left undimensioned, are refused."""
+        """Holes, several polygons, and corners left undimensioned,
+        are refused."""
         outline: Outline = flat_drill()
         outline.holes = [Hole("plain", (0.0, 0.0), "A")]
         with self.assertRaisesRegex(ValueError, "holes"):
+            outline_polygon(outline)
+
+        # Several polygons wait for `T.sa~6.11` #S4.
+        outline = flat_drill()
+        outline.polygons.append(
+            Polygon("cap", Role.OTHER, list(outline.names[:3]))
+        )
+        with self.assertRaisesRegex(ValueError, "several polygons"):
             outline_polygon(outline)
         outline = flat_drill()
         outline.dimensions = []

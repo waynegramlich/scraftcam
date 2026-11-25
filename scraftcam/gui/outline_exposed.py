@@ -135,13 +135,15 @@ def state(editor: str) -> str:
             + "]",
             f"chosen dimensions: {view.chosen_dimensions}",
             "chosen edges: ["
-            + ", ".join(drawing.names[edge] for edge in view.chosen_edges)
+            + ", ".join(
+                _edge_name(drawing, edge) for edge in view.chosen_edges
+            )
             + "]",
             "problems:",
         )
     )
     problem: str
-    for problem in shown.letters.problems.text().splitlines():
+    for problem in shown.values.problems.text().splitlines():
         lines.append(f"  {problem}")
     lines.append(f"undo depth: {len(view.history.done)}")
     return "\n".join(lines)
@@ -225,6 +227,23 @@ def _spot(value: float) -> str:
     * (`str`): it, whole numbers without `.0`.
     """
     return str(int(value)) if float(value).is_integer() else repr(value)
+
+
+def _edge_name(drawing: Drawing, edge: tuple[int, int]) -> str:
+    """Give an edge's name, `V1-V2`, or an axis's (#797).
+
+    Arguments:
+    * `drawing` (`Drawing`):
+        The drawing, for its corners' names.
+    * `edge` (`tuple[int, int]`):
+        The corners it leaves and reaches, or an axis and -1.
+
+    Returns:
+    * (`str`): Its name.
+    """
+    if edge[0] < 0:
+        return drawing.name(edge[0])
+    return f"{drawing.names[edge[0]]}-{drawing.names[edge[1]]}"
 
 
 def _code_name(drawing: Drawing, code: int) -> str:

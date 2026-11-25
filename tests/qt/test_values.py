@@ -19,6 +19,7 @@ from scraftcam.gui.values import (
     formula_problem,
     letter_values,
     letters_bad,
+    overlaps,
     placed_corners,
     real_corners,
     refresh_formulas,
@@ -163,9 +164,10 @@ class ValuesTest(unittest.TestCase):
             ]
 
         self.assertEqual(values_cross(notched, named("1 in"), sizes), [])
+        # Each pair by the corners its edges leave (one polygon).
         crossed: set[tuple[int, int]] = {
-            (min(pair), max(pair))
-            for pair in values_cross(notched, named("5 in"), sizes)
+            (min(one[0], other[0]), max(one[0], other[0]))
+            for one, other in values_cross(notched, named("5 in"), sizes)
         }
         self.assertLessEqual({(1, 3), (1, 4)}, crossed)
         self.assertEqual(values_cross(notched, [], sizes), [])
@@ -222,6 +224,29 @@ class TestFormulas(unittest.TestCase):
         refresh_formulas(found)
         self.assertEqual(found[2].default, "")
         self.assertNotIn("HPA", letter_values(found))
+
+
+class OverlapsTest(unittest.TestCase):
+    """Polygons may touch, never overlap (`T.sa~6.11` #790)."""
+
+    def test_overlaps(self) -> None:
+        """Side by side, sharing an edge, is fine; a triangle through
+        three of a square's corners, a corner poking in, and crossing
+        edges overlap."""
+        points: list[tuple[float, float]] = [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (2.0, 6.0),
+            (2.0, 2.0),
+            (6.0, 2.0),
+        ]
+        square: list[int] = [0, 1, 2, 3]
+        self.assertEqual(overlaps(points, [square, [3, 2, 4]]), [])
+        self.assertEqual(overlaps(points, [square, [0, 1, 2]]), [(0, 1)])
+        self.assertEqual(overlaps(points, [square, [3, 5, 4]]), [(0, 1)])
+        self.assertEqual(overlaps(points, [square, [4, 5, 6]]), [(0, 1)])
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ is one too many (over-dimensioned).
 import math
 import re
 from dataclasses import dataclass, field
+from typing import TypeAlias
 
 # The origin, as a point of a dimension (corners are 0 and up).
 ORIGIN: int = -1
@@ -37,6 +38,84 @@ LENGTH: str = "length"
 X_AXIS: int = -2
 Y_AXIS: int = -3
 AXES: tuple[int, ...] = (X_AXIS, Y_AXIS)
+
+# An edge by the corners it leaves and reaches (`T.sa~6.11` #797);
+# an axis is `(X_AXIS, -1)` or `(Y_AXIS, -1)`.
+Edge: TypeAlias = tuple[int, int]
+
+# Each polygon's corners in order (`Outline.loops()`); `None` is one
+# ring through every corner in order.
+Loops: TypeAlias = list[list[int]] | None
+
+
+# Function `ring_edges()`:
+def ring_edges(count: int, loops: Loops) -> list[Edge]:
+    """Return every polygon's edges as walked, a shared one once
+    (#797).
+
+    Arguments:
+    * `count` (`int`): How many corners there are.
+    * `loops` (`Loops`): Each polygon's corners, or `None`.
+
+    Returns:
+    * (`list[Edge]`): The edges.
+    """
+    if loops is None:
+        loops = [list(range(count))]
+    edges: list[Edge] = []
+    seen: set[frozenset[int]] = set()
+    loop: list[int]
+    for loop in loops:
+        spot: int
+        corner: int
+        for spot, corner in enumerate(loop):
+            edge: Edge = (corner, loop[(spot + 1) % len(loop)])
+            if frozenset(edge) not in seen:
+                seen.add(frozenset(edge))
+                edges.append(edge)
+    return edges
+
+
+# Function `edges_at()`:
+def edges_at(corner: int, count: int, loops: Loops) -> list[Edge]:
+    """Return the edges meeting at a corner, each as walked (#797).
+
+    Arguments:
+    * `corner` (`int`): The corner.
+    * `count` (`int`): How many corners there are.
+    * `loops` (`Loops`): Each polygon's corners, or `None`.
+
+    Returns:
+    * (`list[Edge]`): Its edges, arriving and leaving.
+    """
+    return [edge for edge in ring_edges(count, loops) if corner in edge]
+
+
+# Function `angle_edges()`:
+def angle_edges(dimension: "Dimension", count: int) -> tuple[Edge, Edge]:
+    """Return an angle's two edges, each by its corners (an axis as
+    `(axis, -1)`); -1 reaches the next corner in `points` (#797).
+
+    Arguments:
+    * `dimension` (`Dimension`): The angle.
+    * `count` (`int`): How many corners there are.
+
+    Returns:
+    * (`tuple[Edge, Edge]`): Its first and second edges.
+    """
+    found: list[Edge] = []
+    corner: int
+    to: int
+    for corner, to in (
+        (dimension.start, dimension.start_to),
+        (dimension.end, dimension.end_to),
+    ):
+        if corner in AXES:
+            found.append((corner, -1))
+        else:
+            found.append((corner, to if to >= 0 else (corner + 1) % count))
+    return found[0], found[1]
+
 
 # An angle between two edges (`start`, `end` are the corners each
 # edge leaves, or an axis); `offset` is its arc's radius, `along` the letter's
@@ -125,10 +204,14 @@ class Dimension:  # pylint: disable=too-many-instance-attributes
     * `moved` (`tuple[float, float]`): How far the user has dragged a
       `—` or `|` mark's box from where it is first drawn (drawing
       steps, #317); (0, 0) for everything else.
+    * `start_to` (`int`): For an angle, the corner its first edge
+      reaches (`T.sa~6.11` #797); -1 for an axis, or the corner after
+      `start` in the outline's `points`.
+    * `end_to` (`int`): The same for its second edge.
 
     Constructor:
     * `Dimension(letter, kind, start, end, offset, along, places,
-      rays, font_step, moved)`
+      rays, font_step, moved, start_to, end_to)`
     """
 
     # Constructor arguments:
@@ -142,6 +225,8 @@ class Dimension:  # pylint: disable=too-many-instance-attributes
     rays: tuple[int, int] = field(init=True, default=(1, 1))
     font_step: int = field(init=True, default=0)
     moved: tuple[float, float] = field(init=True, default=(0.0, 0.0))
+    start_to: int = field(init=True, default=-1)
+    end_to: int = field(init=True, default=-1)
 
     # Method `Dimension.place_of()`:
     def place_of(self, kind: str) -> tuple[float, float] | None:
@@ -277,6 +362,7 @@ class Solution:
 def solve(
     points: list[tuple[float, float]],
     dimensions: list[Dimension],
+    loops: Loops = None,
 ) -> Solution:
     """Find each corner's coordinates from the dimensions.
 
@@ -299,6 +385,9 @@ def solve(
     * `points` (`list[tuple[float, float]]`):
       The corners as drawn, for the signs.
     * `dimensions` (`list[Dimension]`): The dimensions.
+    * `loops` (`Loops`): Each polygon's corners (#765), or `None`
+      for one ring through them all.
+
     Returns:
     * (`Solution`): The formulas, and the extra dimensions.
     """
@@ -314,14 +403,9 @@ def solve(
     # then the edges whose directions angles gave.  A marked edge is
     # directed from the start, as the axes are (#233); the mark itself
     # gives its far end, so it is not followed as a directed edge.
-    ways: dict[int, str] = {X_AXIS: "0 deg", Y_AXIS: "90 deg"}
-    marked: set[int] = set()
-    dimension: Dimension
-    for dimension in dimensions:
-        edge: int = mark_edge(dimension, len(points))
-        if edge >= 0:
-            marked.add(edge)
-            ways[edge] = _drawn_way(points, edge, AXIS[dimension.kind])
+    ways: dict[Edge, str]
+    marked: set[frozenset[int]]
+    ways, marked = _marked_ways(points, dimensions, loops)
     used: set[int] = set()
     every: list[Dimension] = dimensions
     found: bool = True
@@ -343,11 +427,12 @@ def solve(
                 found = True
                 break
         way: str
-        for edge, way in ways.items():
+        directed: Edge
+        for directed, way in list(ways.items()):
             if (
-                edge not in AXES
-                and edge not in marked
-                and _along_edge(points, edge, way, known)
+                directed[0] not in AXES
+                and frozenset(directed) not in marked
+                and _along_edge(directed, way, known)
             ):
                 found = True
     known[0].pop(ORIGIN)
@@ -459,30 +544,32 @@ def is_mark(dimension: Dimension) -> bool:
 
 
 # Function `mark_edge()`:
-def mark_edge(dimension: Dimension, corners: int) -> int:
-    """Return the edge a mark lies along (the corner it leaves), or
-    -1 when it is not a mark across an edge.
+def mark_edge(
+    dimension: Dimension, corners: int, loops: Loops = None
+) -> Edge | None:
+    """Return the edge a mark lies along, as walked, or `None` when it
+    is not a mark across an edge (#797).
 
     Arguments:
     * `dimension` (`Dimension`): The dimension.
     * `corners` (`int`): How many corners the outline has.
+    * `loops` (`Loops`): Each polygon's corners, or `None`.
 
     Returns:
-    * (`int`): The edge, or -1.
+    * (`Edge | None`): The edge, or `None`.
     """
     if (
         not is_mark(dimension)
         or dimension.kind not in AXIS
         or min(dimension.start, dimension.end) < 0
     ):
-        return -1
-    start: int = dimension.start
-    end: int = dimension.end
-    if end == (start + 1) % corners:
-        return start
-    if start == (end + 1) % corners:
-        return end
-    return -1
+        return None
+    pair: frozenset[int] = frozenset((dimension.start, dimension.end))
+    edge: Edge
+    for edge in ring_edges(corners, loops):
+        if frozenset(edge) == pair:
+            return edge
+    return None
 
 
 # Function `mark_broken()`:
@@ -506,10 +593,10 @@ def mark_broken(
         # A right angle: its edges' directions square to each other.
         ways: list[tuple[float, float]] = [
             (
-                points[(edge + 1) % len(points)][0] - points[edge][0],
-                points[(edge + 1) % len(points)][1] - points[edge][1],
+                points[edge[1]][0] - points[edge[0]][0],
+                points[edge[1]][1] - points[edge[0]][1],
             )
-            for edge in (dimension.start, dimension.end)
+            for edge in angle_edges(dimension, len(points))
         ]
         size: float = math.hypot(*ways[0]) * math.hypot(*ways[1])
         dot: float = ways[0][0] * ways[1][0] + ways[0][1] * ways[1][1]
@@ -528,6 +615,7 @@ def snapped(
     dimensions: list[Dimension],
     corner: int,
     tolerance: float,
+    loops: Loops = None,
 ) -> tuple[tuple[float, float], list[Dimension]]:
     """Return where a dragged corner snaps to, and the dimensions with
     its marks remade (`T.tfo~6.5` #451).
@@ -549,6 +637,7 @@ def snapped(
     * `corner` (`int`): The dragged corner.
     * `tolerance` (`float`): How near snaps, in drawing units (a few
       pixels at the current zoom).
+    * `loops` (`Loops`): Each polygon's corners (#765), or `None`.
 
     Returns:
     * (`tuple[tuple[float, float], list[Dimension]]`): The corner's
@@ -557,24 +646,27 @@ def snapped(
     """
     # Snap the corner, then take off its marks.
     count: int = len(points)
-    here: tuple[float, float] = _snap_place(points, corner, tolerance)
+    here: tuple[float, float] = _snap_place(points, corner, tolerance, loops)
     moved: list[tuple[float, float]] = list(points)
     moved[corner] = here
-    kept: list[Dimension] = without_marks(dimensions, corner, count)
+    kept: list[Dimension] = without_marks(dimensions, corner, count, loops)
 
     # Add the marks it shows one at a time, leaving off any one too
     # many.
     mark: Dimension
-    for mark in _shown_marks(moved, kept, corner):
+    for mark in _shown_marks(moved, kept, corner, loops):
         trial: list[Dimension] = [*kept, mark]
-        if len(trial) - 1 not in solve(moved, trial).extra:
+        if len(trial) - 1 not in solve(moved, trial, loops).extra:
             kept = trial
     return here, kept
 
 
 # Function `without_marks()`:
 def without_marks(
-    dimensions: list[Dimension], corner: int, count: int
+    dimensions: list[Dimension],
+    corner: int,
+    count: int,
+    loops: Loops = None,
 ) -> list[Dimension]:
     """Return the dimensions without a corner's marks: those on its
     two edges and from the origin to it (#451).
@@ -583,15 +675,14 @@ def without_marks(
     * `dimensions` (`list[Dimension]`): The dimensions.
     * `corner` (`int`): The corner.
     * `count` (`int`): How many corners there are.
+    * `loops` (`Loops`): Each polygon's corners (#765), or `None`.
 
     Returns:
     * (`list[Dimension]`): The others, in order.
     """
     mine: list[set[int]] = [
-        {(corner - 1) % count, corner},
-        {corner, (corner + 1) % count},
-        {ORIGIN, corner},
-    ]
+        set(edge) for edge in edges_at(corner, count, loops)
+    ] + [{ORIGIN, corner}]
     return [
         dimension
         for dimension in dimensions
@@ -605,7 +696,10 @@ def without_marks(
 
 # Function `_snap_place()`:
 def _snap_place(
-    points: list[tuple[float, float]], corner: int, tolerance: float
+    points: list[tuple[float, float]],
+    corner: int,
+    tolerance: float,
+    loops: Loops = None,
 ) -> tuple[float, float]:
     """Return where a dragged corner snaps to: along each axis, the
     closest of the axis and its neighbors' coordinates, when within
@@ -615,11 +709,15 @@ def _snap_place(
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
     * `corner` (`int`): The dragged corner.
     * `tolerance` (`float`): How near snaps, in drawing units.
+    * `loops` (`Loops`): Each polygon's corners (#765), or `None`.
 
     Returns:
     * (`tuple[float, float]`): Its snapped place.
     """
-    count: int = len(points)
+    others: list[tuple[float, float]] = [
+        points[edge[0] if edge[1] == corner else edge[1]]
+        for edge in edges_at(corner, len(points), loops)
+    ]
     raw: tuple[float, float] = points[corner]
     place: list[float] = list(raw)
     gaps: list[float] = [0.0, 0.0]
@@ -628,11 +726,7 @@ def _snap_place(
         best: float = place[axis]
         gap: float = math.inf
         target: float
-        for target in (
-            0.0,
-            points[(corner - 1) % count][axis],
-            points[(corner + 1) % count][axis],
-        ):
+        for target in (0.0, *(other[axis] for other in others)):
             if abs(target - place[axis]) < gap:
                 best = target
                 gap = abs(target - place[axis])
@@ -642,10 +736,7 @@ def _snap_place(
 
     # Never onto a neighbor (an edge of no length): the axis snapped
     # further stays where it was dragged.
-    neighbors: set[tuple[float, float]] = {
-        points[(corner - 1) % count],
-        points[(corner + 1) % count],
-    }
+    neighbors: set[tuple[float, float]] = set(others)
     if (place[0], place[1]) in neighbors:
         axis = 0 if gaps[0] >= gaps[1] else 1
         place[axis] = raw[axis]
@@ -657,6 +748,7 @@ def _shown_marks(
     points: list[tuple[float, float]],
     dimensions: list[Dimension],
     corner: int,
+    loops: Loops = None,
 ) -> list[Dimension]:
     """Return the marks a drawing shows at one corner (#451): on its
     edges drawn exactly level or upright (not one with a lettered
@@ -666,6 +758,7 @@ def _shown_marks(
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
     * `dimensions` (`list[Dimension]`): The dimensions, for angles.
     * `corner` (`int`): The corner.
+    * `loops` (`Loops`): Each polygon's corners (#765), or `None`.
 
     Returns:
     * (`list[Dimension]`): The marks, on axes first.
@@ -677,16 +770,16 @@ def _shown_marks(
         shown.append(Dimension("", VERTICAL, ORIGIN, corner))
     if here[0] == 0.0:
         shown.append(Dimension("", HORIZONTAL, ORIGIN, corner))
-    angled: set[int] = {
-        end
+    angled: set[frozenset[int]] = {
+        frozenset(edge)
         for dimension in dimensions
         if dimension.kind == ANGLE and dimension.letter
-        for end in (dimension.start, dimension.end)
+        for edge in angle_edges(dimension, count)
     }
     edge: int
-    for edge in ((corner - 1) % count, corner):
-        after: int = (edge + 1) % count
-        if edge in angled or after == edge:
+    after: int
+    for edge, after in edges_at(corner, count, loops):
+        if frozenset((edge, after)) in angled or after == edge:
             continue
         start: tuple[float, float] = points[edge]
         end: tuple[float, float] = points[after]
@@ -734,22 +827,71 @@ def drawn_marks(points: list[tuple[float, float]]) -> list[Dimension]:
 
 
 # Function `_drawn_way()`:
-def _drawn_way(points: list[tuple[float, float]], edge: int, axis: int) -> str:
+def _drawn_way(
+    points: list[tuple[float, float]], edge: Edge, axis: int
+) -> str:
     """Return a marked edge's direction, from the corner it leaves:
     along X for a level mark, Y for an upright one, the sign as drawn.
 
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
-    * `edge` (`int`): The corner the edge leaves.
+    * `edge` (`Edge`): The corners it leaves and reaches.
     * `axis` (`int`): 1 for a level mark (Y kept), 0 for an upright.
 
     Returns:
     * (`str`): Its direction, in degrees.
     """
-    after: int = (edge + 1) % len(points)
+    here: tuple[float, float] = points[edge[0]]
+    there: tuple[float, float] = points[edge[1]]
     if axis == 1:
-        return "0 deg" if points[after][0] >= points[edge][0] else "180 deg"
-    return "90 deg" if points[after][1] >= points[edge][1] else "-90 deg"
+        return "0 deg" if there[0] >= here[0] else "180 deg"
+    return "90 deg" if there[1] >= here[1] else "-90 deg"
+
+
+# Function `_marked_ways()`:
+def _marked_ways(
+    points: list[tuple[float, float]],
+    dimensions: list[Dimension],
+    loops: Loops,
+) -> tuple[dict[Edge, str], set[frozenset[int]]]:
+    """Return the directions the axes and the marked edges start with
+    (#233, #797), and the marked edges.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners as drawn.
+    * `dimensions` (`list[Dimension]`): The dimensions.
+    * `loops` (`Loops`): Each polygon's corners, or `None`.
+
+    Returns:
+    * (`tuple[dict[Edge, str], set[frozenset[int]]]`): Each directed
+      edge's direction, and each marked edge's corners.
+    """
+    ways: dict[Edge, str] = {(X_AXIS, -1): "0 deg", (Y_AXIS, -1): "90 deg"}
+    marked: set[frozenset[int]] = set()
+    dimension: Dimension
+    for dimension in dimensions:
+        edge: Edge | None = mark_edge(dimension, len(points), loops)
+        if edge is not None:
+            marked.add(frozenset(edge))
+            _set_way(
+                ways, edge, _drawn_way(points, edge, AXIS[dimension.kind])
+            )
+    return ways, marked
+
+
+# Function `_set_way()`:
+def _set_way(ways: dict[Edge, str], edge: Edge, way: str) -> None:
+    """Give an edge its direction, and the edge walked the other way
+    the opposite one (#797).
+
+    Arguments:
+    * `ways` (`dict[Edge, str]`): Each directed edge's direction.
+    * `edge` (`Edge`): The edge, as walked.
+    * `way` (`str`): Its direction, an expression in degrees.
+    """
+    ways[edge] = way
+    if edge[1] >= 0:
+        ways[(edge[1], edge[0])] = f"{way} + 180 deg"
 
 
 # Function `_apply()`:
@@ -939,7 +1081,7 @@ def _along_length(
 def _angle_way(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     points: list[tuple[float, float]],
     dimension: Dimension,
-    ways: dict[int, str],
+    ways: dict[Edge, str],
     known: tuple[dict[int, Formula], dict[int, Formula]],
     extra: list[int],
     index: int,
@@ -950,8 +1092,8 @@ def _angle_way(  # pylint: disable=too-many-arguments,too-many-positional-argume
     Arguments:
     * `points` (`list[tuple[float, float]]`): The corners as drawn.
     * `dimension` (`Dimension`): The angle.
-    * `ways` (`dict[int, str]`): Each edge's direction (from the
-      corner it leaves), an expression in degrees; added to.
+    * `ways` (`dict[Edge, str]`): Each directed edge's direction
+      (#797), an expression in degrees; added to.
     * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
       The X and Y formulas found so far.
     * `extra` (`list[int]`): Given the angle if one too many (#230).
@@ -960,16 +1102,14 @@ def _angle_way(  # pylint: disable=too-many-arguments,too-many-positional-argume
     Returns:
     * (`bool`): Whether it is done with (used or extra).
     """
-    start: int = dimension.start
-    end: int = dimension.end
+    start: Edge
+    end: Edge
+    start, end = angle_edges(dimension, len(points))
     turn: str = dimension.letter or "90 deg"  # A right angle (#236).
 
     # Both edges directed already, by angles or by both their corners
     # known in full: the angle is one too many (#33, #230).
-    if all(
-        edge in ways or _edge_known(points, edge, known)
-        for edge in (start, end)
-    ):
+    if all(edge in ways or _edge_known(edge, known) for edge in (start, end)):
         extra.append(index)
         return True
 
@@ -977,43 +1117,39 @@ def _angle_way(  # pylint: disable=too-many-arguments,too-many-positional-argume
     flips: int = (dimension.rays[0] != 1) - (dimension.rays[1] != 1)
     if start in ways:
         half: str = {1: " + 180 deg", -1: " - 180 deg", 0: ""}[flips]
-        ways[end] = f"{ways[start]} + {turn}{half}"
+        _set_way(ways, end, f"{ways[start]} + {turn}{half}")
         return True
     if end in ways:
         back: str = {1: " - 180 deg", -1: " + 180 deg", 0: ""}[flips]
-        ways[start] = f"{ways[end]} - {turn}{back}"
+        _set_way(ways, start, f"{ways[end]} - {turn}{back}")
         return True
     return False
 
 
 # Function `_edge_known()`:
 def _edge_known(
-    points: list[tuple[float, float]],
-    edge: int,
+    edge: Edge,
     known: tuple[dict[int, Formula], dict[int, Formula]],
 ) -> bool:
     """Return whether both corners of an edge are known in full, so
     its direction is known too.
 
     Arguments:
-    * `points` (`list[tuple[float, float]]`): The corners.
-    * `edge` (`int`): The corner the edge leaves (an axis: never).
+    * `edge` (`Edge`): Its corners (an axis: never).
     * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
       The X and Y formulas found so far.
 
     Returns:
     * (`bool`): Whether the edge is known.
     """
-    if edge in AXES:
+    if edge[0] in AXES:
         return False
-    ends: tuple[int, int] = (edge, (edge + 1) % len(points))
-    return all(end in table for end in ends for table in known)
+    return all(end in table for end in edge for table in known)
 
 
 # Function `_along_edge()`:
 def _along_edge(
-    points: list[tuple[float, float]],
-    edge: int,
+    edge: Edge,
     way: str,
     known: tuple[dict[int, Formula], dict[int, Formula]],
 ) -> bool:
@@ -1021,8 +1157,7 @@ def _along_edge(
     from one known coordinate there.
 
     Arguments:
-    * `points` (`list[tuple[float, float]]`): The corners.
-    * `edge` (`int`): The corner the edge leaves.
+    * `edge` (`Edge`): Its corners, as walked.
     * `way` (`str`): Its direction, an expression in degrees.
     * `known` (`tuple[dict[int, Formula], dict[int, Formula]]`):
       The X and Y formulas found so far, added to.
@@ -1030,7 +1165,7 @@ def _along_edge(
     Returns:
     * (`bool`): Whether it gave something.
     """
-    ends: tuple[int, int] = (edge, (edge + 1) % len(points))
+    ends: Edge = edge
     full: int
     other: int
     for full, other in (ends, ends[::-1]):
