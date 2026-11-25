@@ -8,10 +8,13 @@ Layout" and opened 2026-11-24 (#627-#633), taking in `T.tkis~6.7`
 
 **Where we are (2026-11-24 evening):** #694 and #S2 done; #S1 half
 done (the example shop in the package, read only, `settings.py`),
-#S1 done 2026-11-24 (`git` after `023dfc7`): `open_shop()`, no
-`--shop` (#718), [Copy Shop] (#709); `--show-demo` the user's to
-try.  Next #S3 (a kind's letters table as its tools' template,
-#631).
+#S1 done (`c26ec49`); `--show-demo` the user's to try.  #S3 done
+2026-11-24: the drill, end mill and chamfer mill are in kind
+directories, their outlines' `key`s and letters are their tools'
+fields, each tool checked against its own shop's outline.  Next:
+#S5 (the tree shows the files, #615), then #S6 (the tool panel's
+one table), #S7; and `T.tfo~6.5` reopens for the other round tools
+(#690, #727).
 Round tool bits only for now.  The user has
 `scraftcam/example_shop/.allow_edits` (the GUI may edit the example
 shop in this checkout).  Undecided, for later: #706 is gone (#711);
@@ -184,6 +187,51 @@ Order: #694, #S2, #S1, #S3, #S5, #S6, #S7 (#S4 dropped, #678).
   (`outline_panel.READ_ONLY_OUTLINE`).
 * The LinuxCNC suite passes with `open_shop` (10 tests, 136 s,
   2026-11-24).  `--show-demo` is the user's to try.  #S1 is done.
+* #S1 committed (`c26ec49`).  #S3's open questions (Claude,
+  2026-11-24): #720 which letter is which key (`diameter`, ...;
+  `shops.DRILL_LETTERS`, `END_MILL_LETTERS` today); #721 per-shop
+  outlines against one schema (`KINDS`, `schemas/*.json`,
+  `Shops.md`); #722 formula letters are not fields; #723 a
+  letter's kind of measurement; #724 a letter a tool leaves out.
+* Decided (the user): #720 `[letters.X] key = "diameter"` replaces
+  `DRILL_LETTERS`/`END_MILL_LETTERS`.  #721 tools are checked
+  against their own shop's outline (the shop may change its copy;
+  its problem if wrong); `Shops.md` and the JSON schemas from the
+  example shop's.  #723 a letter's units come from its default in
+  the dimensions table; nobody changes them (#723a asked: may a
+  tool give "6 mm" for an inch letter?).  #724 never a default: a
+  letter left out, or not a valid value, is an error.  #722
+  explained again.  Asked: #726-#729.
+* Decided (the user): #723a any compatible unit (a length for a
+  length letter).  #726 the other fields stay in `shops.KINDS`.
+  #727 kinds with no outline keep their fields in code until
+  `T.tfo~6.5` fills them in (after #S3, #690).  #728 #S3 moves the
+  end mills and the chamfer mill into `tools/end_mills/`,
+  `tools/chamfer_mills/`.  #729 a letter named like another field
+  is an error.  #722 (a formula letter is never a field; a tool
+  giving one is refused): agreed.
+* #S3 chunk 1 done 2026-11-24 (#728): `tools/end_mills/` (7, the
+  ball and roughing mills are `end_mill`s too) and
+  `tools/chamfer_mills/` (1), each beside its outline; paths in
+  `drive_editor.py`, five tests, `Shops.md`.  Left at `tools/`: the
+  corner rounding mill, double angle cutter, the countersinks (no
+  outlines, #727) and `shank_drill.outline.toml`.  Next: chunk 2
+  (letters as fields, #720, #722-#724, #729), then 3 (#721).
+* #S3 chunk 2 done 2026-11-24: `[letters.X] key = "..."` in the
+  drill, end mill and chamfer mill outlines (`gui/letters.Letter.key`
+  read and written); `shops.outline_keys()` gives `DRILL_LETTERS`,
+  `END_MILL_LETTERS`, `CHAMFER_MILL_LETTERS` from the example
+  shop's outlines (#720, #721).  The reader checks each tool against
+  the outline beside it (`_Reader.outline_fields()`): every default
+  letter required (#724), a formula letter refused (#722), a new
+  letter a field by its letter, its measurement from its default
+  (#723), a letter named like a field refused (#729)
+  (`TestOutlineLetters`).  The chamfer mill's file is by letters.
+  Chunk 3 needed nothing more: `Shops.md` and the JSON schemas
+  follow the keyed letters.  Known limit: a letter with no `key` in
+  the example shop's own outlines would be checked by the reader
+  but not listed in `Shops.md` or the schemas (none has one yet).
+  #S3 done.
 * #S2 the drill: `examples/shop/tools/drills/` with
   `drill.outline.toml`, its `.svg` and one `.toml` per drill.
 * #S1 #433/#437.1/#438: the example shop into the package, read

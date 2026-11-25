@@ -30,7 +30,7 @@ shop/
   controllers/linuxcnc.toml   a controller template (`controller`)
   machines/shop_mill.toml     a machine, with its tool table (`machine`)
   tool_materials/carbide.toml what tools are made of (`tool_material`)
-  tools/1_4_in_end_mill.toml  a tool (`end_mill`, `drill`, ...)
+  tools/countersink.toml      a tool of a kind with no outline
   tools/drills/              a kind's directory: its tools, beside
     drill.outline.toml        the kind's outline (#711)
   tooling/grid_plate.toml     work holding (`grid_plate`)
@@ -772,8 +772,9 @@ feed = "4 in/min"
 
 ## `chamfer_mill`
 
-A chamfer mill (a V-bit), which bevels top edges.  It has a `name` even
-when it is not a file of its own.
+A chamfer mill (a V-bit), which bevels top edges, its sizes the letters
+of `chamfer_mill.outline.toml`.  It has a `name` even when it is not a
+file of its own.
 
 | Key               | Value                | Required | Meaning               |
 | ----------------- | -------------------- | -------- | --------------------- |
@@ -784,16 +785,16 @@ when it is not a file of its own.
 |                   |                      |          | not a T number).      |
 | `description`     | string               | no       | What it is, in a few  |
 |                   |                      |          | words.                |
-| `diameter`        | length               | yes      | The cutting diameter. |
-| `tip_diameter`    | length               | yes      | The diameter at its   |
+| `D`               | length               | yes      | The cutting diameter. |
+| `TD`              | length               | yes      | The diameter at its   |
 |                   |                      |          | tip.                  |
-| `angle`           | angle                | yes      | The included angle    |
+| `A`               | angle                | yes      | The included angle    |
 |                   |                      |          | (90 deg makes 45 deg  |
 |                   |                      |          | bevels).              |
 | `flutes`          | integer              | no       | How many flutes.      |
-| `shank`           | length               | no       | The shank diameter,   |
+| `SD`              | length               | no       | The shank diameter,   |
 |                   |                      |          | if not `diameter`.    |
-| `overall_length`  | length               | yes      | Its whole length      |
+| `OAL`             | length               | yes      | Its whole length      |
 |                   |                      |          | (OAL).                |
 | `holder`          | holder list          | no       | What holds it, from   |
 |                   |                      |          | the spindle to its    |
@@ -828,11 +829,12 @@ when it is not a file of its own.
 ```toml
 name = "1/8 in 90 deg carbide chamfer mill"
 unique_id = 7
-diameter = "1/8 in"
-tip_diameter = "0.020 in"
-angle = "90 deg"
+D = "1/8 in"
+TD = "0.020 in"
+A = "90 deg"
+SD = "1/8 in"
+OAL = "1-1/2 in"
 flutes = 2
-overall_length = "1-1/2 in"
 material = "carbide"
 vendor = "Shars Tool"
 vendor_pn = "416-3509"

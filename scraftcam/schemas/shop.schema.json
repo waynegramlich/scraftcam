@@ -1298,7 +1298,7 @@
       "additionalProperties": false
     },
     "chamfer_mill": {
-      "description": "A chamfer mill (a V-bit), which bevels top edges.",
+      "description": "A chamfer mill (a V-bit), which bevels top edges, its sizes the letters of `chamfer_mill.outline.toml`.",
       "type": "object",
       "properties": {
         "name": {
@@ -1331,17 +1331,17 @@
           "description": "What it is, in a few words.",
           "type": "string"
         },
-        "diameter": {
+        "D": {
           "description": "The cutting diameter.",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
         },
-        "tip_diameter": {
+        "TD": {
           "description": "The diameter at its tip.",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
         },
-        "angle": {
+        "A": {
           "description": "The included angle (90 deg makes 45 deg bevels).",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:deg)\\s*$"
@@ -1350,12 +1350,12 @@
           "description": "How many flutes.",
           "type": "integer"
         },
-        "shank": {
+        "SD": {
           "description": "The shank diameter, if not `diameter`.",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
         },
-        "overall_length": {
+        "OAL": {
           "description": "Its whole length (OAL).",
           "type": "string",
           "pattern": "^\\s*[-+]?(?:(?:\\d+-)?\\d+/\\d+|(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*(?:inches|inch|in|ft|mm|cm)\\s*$"
@@ -1432,10 +1432,10 @@
       },
       "required": [
         "unique_id",
-        "diameter",
-        "tip_diameter",
-        "angle",
-        "overall_length",
+        "D",
+        "TD",
+        "A",
+        "OAL",
         "material"
       ],
       "additionalProperties": false

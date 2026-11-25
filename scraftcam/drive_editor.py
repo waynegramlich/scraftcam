@@ -38,7 +38,7 @@ TOP: Path = Path(__file__).resolve().parent.parent
 DRIVE: Path = Path.home() / ".scraftcam" / "drive"
 
 # The outline driven when none is named.
-DEFAULT: Path = EXAMPLE_SHOP / "tools" / "end_mill.outline.toml"
+DEFAULT: Path = EXAMPLE_SHOP / "tools/end_mills/end_mill.outline.toml"
 
 # The MCP tools the session may use without asking.
 TOOLS: str = (

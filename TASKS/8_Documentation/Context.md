@@ -24,3 +24,6 @@ numbers are shared by every task; the next is in
   tools in a directory per kind (`tools/drills/`, #711).  Paths
   are updated; `scraftcam/gui/README.md` has [Copy Shop] and the
   settings (#S1 done); `README.md`'s "Trying It" still to check.
+* `T.toasl~6.8` #S3: tools are in kind directories (`tools/drills/`,
+  `end_mills/`, `chamfer_mills/`), written by their outline's
+  letters (`key = ...` in the outline); describe for shop owners.

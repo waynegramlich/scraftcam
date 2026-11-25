@@ -15,7 +15,7 @@ from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
 # The example shop's tools, an end mill and its kind's outline.
-TOOLS: Path = EXAMPLE_SHOP / "tools"
+TOOLS: Path = EXAMPLE_SHOP / "tools/end_mills"
 TOOL: str = "1_4_in_2_flute_carbide_end_mill.toml"
 OUTLINE: str = "end_mill.outline.toml"
 

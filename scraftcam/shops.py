@@ -43,25 +43,6 @@ from .machine import DrillCycle, Machine, ToolEntry, ToolKind
 # The format version that this module reads and describes.
 FORMAT_VERSION: str = "0.0.1"
 
-# A drill's sizes, by key: the letters of its outline drawing,
-# `drill.outline.toml`, which a drill file writes (`T.tfo~6.5` #435).
-DRILL_LETTERS: dict[str, str] = {
-    "diameter": "D",
-    "length_of_cut": "FL",
-    "overall_length": "OAL",
-    "point_angle": "PA",
-}
-
-# An end mill's sizes, by key: the letters of its outline drawing,
-# `end_mill.outline.toml`, which an end mill file writes (`T.tfo~6.5`
-# #452).
-END_MILL_LETTERS: dict[str, str] = {
-    "diameter": "D",
-    "length_of_cut": "LOC",
-    "overall_length": "OAL",
-    "shank": "SD",
-}
-
 # Where a value is in a file: its keys, and its indices in lists.
 KeyPath: TypeAlias = tuple[str | int, ...]
 
@@ -484,6 +465,55 @@ SHOP_FILE: str = "shop.toml"
 EXAMPLE_SHOP: Path = Path(__file__).resolve().parent / "example_shop"
 EXAMPLE_SHOP_FILE: Path = EXAMPLE_SHOP / SHOP_FILE
 
+
+# Function `outline_keys()`:
+def outline_keys(kind: str) -> dict[str, str]:
+    """Return a kind's sizes, by key: the letters of its outline.
+
+    Each letter of the example shop's `tools/*/KIND.outline.toml`
+    that names a `key` (`[letters.D] key = "diameter"`) is that field
+    of a tool of the kind, written in its file by the letter
+    (`T.toasl~6.8` #720, #721; `T.tfo~6.5` #435).
+
+    Arguments:
+    * `kind` (`str`): The kind (`drill`).
+
+    Returns:
+    * (`dict[str, str]`): By key, its letter (`{"diameter": "D"}`).
+
+    Raises:
+    * `ValueError`: If there is not one such outline, or a letter
+      with a `key` is a formula (#722) or names a key twice.
+    """
+    found: list[Path] = sorted(
+        (EXAMPLE_SHOP / "tools").glob(f"*/{kind}{OUTLINE_SUFFIX}")
+    )
+    if len(found) != 1:
+        raise ValueError(f"{kind}: {len(found)} outlines, not 1")
+    with found[0].open("rb") as file:
+        letters: object = tomllib.load(file).get("letters", {})
+    keys: dict[str, str] = {}
+    letter: str
+    table: object
+    if not isinstance(letters, dict):
+        # A bad file, not a bad argument: `ValueError`, as the others.
+        raise ValueError(  # noqa: TRY004
+            f"{found[0]}: `letters` is not a table"
+        )
+    for letter, table in letters.items():
+        key: object = table.get("key") if isinstance(table, dict) else None
+        if not key:
+            continue
+        if not isinstance(key, str) or key in keys:
+            raise ValueError(f"{found[0]}: letters.{letter}.key {key!r}")
+        if isinstance(table, dict) and "formula" in table:
+            raise ValueError(
+                f"{found[0]}: letters.{letter} is a formula, never a key"
+            )
+        keys[key] = letter
+    return keys
+
+
 # A shop in the package is read only, so that it ships as it is
 # (#683); a developer's checkout lets the GUI change it while this
 # file, which `.gitignore` and `.hgignore` keep out, is in the shop
@@ -540,6 +570,12 @@ CATALOG: str = "catalog.toml"
 # The outline editor's files (`T.oe~6.2` #S4), kept beside the
 # items in `tools/` and `tooling/`; not items themselves.
 OUTLINE_SUFFIX: str = ".outline.toml"
+
+# A drill's, an end mill's and a chamfer mill's sizes, by key: the
+# letters of their outlines, which their files write (#720).
+DRILL_LETTERS: dict[str, str] = outline_keys("drill")
+END_MILL_LETTERS: dict[str, str] = outline_keys("end_mill")
+CHAMFER_MILL_LETTERS: dict[str, str] = outline_keys("chamfer_mill")
 CATALOG_PAGES: str = "pages"
 ITEM_PATTERNS: dict[str, tuple[str, ...]] = {
     "catalogs": (f"*/*/{CATALOG}",),
@@ -1461,34 +1497,39 @@ feed = "4 in/min"
         ),
         TableKind(
             "chamfer_mill",
-            "A chamfer mill (a V-bit), which bevels top edges.",
-            _tool_fields(
-                *_size_fields(length_of_cut=False),
-                TableField(
-                    "tip_diameter",
-                    "length",
-                    "The diameter at its tip.",
-                    True,
-                    letter="T",
+            "A chamfer mill (a V-bit), which bevels top edges, its sizes "
+            "the letters of `chamfer_mill.outline.toml`.",
+            _shorts(
+                _tool_fields(
+                    *_size_fields(length_of_cut=False),
+                    TableField(
+                        "tip_diameter",
+                        "length",
+                        "The diameter at its tip.",
+                        True,
+                        letter="T",
+                    ),
+                    TableField(
+                        "angle",
+                        "angle",
+                        "The included angle (90 deg makes 45 deg bevels).",
+                        True,
+                        letter="A",
+                    ),
+                    TableField("flutes", "integer", "How many flutes."),
                 ),
-                TableField(
-                    "angle",
-                    "angle",
-                    "The included angle (90 deg makes 45 deg bevels).",
-                    True,
-                    letter="A",
-                ),
-                TableField("flutes", "integer", "How many flutes."),
+                CHAMFER_MILL_LETTERS,
             ),
             True,
             """\
 name = "1/8 in 90 deg carbide chamfer mill"
 unique_id = 7
-diameter = "1/8 in"
-tip_diameter = "0.020 in"
-angle = "90 deg"
+D = "1/8 in"
+TD = "0.020 in"
+A = "90 deg"
+SD = "1/8 in"
+OAL = "1-1/2 in"
 flutes = 2
-overall_length = "1-1/2 in"
 material = "carbide"
 vendor = "Shars Tool"
 vendor_pn = "416-3509"
@@ -2090,7 +2131,7 @@ shop/
   controllers/linuxcnc.toml   a controller template (`controller`)
   machines/shop_mill.toml     a machine, with its tool table (`machine`)
   tool_materials/carbide.toml what tools are made of (`tool_material`)
-  tools/1_4_in_end_mill.toml  a tool (`end_mill`, `drill`, ...)
+  tools/countersink.toml      a tool of a kind with no outline
   tools/drills/              a kind's directory: its tools, beside
     drill.outline.toml        the kind's outline (#711)
   tooling/grid_plate.toml     work holding (`grid_plate`)
@@ -2759,6 +2800,138 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
             materials["materials"] = found.get("material", [])
             shop["materials"] = materials
 
+    # Method `_Reader.keys()`:
+    # It takes the parts `table()` holds, so the count is fine.
+    def keys(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        value: dict[str, object],
+        kind: TableKind,
+        fields: dict[str, TableField],
+        formulas: set[str],
+        path: KeyPath,
+        source: _Source,
+    ) -> dict[str, object]:
+        """Check each key of a table, keeping the good ones.
+
+        Arguments:
+        * `value` (`dict[str, object]`): The table.
+        * `kind` (`TableKind`): Its kind.
+        * `fields` (`dict[str, TableField]`): Its fields, by the key
+          written.
+        * `formulas` (`set[str]`): Letters never given (#722).
+        * `path` (`KeyPath`): Where it is.
+        * `source` (`_Source`): The file it is in.
+
+        Returns:
+        * (`dict[str, object]`): The good keys' values, by long key.
+        """
+        contents: dict[str, object] = {}
+        key: str
+        item: object
+        for key, item in value.items():
+            if key in formulas:
+                self.problem(
+                    source,
+                    path + (key,),
+                    "is worked out by the outline's formula, never given "
+                    "(#722)",
+                )
+            elif key not in fields:
+                known: str = ", ".join(f.short or f.key for f in kind.fields)
+                self.problem(
+                    source,
+                    path + (key,),
+                    f"is not a key of `{kind.kind}` (its keys are {known})",
+                )
+            else:
+                contents[fields[key].key] = self.value(
+                    item, fields[key], path + (key,), source
+                )
+        return contents
+
+    # Method `_Reader.outline_fields()`:
+    def outline_fields(
+        self,
+        kind: TableKind,
+        fields: dict[str, TableField],
+        source: _Source,
+    ) -> set[str]:
+        """Add a tool's letters from its shop's outline, beside it.
+
+        Every letter with a `default` must be given (#724): a keyed
+        one is its field, made required; one with no key is a field
+        by its letter, its measurement that of its default (#723).  A
+        letter named like another field is a problem (#729).
+
+        Arguments:
+        * `kind` (`TableKind`): The tool's kind.
+        * `fields` (`dict[str, TableField]`): Its fields, by the key
+          written; the outline's letters are added.
+        * `source` (`_Source`): The tool's file.
+
+        Returns:
+        * (`set[str]`): The outline's formula letters (#722).
+        """
+        outline: Path = Path(source.shown).parent / (
+            kind.kind + OUTLINE_SUFFIX
+        )
+        if not outline.is_file():
+            return set()
+        try:
+            with outline.open("rb") as file:
+                letters: object = tomllib.load(file).get("letters", {})
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            self.problem(source, (), f"{outline.name}: {error}")
+            return set()
+        formulas: set[str] = set()
+        letter: str
+        table: object
+        for letter, table in (
+            letters.items() if isinstance(letters, dict) else ()
+        ):
+            if not isinstance(table, dict) or "formula" in table:
+                formulas.add(letter)
+                continue
+            known: TableField | None = fields.get(letter)
+            if known is not None and known.short == letter:
+                fields[letter] = replace(known, required=True)
+            elif known is not None or letter in {
+                each.key for each in fields.values()
+            }:
+                self.problem(
+                    source,
+                    (),
+                    f"{outline.name}: letter {letter} is named like a "
+                    "field (#729)",
+                )
+            else:
+                form: str = next(
+                    (
+                        each
+                        for each in ("length", "angle")
+                        if not measurement_problem(
+                            table.get("default"), UNITS[each]
+                        )
+                    ),
+                    "",
+                )
+                if form:
+                    fields[letter] = TableField(
+                        letter,
+                        form,
+                        str(table.get("name", letter)),
+                        True,
+                        short=letter,
+                    )
+                else:
+                    self.problem(
+                        source,
+                        (),
+                        f"{outline.name}: letter {letter}'s default is "
+                        "not a length or an angle",
+                    )
+        return formulas
+
     # Method `_Reader.item()`:
     def item(
         self, path: Path, kinds: tuple[str, ...]
@@ -2846,29 +3019,26 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
             return {}
 
         # Check every key; a field with a `short` letter is written
-        # by it (#435), kept by its key.
+        # by it (#435), kept by its key.  A tool beside its shop's
+        # outline also has that outline's other letters (#720, #721).
         fields: dict[str, TableField] = {
             field.short or field.key: field for field in HEADER + kind.fields
         }
-        contents: dict[str, object] = {}
-        for key, item in value.items():
-            if key not in fields:
-                known: str = ", ".join(f.short or f.key for f in kind.fields)
-                self.problem(
-                    source,
-                    path + (key,),
-                    f"is not a key of `{kind.kind}` (its keys are {known})",
-                )
-            else:
-                contents[fields[key].key] = self.value(
-                    item, fields[key], path + (key,), source
-                )
+        formulas: set[str] = set()
+        if whole and kind.kind in TOOL_KINDS:
+            formulas = self.outline_fields(kind, fields, source)
+        contents: dict[str, object] = self.keys(
+            value, kind, fields, formulas, path, source
+        )
 
         # Note the keys that are missing, and a `kind` that does not
         # fit.
         required: list[str] = [
-            f.short or f.key for f in kind.fields if f.required
+            f.short or f.key
+            for f in (*kind.fields, *fields.values())
+            if f.required and f not in HEADER
         ]
+        required = list(dict.fromkeys(required))
         if whole:
             required = [f.key for f in HEADER if f.required] + required
         elif kind.named:

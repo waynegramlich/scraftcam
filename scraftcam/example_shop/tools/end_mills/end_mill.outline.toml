@@ -3,21 +3,25 @@ version = 4
 revolve = true
 
 [letters.D]
+key = "diameter"
 name = "Diameter"
 default = "1/4 in"
 help = "The cutting diameter, across the flutes."
 
 [letters.LOC]
+key = "length_of_cut"
 name = "Length of cut"
 default = "3/4 in"
 help = "From the end to where the flutes stop."
 
 [letters.OAL]
+key = "overall_length"
 name = "Overall length"
 default = "2-1/2 in"
 help = "From the end to the top of the shank."
 
 [letters.SD]
+key = "shank"
 name = "Shank Diameter"
 default = "1 in"
 help = "The diameter of the the shank."

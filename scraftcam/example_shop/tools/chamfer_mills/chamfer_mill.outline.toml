@@ -3,16 +3,19 @@ version = 4
 revolve = true
 
 [letters.D]
+key = "diameter"
 name = "Diameter"
 default = "1/4 in"
 help = "The chamfer's widest diameter, where the cone meets the body."
 
 [letters.TD]
+key = "tip_diameter"
 name = "Tip diameter"
 default = "0.020 in"
 help = "The flat across the tip (0 for a sharp point)."
 
 [letters.A]
+key = "angle"
 name = "Angle"
 default = "90 deg"
 help = "The angle across the cone (60 deg, 82 deg, 90 deg, 120 deg)."
@@ -23,11 +26,13 @@ formula = "A / 2"
 help = "Half of the cone's angle, from the axis, as drawn."
 
 [letters.SD]
+key = "shank"
 name = "Shank diameter"
 default = "1/4 in"
 help = "The shank's diameter (often the same as the diameter)."
 
 [letters.OAL]
+key = "overall_length"
 name = "Overall length"
 default = "2 in"
 help = "From the tip to the end of the shank."

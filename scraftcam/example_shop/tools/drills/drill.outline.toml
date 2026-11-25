@@ -3,11 +3,13 @@ version = 4
 revolve = true
 
 [letters.D]
+key = "diameter"
 name = "Diameter"
 default = "1/4 in"
 help = "The drill's diameter, across its margins."
 
 [letters.PA]
+key = "point_angle"
 name = "Point angle"
 default = "118 deg"
 help = "The angle across the point (118 deg, 135 deg)."
@@ -18,11 +20,13 @@ formula = "PA / 2"
 help = "Half of the point angle, as drawn."
 
 [letters.FL]
+key = "length_of_cut"
 name = "Flute length"
 default = "2-3/4 in"
 help = "From the point's tip to the end of the flutes."
 
 [letters.OAL]
+key = "overall_length"
 name = "Overall length"
 default = "4 in"
 help = "From the point's tip to the end of the shank."

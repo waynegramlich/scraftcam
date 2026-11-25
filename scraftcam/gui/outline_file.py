@@ -48,6 +48,7 @@ corner it leaves) or `"x_axis"` / `"y_axis"`.
 """
 
 import json
+import re
 import tomllib
 from dataclasses import dataclass, field
 
@@ -203,9 +204,10 @@ def outline_text(outline: Outline) -> str:
     # The letters, a table each, in the order of the table.
     letter: Letter
     for letter in outline.letters:
+        lines += ["", f"[letters.{letter.letter}]"]
+        if letter.key:
+            lines.append(f"key = {_string(letter.key)}")
         lines += [
-            "",
-            f"[letters.{letter.letter}]",
             f"name = {_string(letter.name)}",
             (
                 f"formula = {_string(letter.formula)}"
@@ -595,7 +597,14 @@ class _Reader:
                 if isinstance(table, dict)
                 else False
             )
-            if not isinstance(fillet, bool):
+            key: object = (
+                table.get("key", "") if isinstance(table, dict) else ""
+            )
+            if not isinstance(key, str) or (
+                key and not re.fullmatch("[a-z][a-z0-9_]*", key)
+            ):
+                self.note(f"letters.{name}.key", "is not a field's name")
+            elif not isinstance(fillet, bool):
                 self.note(f"letters.{name}.fillet", "is not true or false")
             elif not isinstance(formula, str):
                 self.note(f"letters.{name}.formula", "is not text")
@@ -608,6 +617,7 @@ class _Reader:
                         str(texts[2]),
                         fillet,
                         formula,
+                        key=key,
                     )
                 )
             else:

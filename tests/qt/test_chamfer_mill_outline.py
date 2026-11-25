@@ -23,7 +23,7 @@ from tests.qt.test_drill_outline import MM, assert_same, turned
 
 # The kind's outline drawing.
 CHAMFER_MILL: Path = Path(__file__).resolve().parents[2] / (
-    EXAMPLE_SHOP / "tools/chamfer_mill.outline.toml"
+    EXAMPLE_SHOP / "tools/chamfer_mills/chamfer_mill.outline.toml"
 )
 
 # A chamfer mill's shop keys and the outline's letters (the shop

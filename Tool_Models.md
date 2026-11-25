@@ -350,7 +350,8 @@ unique_id = 1
 
 ## Chamfer Mill
 
-A chamfer mill (a V-bit), which bevels top edges.
+A chamfer mill (a V-bit), which bevels top edges, its sizes the letters
+of `chamfer_mill.outline.toml`.
 
 ![Chamfer Mill sketch](docs/tool_models/chamfer_mill.svg)
 
@@ -376,11 +377,11 @@ python3 -m scraftcam.tooling.cutter_models 8080 '{
   "kind": "chamfer_mill",
   "material": "carbide",
   "finish": "uncoated",
-  "diameter": "1/2 in",
-  "shank": "1/2 in",
-  "tip_diameter": "1/4 in",
-  "overall_length": "2 in",
-  "angle": "90 deg"
+  "D": "1/2 in",
+  "SD": "1/2 in",
+  "TD": "1/4 in",
+  "OAL": "2 in",
+  "A": "90 deg"
 }'
 ```
 
@@ -397,11 +398,11 @@ with connect("8080") as transport:
             "kind": "chamfer_mill",
             "material": "carbide",
             "finish": "uncoated",
-            "diameter": "1/2 in",
-            "shank": "1/2 in",
-            "tip_diameter": "1/4 in",
-            "overall_length": "2 in",
-            "angle": "90 deg",
+            "D": "1/2 in",
+            "SD": "1/2 in",
+            "TD": "1/4 in",
+            "OAL": "2 in",
+            "A": "90 deg",
         },
     )
 ```
@@ -413,13 +414,13 @@ name = "Sample chamfer mill"
 kind = "chamfer_mill"
 language = "English"
 version = "0.0.1"
-angle = "90 deg"
-diameter = "1/2 in"
+A = "90 deg"
+D = "1/2 in"
+OAL = "2 in"
+SD = "1/2 in"
+TD = "1/4 in"
 finish = "uncoated"
 material = "carbide"
-overall_length = "2 in"
-shank = "1/2 in"
-tip_diameter = "1/4 in"
 unique_id = 1
 ```
 

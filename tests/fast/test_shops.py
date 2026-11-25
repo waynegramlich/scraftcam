@@ -6,6 +6,7 @@ import tomllib
 import unittest
 from pathlib import Path
 from typing import Any, cast
+from unittest import mock
 
 from scraftcam import shops
 
@@ -176,9 +177,9 @@ class TestReader(CopiedShop):
     MILL: str = "machines/shop_mill.toml"
     ROUTER: str = "machines/shop_router.toml"
     LINUXCNC: str = "controllers/linuxcnc.toml"
-    END_MILL: str = "tools/1_4_in_2_flute_carbide_end_mill.toml"
-    ROUTER_MILL: str = "tools/1_2_in_2_flute_carbide_end_mill.toml"
-    BALL_MILL: str = "tools/1_4_in_2_flute_hss_ball_end_mill.toml"
+    END_MILL: str = "tools/end_mills/1_4_in_2_flute_carbide_end_mill.toml"
+    ROUTER_MILL: str = "tools/end_mills/1_2_in_2_flute_carbide_end_mill.toml"
+    BALL_MILL: str = "tools/end_mills/1_4_in_2_flute_hss_ball_end_mill.toml"
     DRILL: str = "tools/drills/15_64_in_hss_jobber_drill.toml"
 
     def test_example(self) -> None:
@@ -887,6 +888,96 @@ class TestMarkdown(unittest.TestCase):
                 source = shops._Source(kind.kind, {})
                 reader.table(tomllib.loads(kind.example), kind, (), source)
                 self.assertEqual(reader.problems, [])
+
+
+class TestOutlineLetters(CopiedShop):
+    """A tool is checked against its own shop's outline (#721-#729)."""
+
+    DRILL: str = "tools/drills/15_64_in_hss_jobber_drill.toml"
+    OUTLINE: str = "tools/drills/drill.outline.toml"
+
+    def test_letters(self) -> None:
+        """Missing, a formula given, a new letter, a clash."""
+        # Every letter with a default must be given (#724).
+        self.change(self.DRILL, 'FL = "2-5/8 in"\n', "")
+        self.assertTrue(
+            any("`FL` is missing" in each for each in self.problems())
+        )
+        self.change(
+            self.DRILL, 'D = "15/64 in"', 'FL = "2-5/8 in"\nD = "15/64 in"'
+        )
+
+        # A formula letter is never given (#722).
+        self.change(
+            self.DRILL, 'D = "15/64 in"', 'D = "15/64 in"\nHPA = "59 deg"'
+        )
+        self.assertTrue(any("never given" in each for each in self.problems()))
+        self.change(self.DRILL, 'HPA = "59 deg"\n', "")
+
+        # The shop's own new letter: every drill must give it, as a
+        # length (#721, #723).
+        self.change(
+            self.OUTLINE,
+            "[letters.OAL]",
+            '[letters.W]\nname = "Web"\ndefault = "0.02 in"\n'
+            'help = "The web."\n\n[letters.OAL]',
+        )
+        found: list[str] = self.problems()
+        self.assertTrue(any("`W` is missing" in each for each in found))
+        self.change(self.DRILL, 'D = "15/64 in"', 'D = "15/64 in"\nW = "1 mm"')
+        self.change(
+            "tools/drills/1_8_in_cobalt_jobber_drill.toml",
+            'D = "1/8 in"',
+            'D = "1/8 in"\nW = "0.01 in"',
+        )
+        shop: dict[str, Any] = shops.read(self.directory / "shop.toml")
+        self.assertEqual(shop["tools"][0]["drills"][0]["W"], "1 mm")
+        self.change(self.DRILL, 'W = "1 mm"', 'W = "59 deg"')
+        self.assertTrue(self.problems())
+
+        # A letter named like a field (#729).
+        self.change(self.DRILL, 'W = "59 deg"', 'W = "1 mm"')
+        self.change(self.OUTLINE, "[letters.W]", "[letters.holder]")
+        self.assertTrue(
+            any("named like a field" in each for each in self.problems())
+        )
+
+
+class TestOutlineKeys(unittest.TestCase):
+    """A kind's sizes come from its outline's `key`s (#720, #722)."""
+
+    def test_keys(self) -> None:
+        """The drill's and end mill's, from the example shop."""
+        self.assertEqual(
+            shops.outline_keys("drill"),
+            {
+                "diameter": "D",
+                "point_angle": "PA",
+                "length_of_cut": "FL",
+                "overall_length": "OAL",
+            },
+        )
+        self.assertEqual(shops.END_MILL_LETTERS["shank"], "SD")
+
+    def test_refused(self) -> None:
+        """No outline, a formula with a key, a key twice."""
+        with self.assertRaises(ValueError):
+            shops.outline_keys("no_such_kind")
+        with tempfile.TemporaryDirectory() as temporary:
+            top: Path = Path(temporary)
+            (top / "tools" / "things").mkdir(parents=True)
+            outline: Path = top / "tools" / "things" / "thing.outline.toml"
+            text: str
+            for text in (
+                '[letters.H]\nkey = "half"\nformula = "A / 2"\n',
+                '[letters.A]\nkey = "a"\n[letters.B]\nkey = "a"\n',
+            ):
+                outline.write_text(text)
+                with (
+                    mock.patch.object(shops, "EXAMPLE_SHOP", top),
+                    self.assertRaises(ValueError),
+                ):
+                    shops.outline_keys("thing")
 
 
 if __name__ == "__main__":

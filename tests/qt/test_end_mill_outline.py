@@ -29,7 +29,7 @@ from tests.qt.test_drill_outline import MM, assert_same, turned
 
 # The kind's outline drawing.
 END_MILL: Path = Path(__file__).resolve().parents[2] / (
-    EXAMPLE_SHOP / "tools/end_mill.outline.toml"
+    EXAMPLE_SHOP / "tools/end_mills/end_mill.outline.toml"
 )
 
 

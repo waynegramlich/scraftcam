@@ -48,9 +48,12 @@ class Letter:
       "" for a letter given a value (`T.tfo~6.5` #430).  A formula
       letter's `default` is its worked out value, kept up to date by
       `values.refresh_formulas()`, and is never asked for.
+    * `key` (`str`): The field of a tool of the outline's kind that
+      this letter is (`diameter`), which scraftcam's own code reads,
+      or "" (`T.toasl~6.8` #720; keyword only).
 
     Constructor:
-    * `Letter(letter, name, default, help, fillet, formula)`
+    * `Letter(letter, name, default, help, fillet, formula, key="")`
     """
 
     # Constructor arguments:
@@ -60,6 +63,7 @@ class Letter:
     help: str = field(init=True, default="")
     fillet: bool = field(init=True, default=False)
     formula: str = field(init=True, default="")
+    key: str = field(init=True, default="", kw_only=True)
 
 
 # Function `value_problem()`:

@@ -968,7 +968,7 @@ class EditorTest(unittest.TestCase):  # pylint: disable=too-many-public-methods
         dropped keeps its marks, and the outline its sizes; dragged
         off, the corner floats, and undo puts it back (#451)."""
 
-        source: Path = EXAMPLE_SHOP / "tools/end_mill.outline.toml"
+        source: Path = EXAMPLE_SHOP / "tools/end_mills/end_mill.outline.toml"
         with tempfile.TemporaryDirectory() as folder:
             path: Path = Path(folder) / source.name
             shutil.copy(source, path)
@@ -2214,7 +2214,7 @@ class FitTest(unittest.TestCase):
     def test_fit_shows_dimensions(self) -> None:
         """Every dimension of the end mill is inside the view."""
 
-        source: Path = EXAMPLE_SHOP / "tools/end_mill.outline.toml"
+        source: Path = EXAMPLE_SHOP / "tools/end_mills/end_mill.outline.toml"
         editor: OutlineEditor = OutlineEditor(
             outline_editor.drawing_from(source)
         )
