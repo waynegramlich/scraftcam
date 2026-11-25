@@ -5,7 +5,9 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from typing import cast
 
+from scraftcam.appearance import Color
 from scraftcam.geometry import Corner
 from scraftcam.gui.dimensions import RADIUS, Dimension
 from scraftcam.gui.letters import Letter
@@ -15,8 +17,10 @@ from scraftcam.gui.outline_file import (
     Polygon,
     Role,
     outline_from_text,
+    outline_text,
 )
 from scraftcam.gui.outline_polygon import (
+    outline_cacheable,
     outline_polygon,
     outline_revolved,
     outline_unit,
@@ -24,11 +28,14 @@ from scraftcam.gui.outline_polygon import (
 )
 from scraftcam.gui.values import letter_values, real_corners
 from scraftcam.model import Length
+from scraftcam.model_cache import Cacheable, ModelCache
 from scraftcam.pybind.scraftpybind import JSON, PyBind, connect
 from scraftcam.shops import EXAMPLE_SHOP
 from scraftcam.solid import (
     Layer,
     RoundedPolygon,
+    Solid,
+    SolidAssembly,
     SolidRevolved,
     SolidRoundedPolygon,
 )
@@ -43,9 +50,13 @@ HAVE_SOLIDCRAFT: bool = shutil.which("solidcraft-cli") is not None
 
 # Function `flat_drill()`:
 def flat_drill() -> Outline:
-    """Return the example drill's outline, not revolved."""
+    """Return the example drill's outline, not revolved, its flutes and
+    shank one polygon again (flat trees of polygons are #S5)."""
     outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
     outline.revolve = False
+    outline.polygons = [
+        Polygon("outline", Role.OTHER, ["V1", "V2", "V3", "V4", "V5"])
+    ]
     return outline
 
 
@@ -73,6 +84,7 @@ class TestOutlinePolygon(unittest.TestCase):
             outline.points, outline.letters, outline.dimensions
         )
         assert expected is not None
+        del expected[5]  # The flutes' end on the axis, in no polygon here.
         del expected[2]
         self.assertEqual(
             [(corner.x, corner.y) for corner in polygon.corners], expected
@@ -92,11 +104,7 @@ class TestOutlinePolygon(unittest.TestCase):
         """A file is read; a revolved one is refused."""
         with tempfile.TemporaryDirectory() as directory:
             path: Path = Path(directory) / "flat.outline.toml"
-            text: str = DRILL.read_text(encoding="utf-8")
-            path.write_text(
-                text.replace("revolve = true", "revolve = false"),
-                encoding="utf-8",
-            )
+            path.write_text(outline_text(flat_drill()), encoding="utf-8")
             self.assertEqual(
                 polygon_from_file(path).corners,
                 outline_polygon(flat_drill()).corners,
@@ -112,12 +120,12 @@ class TestOutlinePolygon(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "holes"):
             outline_polygon(outline)
 
-        # Several polygons wait for `T.sa~6.11` #S4.
+        # Several flat polygons wait for `T.sa~6.11` #S5.
         outline = flat_drill()
         outline.polygons.append(
             Polygon("cap", Role.OTHER, list(outline.names[:3]))
         )
-        with self.assertRaisesRegex(ValueError, "several polygons"):
+        with self.assertRaisesRegex(ValueError, "several flat polygons"):
             outline_polygon(outline)
         outline = flat_drill()
         outline.dimensions = []
@@ -158,14 +166,43 @@ class TestOutlineRevolved(unittest.TestCase):
     """A revolved outline is a round solid."""
 
     def test_drill(self) -> None:
-        """The drill's tip is cut flat; a flat outline is refused."""
+        """The drill's flutes' tip is cut flat; a flat outline is
+        refused."""
         outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
-        drill: SolidRevolved = outline_revolved(outline, "drill")
+        drill: Solid = outline_revolved(outline, "drill")
+        assert isinstance(drill, SolidAssembly)
+        flutes: Solid = drill.parts[0].solid
+        assert isinstance(flutes, SolidRevolved)
         self.assertEqual(
-            len(drill.flat.corners), len(drill.profile.corners) + 1
+            len(flutes.flat.corners), len(flutes.profile.corners) + 1
         )
         with self.assertRaisesRegex(ValueError, "not revolved"):
             outline_revolved(flat_drill(), "flat")
+
+    def test_cacheable(self) -> None:
+        """The drill as a cached model: its hash is its shape alone,
+        its flutes see-through (#837, #826)."""
+        outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
+        hss: Color = Color(16.0, 17.0, 19.0)
+        model: Cacheable = outline_cacheable(outline, "drill", color=hss)
+        self.assertEqual(
+            model.shape, outline_cacheable(outline, "drill").shape
+        )
+        self.assertEqual(model.color_of("drill_shank"), "#292b30")
+        self.assertAlmostEqual(model.opacity_of("drill_flutes"), 0.8)
+        self.assertEqual(model.opacity_of("drill_shank"), 1.0)
+
+    @unittest.skipUnless(HAVE_SOLIDCRAFT, "no `solidcraft-cli` on the PATH")
+    def test_cached_live(self) -> None:
+        """The drill's `.step` is made headless, in the cache (#831)."""
+        outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
+        model: Cacheable = outline_cacheable(outline, "drill")
+        with tempfile.TemporaryDirectory() as directory:
+            cache: ModelCache = ModelCache(Path(directory))
+            path: Path = cache.path(model)
+            self.assertTrue(path.name.startswith("drill__"))
+            self.assertTrue(cache.create_headless(model, path))
+            self.assertGreater(path.stat().st_size, 1000)
 
     def test_bad_profiles(self) -> None:
         """Across the axis, or with no edge on it, is refused."""
@@ -180,17 +217,24 @@ class TestOutlineRevolved(unittest.TestCase):
 
     @unittest.skipUnless(HAVE_SOLIDCRAFT, "no `solidcraft-cli` on the PATH")
     def test_build_live(self) -> None:
-        """The drill turns into the volume Pappus gives, along Z."""
+        """The drill's flutes and shank turn into the volume Pappus
+        gives, along Z (`T.sa~6.11` #818)."""
         outline: Outline = outline_from_text(DRILL.read_text(encoding="utf-8"))
-        drill: SolidRevolved = outline_revolved(outline, "drill")
+        drill: Solid = outline_revolved(outline, "drill")
+        assert isinstance(drill, SolidAssembly)
+        parts: list[SolidRevolved] = [
+            cast(SolidRevolved, part.solid) for part in drill.parts
+        ]
         with connect("headless") as transport:
             solidcraft: PyBind = PyBind(transport)
-            self.assertEqual(drill.build(solidcraft), ["drill"])
+            self.assertEqual(len(drill.build(solidcraft)), 2)
             properties: JSON = solidcraft.component.properties()
         volume: float
         high: list[float]
         volume, _, high = totals(properties)
-        expected: float = turned_volume(list(drill.flat.corners))
+        expected: float = sum(
+            turned_volume(list(part.flat.corners)) for part in parts
+        )
         self.assertLess(abs(volume - expected) / expected, 2e-3)
         self.assertAlmostEqual(high[2], 4 * 25.4, 3)
 

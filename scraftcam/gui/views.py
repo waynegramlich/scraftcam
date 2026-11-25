@@ -1014,7 +1014,11 @@ class Panel(QFrame):
                     f"{__package__}.outline_editor"
                 )
                 self.node.path.with_suffix(".svg").write_text(
-                    editors.tool_svg(self.outline_path, values),
+                    editors.tool_svg(
+                        self.outline_path,
+                        values,
+                        str(self.item.get("material", "")),
+                    ),
                     encoding="utf-8",
                 )
             return ""
@@ -1024,7 +1028,14 @@ class Panel(QFrame):
             for letter in defaults
             if letter in self.item
         }
-        tool: ToolValues = ToolValues(values, defaults, save, value_problem)
+        tool: ToolValues = ToolValues(
+            values,
+            defaults,
+            save,
+            value_problem,
+            str(self.item.get("material", "")),
+            self.node.path.stem if self.node is not None else "",
+        )
         tool.editing = self.editing
         editor.show_tool(tool)
 

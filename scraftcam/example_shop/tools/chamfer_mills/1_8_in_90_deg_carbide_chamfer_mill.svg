@@ -1,5 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="40.9286mm" height="130mm" viewBox="-5.4783 -47.2609 17.795 56.5217">
 <rect x="-5.4783" y="-47.2609" width="17.795" height="56.5217" class="paper" fill="white"/>
+<defs>
+<pattern id="hatch1" patternUnits="userSpaceOnUse" width="0.8696" height="0.8696" patternTransform="rotate(-45)"><line x1="0" y1="0.4348" x2="0.8696" y2="0.4348" stroke="black" stroke-width="0.1087"/></pattern>
+</defs>
+<path d="M 0 0 L 0.2609 0 L 1.6304 -1.3696 L 1.6304 -39.1304 L 0 -39.1304 L 0 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
 <path d="M 0 0 L 0.2609 0 L 1.6304 -1.3696 L 1.6304 -39.1304 L 0 -39.1304 L 0 0" class="ink" fill="none" stroke="black" stroke-width="0.2609" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M 0 0 L -0.2609 0" class="ink" fill="none" stroke="black" stroke-dasharray="1.3043 0.6522" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M -0.2609 0 L -1.6304 -1.3696" class="ink" fill="none" stroke="black" stroke-dasharray="1.3043 0.6522" stroke-width="0.1304" stroke-linecap="round" stroke-linejoin="round"/>

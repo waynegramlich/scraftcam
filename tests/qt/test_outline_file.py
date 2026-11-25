@@ -123,23 +123,21 @@ class OutlineFileTest(unittest.TestCase):
         self.assertEqual(filled.names, ["Tip", "V1", "V2"])
 
     def test_polygons(self) -> None:
-        """Polygons are written and read with their names, roles,
-        materials and vertices (#765); a new outline has one through
-        every corner; a bad one is refused, naming why."""
+        """Polygons are written and read with their names, roles and
+        vertices (#765); a new outline has one through every corner; a
+        bad one, or one with a material or colour (#840), is refused,
+        naming why."""
         self.assertEqual(
             HALF_DRILL.polygons,
             [Polygon("outline", Role.OTHER, ["V1", "V2", "V3", "V4"])],
         )
         split: Outline = outline_from_text(outline_text(HALF_DRILL))
         split.polygons = [
-            Polygon("flutes", Role.CUTTING, ["V1", "V2", "V3"], "hss"),
-            Polygon(
-                "shank", Role.SUPPORT, ["V3", "V2", "V1"], "", "R1% G2% B3%"
-            ),
+            Polygon("flutes", Role.CUTTING, ["V1", "V2", "V3"]),
+            Polygon("shank", Role.SUPPORT, ["V3", "V2", "V1"]),
         ]
         text: str = outline_text(split)
-        self.assertIn('material = "hss"', text)
-        self.assertIn('color = "R1% G2% B3%"', text)
+        self.assertNotIn("material", text)
         self.assertEqual(outline_from_text(text), split)
         problem: str
         broken: str
@@ -151,7 +149,12 @@ class OutlineFileTest(unittest.TestCase):
                 "needs vertices",
             ),
             (text.replace("[[polygons]]", "[[polygon]]"), "at least one"),
-            (text.replace("R1% G2%", "#1234"), "is not a colour"),
+            (
+                text.replace(
+                    'role = "support"', 'role = "support"\nmaterial = "hss"'
+                ),
+                "has no material",
+            ),
         ):
             with self.assertRaises(OutlineError) as caught:
                 outline_from_text(broken)

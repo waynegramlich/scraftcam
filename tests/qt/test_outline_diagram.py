@@ -4,7 +4,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from scraftcam.appearance import STANDARD_HATCHES
+from scraftcam.appearance import STANDARD_HATCHES, Hatch
 from scraftcam.diagram import TEXT, Sheet, Stroke, Weight, svg
 from scraftcam.geometry import ArcSegment, LineSegment, Point
 from scraftcam.gui import outline_diagram
@@ -31,7 +31,7 @@ from scraftcam.gui.outline_file import (
     Role,
     outline_from_text,
 )
-from scraftcam.shops import EXAMPLE_SHOP, material_looks
+from scraftcam.shops import EXAMPLE_SHOP
 
 DRILL: Path = EXAMPLE_SHOP / "tools/drills/drill.outline.toml"
 
@@ -124,20 +124,41 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
         self.assertAlmostEqual(outline_sheet(box()).text_height, 4.0 / 30)
 
     def test_hatched(self) -> None:
-        """A polygon with a material is hatched under its ink, from the
-        shop's materials; one without is not (#781, #808, #809)."""
+        """Drawn for a material, every polygon is hatched under the
+        ink; drawn for none, nothing is (#840)."""
         outline: Outline = box()
-        outline.fill_polygons()
-        outline.polygons[0].material = "HSS"
-        materials: dict[str, tuple[str, str]] = material_looks(EXAMPLE_SHOP)
-        sheet: Sheet = outline_sheet(outline, 0.5, materials=materials)
+        hatch: Hatch = STANDARD_HATCHES[1]
+        sheet: Sheet = outline_sheet(outline, 0.5, hatch=hatch)
         self.assertEqual(len(sheet.strokes), 2)
-        self.assertEqual(sheet.strokes[0].hatch, STANDARD_HATCHES[0])
+        self.assertEqual(sheet.strokes[0].hatch, hatch)
         self.assertIn('fill="url(#hatch1)"', svg(sheet))
-        outline.polygons[0].material = ""
-        self.assertEqual(
-            len(outline_sheet(outline, 0.5, materials=materials).strokes), 1
+        self.assertEqual(len(outline_sheet(outline, 0.5).strokes), 1)
+
+    def test_shared_edge_thin(self) -> None:
+        """An edge two polygons share is drawn once, thin (#845)."""
+        outline: Outline = Outline(
+            points=[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (2.0, 6.0)]
         )
+        outline.fill_polygons()
+        outline.polygons[:] = [
+            Polygon("box", Role.SUPPORT, ["V1", "V2", "V3", "V4"]),
+            Polygon("roof", Role.CUTTING, ["V4", "V3", "V5"]),
+        ]
+        strokes: tuple[Stroke, ...] = outline_sheet(outline, 0.5).strokes
+        thin: list[Stroke] = [
+            stroke for stroke in strokes if stroke.weight is Weight.THIN
+        ]
+        self.assertEqual(len(thin), 1)
+        self.assertEqual(
+            {thin[0].segments[0].start, thin[0].segments[0].end},
+            {(4.0, 4.0), (0.0, 4.0)},
+        )
+        thick: int = sum(
+            len(stroke.segments)
+            for stroke in strokes
+            if stroke.weight is Weight.THICK
+        )
+        self.assertEqual(thick, 5)
 
     def test_horizontal(self) -> None:
         """A horizontal dimension's line sits at its offset's Y."""
@@ -260,7 +281,9 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
         sheet: Sheet = outline_sheet(outline, 0.1)
         arcs: list[ArcSegment] = [
             segment
-            for segment in sheet.strokes[0].segments
+            for stroke in sheet.strokes
+            if not stroke.dashed
+            for segment in stroke.segments
             if isinstance(segment, ArcSegment)
         ]
         self.assertEqual(len(arcs), 2)
@@ -288,7 +311,9 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
         sheet: Sheet = outline_sheet(outline, 0.1)
         arcs: list[ArcSegment] = [
             segment
-            for segment in sheet.strokes[0].segments
+            for stroke in sheet.strokes
+            if stroke.weight is Weight.THICK
+            for segment in stroke.segments
             if isinstance(segment, ArcSegment)
         ]
         self.assertAlmostEqual(arcs[0].radius, 25.4 / 64 * scale)
@@ -331,7 +356,9 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
         outline.dimensions = []
         sheet: Sheet = outline_sheet(outline, 0.5)
         mirror: list[Stroke] = [s for s in sheet.strokes if s.dashed]
-        self.assertEqual(len(mirror), 4)  # An edge each side of FL (#434).
+        # An edge each side of FL (#434), and the flutes' end once
+        # (`T.sa~6.11` #845).
+        self.assertEqual(len(mirror), 5)
         corner: Point = outline.points[1]
         self.assertEqual(mirror[0].segments[0].end, (-corner[0], corner[1]))
         self.assertIn("stroke-dasharray", svg(sheet))

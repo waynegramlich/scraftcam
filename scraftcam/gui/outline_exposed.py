@@ -466,6 +466,22 @@ def tab(editor: str, name: str) -> str:
 
 
 @exposed.changes
+def solid(editor: str) -> str:
+    """Press {editor}'s [Solid]: its solid is made (headless, into the
+    cache) and shown alone in SolidCraft, which is started if need be
+    (`T.sa~6.11` #819, #848).  Returns its state, then the message,
+    if any."""
+    # Pressed as a user presses it, so a hidden one fails as it would.
+    shown: OutlineEditor = _editor(editor)
+    if not shown.solid_button.isVisible():
+        raise ExposedError("[Solid] is not shown here (not revolved)")
+    shown.solid_button.click()
+    QTest.qWait(1)
+    told: str = shown.view.message
+    return state(editor) + (f"\nmessage: {told}" if told else "")
+
+
+@exposed.changes
 def resize(editor: str, width: int, height: int) -> str:
     """Make {editor}'s window `width` by `height` pixels, then fit
     the drawing to it (a headless window starts small, too small to

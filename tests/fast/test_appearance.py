@@ -2,7 +2,7 @@
 
 import unittest
 
-from scraftcam.appearance import STANDARD_HATCHES, Color, Hatch, Look, looks
+from scraftcam.appearance import STANDARD_HATCHES, Color, Hatch, Look, material_look
 
 
 # Class `ColorTest`:
@@ -69,25 +69,21 @@ class HatchTest(unittest.TestCase):
 
 # Class `LooksTest`:
 class LooksTest(unittest.TestCase):
-    """A drawing's polygons' colours and hatches."""
+    """A material's colour and hatch."""
 
-    def test_looks(self) -> None:
-        """Own colour wins; materials never share a hatch (#781)."""
+    def test_material_look(self) -> None:
+        """A material's own hatch, else the first standard one (#840)."""
         materials: dict[str, tuple[str, str]] = {
-            "hss": ("R65% G67% B70%", ""),
-            "steel": ("R50% G50% B50%", "A45 S2mm T0.25mm"),
+            "hss": ("R16% G17% B19%", ""),
+            "steel": ("R50% G50% B50%", "A135 S2mm T0.25mm"),
         }
-        found: list[Look] = looks(
-            [("hss", ""), ("steel", "R1% G2% B3%"), ("", ""), ("HSS", "")],
-            materials,
-        )
-        self.assertEqual(found[0].color, Color(65.0, 67.0, 70.0))
-        self.assertEqual(found[1].color, Color(1.0, 2.0, 3.0))
-        self.assertEqual(found[2], Look(None, None))
-        assert found[0].hatch is not None and found[1].hatch is not None
-        self.assertEqual(found[0].hatch, STANDARD_HATCHES[1])
-        self.assertEqual(found[1].hatch.written, "A45 S2mm T0.25mm")
-        self.assertEqual(found[3].hatch, found[0].hatch)
+        hss: Look = material_look("HSS", materials)
+        self.assertEqual(hss.color, Color(16.0, 17.0, 19.0))
+        self.assertEqual(hss.hatch, STANDARD_HATCHES[0])
+        steel: Look = material_look("steel", materials)
+        assert steel.hatch is not None
+        self.assertEqual(steel.hatch.written, "A135 S2mm T0.25mm")
+        self.assertEqual(material_look("", materials), Look(None, None))
 
 
 if __name__ == "__main__":

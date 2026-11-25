@@ -10,9 +10,14 @@ volumes and boxes must agree.
 import math
 import unittest
 from pathlib import Path
+from typing import cast
 
+from scraftcam.appearance import Color
 from scraftcam.gui.outline_file import Outline, outline_from_text
-from scraftcam.gui.outline_polygon import outline_revolved
+from scraftcam.gui.outline_polygon import (
+    CUTTING_TRANSPARENCY,
+    outline_revolved,
+)
 from scraftcam.gui.values import set_letters
 from scraftcam.shops import (
     DRILL_LETTERS,
@@ -20,7 +25,7 @@ from scraftcam.shops import (
     EXAMPLE_SHOP_FILE,
     read,
 )
-from scraftcam.solid import SolidRevolved
+from scraftcam.solid import Appearance, Solid, SolidAssembly, SolidRevolved
 from scraftcam.tooling.cutter_models import (
     profile,
     shop_tools,
@@ -83,8 +88,37 @@ def turned(points: list[tuple[float, float]]) -> tuple[float, float, float]:
     )
 
 
+# Function `turned_parts()`:
+def turned_parts(solid: Solid) -> tuple[float, float, float]:
+    """Return a revolved solid's volume, radius and height, its parts
+    (flutes and shank, `T.sa~6.11` #817) added up.
+
+    Arguments:
+    * `solid` (`Solid`): A `SolidRevolved`, or an assembly of them.
+
+    Returns:
+    * (`tuple[float, float, float]`): Volume, radius, height.
+    """
+    parts: list[SolidRevolved] = (
+        [cast(SolidRevolved, part.solid) for part in solid.parts]
+        if isinstance(solid, SolidAssembly)
+        else [cast(SolidRevolved, solid)]
+    )
+    points: list[list[tuple[float, float]]] = [
+        [(corner.x, corner.y) for corner in part.profile.corners]
+        for part in parts
+    ]
+    each: list[tuple[float, float, float]] = [turned(part) for part in points]
+    zs: list[float] = [z for part in points for _, z in part]
+    return (
+        sum(volume for volume, _, _ in each),
+        max(radius for _, radius, _ in each),
+        max(zs) - min(zs),
+    )
+
+
 # Function `outline_drill()`:
-def outline_drill(tool: dict[str, object]) -> SolidRevolved:
+def outline_drill(tool: dict[str, object]) -> Solid:
     """Return the outline drill given a shop drill's letters.
 
     Arguments:
@@ -105,6 +139,37 @@ def outline_drill(tool: dict[str, object]) -> SolidRevolved:
     return outline_revolved(outline, f"drill_{tool['unique_id']}")
 
 
+# Class `TestDrillParts`:
+class TestDrillParts(unittest.TestCase):
+    """The drill is flutes and a shank (`T.sa~6.11` #817, #826)."""
+
+    def test_parts(self) -> None:
+        """Two stacked parts, named after the drill; the flutes are
+        see-through, both the material's colour."""
+        outline: Outline = outline_from_text(
+            DRILL.read_text(encoding="utf-8"), DRILL.name
+        )
+        drill: Solid = outline_revolved(
+            outline, "drill", color=Color(16.0, 17.0, 19.0)
+        )
+        assert isinstance(drill, SolidAssembly)
+        self.assertEqual(
+            [part.solid.name for part in drill.parts],
+            ["drill_flutes", "drill_shank"],
+        )
+        flutes: Appearance | None = drill.parts[0].solid.appearance
+        shank: Appearance | None = drill.parts[1].solid.appearance
+        assert flutes is not None and shank is not None
+        self.assertAlmostEqual(flutes.t, CUTTING_TRANSPARENCY)
+        self.assertEqual(shank.t, 0.0)
+        self.assertAlmostEqual(shank.r, 0.16)
+        self.assertIsNone(
+            cast(SolidAssembly, outline_revolved(outline, "bare"))
+            .parts[0]
+            .solid.appearance
+        )
+
+
 # Class `TestDrillOutline`:
 class TestDrillOutline(unittest.TestCase):
     """The outline drill matches the old model, drill by drill."""
@@ -120,11 +185,8 @@ class TestDrillOutline(unittest.TestCase):
         tool: dict[str, object]
         for tool in drills:
             with self.subTest(drill=tool["name"]):
-                new: tuple[float, float, float] = turned(
-                    [
-                        (corner.x, corner.y)
-                        for corner in outline_drill(tool).profile.corners
-                    ]
+                new: tuple[float, float, float] = turned_parts(
+                    outline_drill(tool)
                 )
                 old_points: list[tuple[float, float]] = [
                     (r * MM, z * MM) for r, z in profile("drills", tool)

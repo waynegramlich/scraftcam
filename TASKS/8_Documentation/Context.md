@@ -48,3 +48,7 @@ numbers are shared by every task; the next is in
   polygon's material hatches it in drawings (monochrome, #812), a
   standard hatch given when none; a polygon's own colour (for
   solids) in the [Polygons] tab's picker.
+* `T.sa~6.11` #S4: polygons have no material (a tool's `material`
+  hatches its drawing, HSS by default); the drill is flutes and
+  shank; [Solid] shows a round tool in SolidCraft (started if need
+  be, `solid_viewer.py`), its `.step` cached headless.

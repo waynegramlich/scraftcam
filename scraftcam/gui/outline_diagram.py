@@ -13,7 +13,7 @@ import math
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 
-from ..appearance import Look, looks
+from ..appearance import Hatch
 from ..diagram import (
     FONT_STEP,
     TEXT,
@@ -97,7 +97,7 @@ def outline_sheet(
     outline: Outline,
     text_height: float = 0.0,
     *,
-    materials: dict[str, tuple[str, str]] | None = None,
+    hatch: Hatch | None = None,
 ) -> Sheet:
     """Return an outline's diagram.
 
@@ -106,10 +106,10 @@ def outline_sheet(
     * `text_height` (`float`):
       The text height (drawing steps); 0 takes the outline's own, or
       when it has none picks one from its size (#280).
-    * `materials` (`dict[str, tuple[str, str]] | None`):
-      Each material's colour and hatch texts, by name
-      (`shops.material_looks()`), to hatch each polygon that has a
-      material (`T.sa~6.11` #781, #808); `None` hatches none.
+    * `hatch` (`Hatch | None`):
+      The hatch of the material it is drawn for (a tool's,
+      `appearance.material_look()`), over every polygon
+      (`T.sa~6.11` #808, #840); `None` hatches nothing.
 
     Returns:
     * (`Sheet`): The diagram, its paper the drawing plus a margin.
@@ -118,7 +118,7 @@ def outline_sheet(
     # (#457), so the values never move its corners (#299 undone),
     # and a revolved outline's mirror half.
     fillets: dict[int, Fillet] = fillet_arcs(outline)
-    strokes: list[Stroke] = outline_strokes(outline, fillets)
+    strokes: list[Stroke] = outline_strokes(outline, fillets, thin_shared=True)
     if text_height <= 0.0:
         text_height = outline.text_height
     if text_height <= 0.0:
@@ -129,8 +129,8 @@ def outline_sheet(
         )
 
     # Each polygon with a material hatched, under the ink (#808).
-    if materials is not None:
-        strokes[:0] = hatch_strokes(outline, fillets, materials)
+    if hatch is not None:
+        strokes[:0] = hatch_strokes(outline, fillets, hatch)
 
     # The holes, each with its center mark (#290).
     scale: float = _scale(outline)
@@ -183,35 +183,24 @@ def outline_sheet(
 
 # Function `hatch_strokes()`:
 def hatch_strokes(
-    outline: Outline,
-    fillets: dict[int, Fillet],
-    materials: dict[str, tuple[str, str]],
+    outline: Outline, fillets: dict[int, Fillet], hatch: Hatch
 ) -> list[Stroke]:
-    """Return a hatched area per polygon that has a material, no two
-    materials sharing a hatch (`appearance.looks()`, #781).
+    """Return a hatched area per polygon, all one material's hatch
+    (`T.sa~6.11` #840).
 
     Arguments:
     * `outline` (`Outline`): The outline.
     * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
-    * `materials` (`dict[str, tuple[str, str]]`): Each material's
-      colour and hatch texts, by name.
+    * `hatch` (`Hatch`): The material's hatch.
 
     Returns:
     * (`list[Stroke]`): The hatched areas, corners rounded.
     """
-    outline.fill_polygons()
-    found: list[Look] = looks(
-        [(polygon.material, polygon.color) for polygon in outline.polygons],
-        materials,
-    )
     return [
         Stroke(
-            _rounded(outline.points, loop, fillets),
-            Weight.THIN,
-            hatch=look.hatch,
+            _rounded(outline.points, loop, fillets), Weight.THIN, hatch=hatch
         )
-        for loop, look in zip(outline.loops(), found, strict=True)
-        if look.hatch is not None
+        for loop in outline.loops()
     ]
 
 
@@ -423,7 +412,10 @@ def dimension_strokes(
 
 # Function `outline_strokes()`:
 def outline_strokes(
-    outline: Outline, fillets: dict[int, Fillet]
+    outline: Outline,
+    fillets: dict[int, Fillet],
+    *,
+    thin_shared: bool = False,
 ) -> list[Stroke]:
     """Return the outline's own strokes, shared by the SVG and the
     editor (#S4): first a thick closed stroke per polygon (#765),
@@ -433,18 +425,34 @@ def outline_strokes(
     Arguments:
     * `outline` (`Outline`): The outline.
     * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
+    * `thin_shared` (`bool`): True (drawings, not [Edit]) to draw an
+      edge two polygons share once, thin: it parts one piece, not
+      its outside (`T.sa~6.11` #845, #851).  The polygons' strokes
+      are then their other edges, in runs.
 
     Returns:
-    * (`list[Stroke]`): The polygons, then the mirror half's strokes.
+    * (`list[Stroke]`): The polygons, then the mirror half's strokes
+      (and, with `thin_shared`, the shared edges last).
     """
     # The polygons, then their mirror image.
     strokes: list[Stroke] = [
         Stroke(_rounded(outline.points, loop, fillets), Weight.THICK)
         for loop in outline.loops()
     ]
-    segments: tuple[XYSegment, ...] = tuple(
-        segment for stroke in strokes for segment in stroke.segments
-    )
+    # Each edge once: two polygons share one (#845).
+    seen: set[frozenset[Point]] = set()
+    segments: list[XYSegment] = []
+    stroke: Stroke
+    for stroke in strokes:
+        segment: XYSegment
+        for segment in stroke.segments:
+            ends: frozenset[Point] = frozenset((segment.start, segment.end))
+            if isinstance(segment, ArcSegment) or ends not in seen:
+                seen.add(ends)
+                segments.append(segment)
+    shared: list[Stroke] = []
+    if thin_shared:
+        strokes, shared = _thin_shared(outline, strokes)
     if outline.revolve:
         strokes.extend(
             Stroke(
@@ -455,7 +463,60 @@ def outline_strokes(
             for segment in segments
             if abs(segment.start[0]) > ON_AXIS or abs(segment.end[0]) > ON_AXIS
         )
-    return strokes
+    return strokes + shared
+
+
+# Function `_thin_shared()`:
+def _thin_shared(
+    outline: Outline, strokes: list[Stroke]
+) -> tuple[list[Stroke], list[Stroke]]:
+    """Return the polygons' strokes without the edges two polygons
+    share, in runs, and each shared edge once, thin (#845).
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `strokes` (`list[Stroke]`): A closed thick stroke per polygon.
+
+    Returns:
+    * (`tuple[list[Stroke], list[Stroke]]`): The thick runs, and the
+      thin shared edges.
+    """
+    # A shared edge is straight (a shared corner has no fillet, #798),
+    # so it is a line between two corners that both polygons have.
+    seen: dict[frozenset[Point], int] = {}
+    loop: list[int]
+    for loop in outline.loops():
+        index: int
+        for index, corner in enumerate(loop):
+            ends: frozenset[Point] = frozenset(
+                (outline.points[corner], outline.points[loop[index - 1]])
+            )
+            seen[ends] = seen.get(ends, 0) + 1
+    shared: set[frozenset[Point]] = {
+        ends for ends, count in seen.items() if count > 1
+    }
+    if not shared:
+        return strokes, []
+
+    # Each polygon's other segments, in runs (one run may wrap round).
+    thick: list[Stroke] = []
+    stroke: Stroke
+    for stroke in strokes:
+        runs: list[list[XYSegment]] = [[]]
+        segment: XYSegment
+        for segment in stroke.segments:
+            if frozenset((segment.start, segment.end)) in shared:
+                runs.append([])
+            else:
+                runs[-1].append(segment)
+        if len(runs) > 1 and runs[0] and runs[-1]:
+            runs[0] = runs.pop() + runs[0]
+        thick.extend(Stroke(tuple(run), Weight.THICK) for run in runs if run)
+    thin: list[Stroke] = [
+        Stroke((LineSegment(*sorted(ends)),), Weight.THIN)
+        for ends in sorted(shared, key=sorted)
+    ]
+    return thick, thin
 
 
 # Function `hole_sizes()`:

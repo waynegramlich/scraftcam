@@ -44,6 +44,20 @@ def tool_values(tool: Path, outline: Path) -> dict[str, str]:
     return {name: str(item[name]) for name in names if name in item}
 
 
+# Function `tool_material()`:
+def tool_material(tool: Path) -> str:
+    """Return a tool's material, which hatches its drawing (#840).
+
+    Arguments:
+    * `tool` (`Path`): The tool's `.toml`.
+
+    Returns:
+    * (`str`): Its `material`, or "" for none (HSS, #821).
+    """
+    with tool.open("rb") as file:
+        return str(tomllib.load(file).get("material", ""))
+
+
 # Function `kind_tools()`:
 def kind_tools(outline: Path) -> list[Path]:
     """Return the tools beside an outline that are of its kind.
@@ -91,7 +105,9 @@ def write_svgs(shop: Path) -> list[Path]:
     for outline in sorted((shop / "tools").glob(f"*/*{OUTLINE_SUFFIX}")):
         tool: Path
         for tool in kind_tools(outline):
-            text: str = tool_svg(outline, tool_values(tool, outline))
+            text: str = tool_svg(
+                outline, tool_values(tool, outline), tool_material(tool)
+            )
             picture: Path = tool.with_suffix(".svg")
             if not picture.is_file() or (
                 picture.read_text(encoding="utf-8") != text

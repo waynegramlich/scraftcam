@@ -319,67 +319,33 @@ class Look:
     hatch: Hatch | None = field(init=True)
 
 
-# Function `looks()`:
-def looks(
-    polygons: list[tuple[str, str]],
-    materials: dict[str, tuple[str, str]],
-) -> list[Look]:
-    """Return how each polygon of a drawing is drawn (#781, #805).
-
-    A polygon's own colour wins over its material's.  A polygon with
-    a material is hatched by the material's hatch, or else by the
-    first standard hatch that no other material of the drawing has,
-    so no two materials share one; one with no material is not.
+# Function `material_look()`:
+def material_look(
+    material: str, materials: dict[str, tuple[str, str]]
+) -> Look:
+    """Return how a material is drawn: its colour (for solids) and its
+    hatch (for drawings), the first standard hatch when it names none
+    (`T.sa~6.11` #781, #840).
 
     Arguments:
-    * `polygons` (`list[tuple[str, str]]`): Each polygon's material
-      ("" for none) and own colour text ("" for none).
+    * `material` (`str`): The material's name, in any capitals ("" for
+      none).
     * `materials` (`dict[str, tuple[str, str]]`): Each known
       material's colour and hatch texts ("" for none), by its name in
-      lower case (a polygon's material is matched in any capitals).
+      lower case (`shops.material_looks()`).
 
     Returns:
-    * (`list[Look]`): Each polygon's look, in order.
+    * (`Look`): Its look; `Look(None, None)` for no material.
 
     Raises:
-    * `ValueError`: When a colour or hatch text is bad.
+    * `ValueError`: When its colour or hatch text is bad.
     """
-    # Materials in any capitals (as the shop matches them).
-    polygons = [(material.lower(), own) for material, own in polygons]
-
-    # Each material's hatch: its own, then the standard ones unused.
-    taken: set[tuple[HatchLines, ...]] = {
-        Hatch.parse(hatch).lines
-        for material, _ in polygons
-        if material in materials
-        for hatch in (materials[material][1],)
-        if hatch
-    }
-    spare: list[Hatch] = [
-        hatch for hatch in STANDARD_HATCHES if hatch.lines not in taken
-    ]
-    hatches: dict[str, Hatch] = {}
-    material: str
-    own: str
-    for material, _ in polygons:
-        if material and material not in hatches:
-            own = materials.get(material, ("", ""))[1]
-            hatches[material] = (
-                Hatch.parse(own)
-                if own
-                else spare.pop(0)
-                if spare
-                else STANDARD_HATCHES[0]
-            )
-
-    # Each polygon's colour: its own, else its material's.
-    found: list[Look] = []
-    for material, own in polygons:
-        text: str = own or materials.get(material, ("", ""))[0]
-        found.append(
-            Look(
-                Color.parse(text) if text else None,
-                hatches.get(material),
-            )
-        )
-    return found
+    if not material:
+        return Look(None, None)
+    color: str
+    hatch: str
+    color, hatch = materials.get(material.lower(), ("", ""))
+    return Look(
+        Color.parse(color) if color else None,
+        Hatch.parse(hatch) if hatch else STANDARD_HATCHES[0],
+    )

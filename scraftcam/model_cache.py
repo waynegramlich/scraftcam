@@ -190,6 +190,19 @@ def no_color(_body: str) -> str:
     return ""
 
 
+# Function `opaque()`:
+def opaque(_body: str) -> float:
+    """Return a body's opacity when it has none of its own: solid.
+
+    Arguments:
+    * `_body` (`str`): The body's name.
+
+    Returns:
+    * (`float`): 1.0.
+    """
+    return 1.0
+
+
 # Class `Cacheable`:
 @dataclass(frozen=True, slots=True)
 class Cacheable:
@@ -207,9 +220,12 @@ class Cacheable:
       A body's color, from its name, or `""`.  A STEP file's colors do
       not come back, and a color is no part of the hash, so it is given
       each time the model is inserted.
+    * `opacity_of` (`Callable[[str], float]`):
+      A body's opacity, from its name: 1 is solid (a tool's flutes are
+      0.8, `T.sa~6.11` #817).
 
     Constructor:
-    * `Cacheable(name, shape, build, offset, color_of)`
+    * `Cacheable(name, shape, build, offset, color_of, opacity_of)`
     """
 
     # Constructor arguments:
@@ -220,6 +236,7 @@ class Cacheable:
         init=True, default=(0.0, 0.0, 0.0)
     )
     color_of: Callable[[str], str] = field(init=True, default=no_color)
+    opacity_of: Callable[[str], float] = field(init=True, default=opaque)
 
 
 # Function `export_model()`:
@@ -266,13 +283,19 @@ def assign_colors(
     * `model` (`Cacheable`): The model.
     * `bodies` (`list[str]`): The names of its bodies.
     """
-    by_color: dict[str, list[str]] = {}
+    by_color: dict[tuple[str, float], list[str]] = {}
     for body in bodies:
-        by_color.setdefault(model.color_of(body), []).append(body)
-    for color, colored in by_color.items():
+        by_color.setdefault(
+            (model.color_of(body), model.opacity_of(body)), []
+        ).append(body)
+    color: str
+    opacity: float
+    for (color, opacity), colored in by_color.items():
         if color:
             solidcraft.appearance.assign(
-                bodies=cast(JSON, colored), color=color
+                bodies=cast(JSON, colored),
+                color=color,
+                opacity=None if opacity >= 1.0 else opacity,
             )
 
 

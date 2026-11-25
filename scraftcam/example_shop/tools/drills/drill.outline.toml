@@ -51,10 +51,19 @@ at = [1.9971353788206216, 63.90833212225989]
 name = "V5"
 at = [0.0, 63.90833212225989]
 
+[[vertices]]
+name = "V6"
+at = [0.0, 43.93697833405368]
+
 [[polygons]]
-name = "outline"
-role = "other"
-vertices = ["V1", "V2", "V3", "V4", "V5"]
+name = "flutes"
+role = "cutting"
+vertices = ["V1", "V2", "V3", "V6"]
+
+[[polygons]]
+name = "shank"
+role = "support"
+vertices = ["V6", "V3", "V4", "V5"]
 
 [[dimensions]]
 letter = ""
@@ -137,6 +146,22 @@ from = "origin"
 to = "V4"
 offset = 18.0
 along = 0.97
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = "V6"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V3"
+to = "V6"
+offset = 0.0
+along = 0.5
 
 [[hides]]
 axis = "y"

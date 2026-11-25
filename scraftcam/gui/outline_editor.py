@@ -32,6 +32,8 @@ The scene is in unitless drawing steps (letters give the real sizes,
 
 import copy
 import math
+import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -79,6 +81,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QSizePolicy,
     QSplitter,
     QStackedWidget,
@@ -90,10 +93,11 @@ from PySide6.QtWidgets import (  # noqa: E402
     QWidget,
 )
 
-from ..appearance import Hatch, Look, looks  # noqa: E402
+from ..appearance import Color, Hatch, material_look  # noqa: E402
 from ..diagram import FONT_STEP, TEXT, Stroke, Weight, svg  # noqa: E402
 from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
-from ..shops import material_looks, shop_of  # noqa: E402
+from ..model_cache import Cacheable  # noqa: E402
+from ..shops import OUTLINE_SUFFIX, material_looks, shop_of  # noqa: E402
 from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
@@ -143,6 +147,7 @@ from .outline_diagram import (  # noqa: E402
     dimension_arc,
     dimension_strokes,
     fillet_arcs,
+    hatch_strokes,
     outline_sheet,
     outline_strokes,
     upright_text,
@@ -159,7 +164,13 @@ from .outline_file import (  # noqa: E402
     outline_from_text,
     outline_text,
 )
-from .outline_values import ToolValues, ValuesTable  # noqa: E402
+from .outline_polygon import outline_cacheable  # noqa: E402
+from .outline_values import (  # noqa: E402
+    DEFAULT_TOOL_MATERIAL,
+    ToolValues,
+    ValuesTable,
+)
+from .solid_viewer import VIEWER, ViewerError  # noqa: E402
 from .values import (  # noqa: E402
     crossings,
     overlaps,
@@ -1073,9 +1084,9 @@ class OutlineItem(QGraphicsItem):
 
     Attributes:
     * `drawing` (`Drawing`): What it draws.
-    * `materials` (`dict[str, tuple[str, str]]`): The outline's
-      shop's materials' colours and hatches
-      (`shops.material_looks()`); empty colours and hatches nothing.
+    * `hatch` (`Hatch | None`): The hatch of the material it is
+      drawn for (a tool's, `appearance.material_look()`), over every
+      polygon; `None` (a bare outline) hatches nothing (#840).
     """
 
     # Method `OutlineItem.__init__()`:
@@ -1087,7 +1098,7 @@ class OutlineItem(QGraphicsItem):
         """
         super().__init__()
         self.drawing: Drawing = drawing
-        self.materials: dict[str, tuple[str, str]] = {}
+        self.hatch: Hatch | None = None
         self.setZValue(1.0)
 
     # Method `OutlineItem.refresh()`:
@@ -1133,38 +1144,50 @@ class OutlineItem(QGraphicsItem):
         for start, end in sorted(crossed):
             painter.drawLine(corners[start], corners[end])
 
-    # Method `OutlineItem.paint_looks()`:
-    def paint_looks(self, painter: QPainter, thick: list[Stroke]) -> None:
-        """Hatch each polygon by its material, in ink, under the
-        outline: drawings are monochrome, colour is for solids (#812).
-        The hatch is Qt's, its spacing fixed on screen at any zoom
-        (#810).
+    # Method `OutlineItem.paint_hatch()`:
+    def paint_hatch(
+        self, painter: QPainter, fillets: dict[int, Fillet]
+    ) -> None:
+        """Hatch every polygon by the material it is drawn for, in ink,
+        under the outline: drawings are monochrome (#812, #840).  The
+        hatch is Qt's, its spacing fixed on screen at any zoom (#810).
 
         Arguments:
         * `painter` (`QPainter`): What draws, in drawing steps.
-        * `thick` (`list[Stroke]`): A closed stroke per polygon.
+        * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
         """
-        if not self.materials:
+        if self.hatch is None:
             return
-        found: list[Look] = looks(
-            [
-                (polygon.material, polygon.color)
-                for polygon in self.drawing.polygons
-            ],
-            self.materials,
-        )
         # The hatch's pattern is kept in screen pixels.
-        unscaled: QTransform = painter.worldTransform().inverted()[0]
-        ink: QColor = QColor(theme.colors().ink)
+        brush: QBrush = QBrush(
+            QColor(theme.colors().ink), hatch_style(self.hatch)
+        )
+        brush.setTransform(painter.worldTransform().inverted()[0])
+        area: Stroke
+        for area in hatch_strokes(self.drawing, fillets, self.hatch):
+            path: QPainterPath = stroke_path(area)
+            path.closeSubpath()
+            painter.fillPath(path, brush)
+
+    # Method `OutlineItem.paint_thin()`:
+    def paint_thin(self, painter: QPainter, strokes: list[Stroke]) -> None:
+        """Draw the thin strokes: a shared edge in ink (#845); revolved,
+        the mirror half, faint and dashed.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, in drawing steps.
+        * `strokes` (`list[Stroke]`): The outline's strokes.
+        """
+        thin: QPen = QPen(QColor(theme.colors().ink), THIN_PIXELS)
+        thin.setCosmetic(True)
+        ghost: QPen = QPen(QColor(theme.colors().quiet), THIN_PIXELS)
+        ghost.setCosmetic(True)
+        ghost.setStyle(Qt.PenStyle.DashLine)
         stroke: Stroke
-        look: Look
-        for stroke, look in zip(thick, found, strict=False):
-            if look.hatch is not None:
-                path: QPainterPath = stroke_path(stroke)
-                path.closeSubpath()
-                brush: QBrush = QBrush(ink, hatch_style(look.hatch))
-                brush.setTransform(unscaled)
-                painter.fillPath(path, brush)
+        for stroke in strokes:
+            if stroke.weight != Weight.THICK:
+                painter.setPen(ghost if stroke.dashed else thin)
+                painter.drawPath(stroke_path(stroke))
 
     # Method `OutlineItem.paint()`:
     def paint(
@@ -1185,23 +1208,26 @@ class OutlineItem(QGraphicsItem):
         fillets: dict[int, Fillet] = fillet_arcs(
             self.drawing, self.drawing.scale
         )
-        strokes: list[Stroke] = outline_strokes(self.drawing, fillets)
+        # In [Edit] an edge two polygons share is thick, for editing;
+        # in [Drawing] it is thin, as on the diagram (#851).
+        scene: QGraphicsScene | None = self.scene()
+        editing: bool = scene is not None and any(
+            isinstance(view, OutlineView) and view.overview
+            for view in scene.views()
+        )
+        strokes: list[Stroke] = outline_strokes(
+            self.drawing, fillets, thin_shared=not editing
+        )
         thick: list[Stroke] = [
             stroke for stroke in strokes if stroke.weight == Weight.THICK
         ]
-        self.paint_looks(painter, thick)
+        self.paint_hatch(painter, fillets)
         painter.setPen(pen)
         stroke: Stroke
         for stroke in thick:
             painter.drawPath(stroke_path(stroke))
 
-        # Revolved: the mirror half, faint and dashed.
-        ghost: QPen = QPen(QColor(theme.colors().quiet), THIN_PIXELS)
-        ghost.setCosmetic(True)
-        ghost.setStyle(Qt.PenStyle.DashLine)
-        painter.setPen(ghost)
-        for stroke in strokes[len(thick) :]:
-            painter.drawPath(stroke_path(stroke))
+        self.paint_thin(painter, strokes)
 
         corners: list[QPointF] = [
             QPointF(x, y) for x, y in self.drawing.points
@@ -1289,12 +1315,14 @@ def _extent(points: list[tuple[float, float]], axis: int) -> float:
 
 
 # Function `tool_svg()`:
-def tool_svg(outline: Path, values: dict[str, str]) -> str:
-    """Return a tool's diagram: its kind's outline, drawn for it.
+def tool_svg(outline: Path, values: dict[str, str], material: str = "") -> str:
+    """Return a tool's diagram: its kind's outline, drawn for it and
+    hatched by its material (`T.sa~6.11` #840).
 
     Arguments:
     * `outline` (`Path`): The kind's `.outline.toml`.
     * `values` (`dict[str, str]`): The tool's values, by letter.
+    * `material` (`str`): The tool's material ("": HSS, #821).
 
     Returns:
     * (`str`): The `.svg`, as the outline's own is written.
@@ -1302,9 +1330,27 @@ def tool_svg(outline: Path, values: dict[str, str]) -> str:
     return svg(
         outline_sheet(
             tool_drawing(drawing_from(outline), values),
-            materials=material_looks(shop_of(outline)),
+            hatch=tool_hatch(outline, material),
         )
     )
+
+
+# Function `tool_hatch()`:
+def tool_hatch(outline: Path | None, material: str) -> Hatch | None:
+    """Return the hatch of a tool's material, from the outline's own
+    shop (the example shop's for one in none, #809).
+
+    Arguments:
+    * `outline` (`Path | None`): The kind's outline file, if any.
+    * `material` (`str`): The tool's material ("": HSS, #821).
+
+    Returns:
+    * (`Hatch | None`): Its hatch.
+    """
+    return material_look(
+        material or DEFAULT_TOOL_MATERIAL,
+        material_looks(shop_of(outline)),
+    ).hatch
 
 
 # Function `svg_path()`:
@@ -4780,6 +4826,8 @@ class OutlineEditor(QWidget):
         self.read_only: bool = False
         self.locked: bool = False
         self.tool_values: bool = False
+        self.tool_material: str = ""
+        self.tool_name: str = ""
         self.edit_outline: Callable[[], None] | None = None
         self.saved: str = file_text(path)
         self.setWindowTitle(
@@ -4788,7 +4836,6 @@ class OutlineEditor(QWidget):
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.view: OutlineView = OutlineView(self.drawing)
-        self.view.outline.materials = self.materials()
 
         # The buttons in tabs (#319) over the status line.
         self.button_tabs: QTabWidget = QTabWidget()
@@ -4957,9 +5004,15 @@ class OutlineEditor(QWidget):
         self.outline_link: QLabel = QLabel("")
         self.outline_link.setVisible(False)
         self.outline_link.linkActivated.connect(self.follow_outline_link)
+        # [Solid] shows a round tool in SolidCraft (`T.sa~6.11` #819).
+        self.solid_button: QPushButton = QPushButton("Solid")
+        self.solid_button.setToolTip("Show this as a solid in SolidCraft")
+        self.solid_button.setVisible(self.drawing.revolve)
+        self.solid_button.clicked.connect(self.show_solid)
         row: QHBoxLayout = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.addWidget(self.tab_bar)
+        row.addWidget(self.solid_button)
         row.addWidget(self.outline_link)
         row.addStretch(1)
         self.stack: QStackedWidget = QStackedWidget()
@@ -5049,7 +5102,7 @@ class OutlineEditor(QWidget):
         colors: theme.Colors = theme.colors()
         self.picture.load(
             svg(
-                outline_sheet(self.drawing, materials=self.materials()),
+                outline_sheet(self.drawing, hatch=self.view.outline.hatch),
                 colors.ink,
                 colors.paper,
             ).encode("utf-8")
@@ -5126,6 +5179,9 @@ class OutlineEditor(QWidget):
           them.
         """
         self.tool_values = True
+        self.tool_material = tool.material
+        self.tool_name = tool.name
+        self.view.outline.hatch = tool_hatch(self.path, tool.material)
         template: Drawing = copy.deepcopy(self.drawing)
 
         # Function `redraw()`:
@@ -5139,9 +5195,77 @@ class OutlineEditor(QWidget):
 
         tool.redraw = redraw
         redraw()
+        self.prepare_solid()
         self.tab_bar.setTabVisible(list(ViewTab).index(ViewTab.EDIT), False)
         self.set_read_only(True)
         self.values.show_tool(tool)
+
+    # Method `OutlineEditor.solid_model()`:
+    def solid_model(self) -> Cacheable:
+        """Return the solid this drawing makes, for the cache: a tool's
+        named after it, in its material's colour; a bare outline's
+        after its file, in HSS (`T.sa~6.11` #827, #846).
+
+        Returns:
+        * (`Cacheable`): The solid.
+
+        Raises:
+        * `ValueError`: If the drawing makes no solid.
+        """
+        kind: str = (
+            self.path.name.removesuffix(OUTLINE_SUFFIX)
+            if self.path is not None
+            else "outline"
+        )
+        name: str = re.sub(r"\W", "_", self.tool_name or kind)
+        if not name[:1].isalpha():
+            name = f"{kind}_{name}"
+        color: Color | None = material_look(
+            self.tool_material or DEFAULT_TOOL_MATERIAL,
+            material_looks(shop_of(self.path)),
+        ).color
+        return outline_cacheable(self.drawing, name, color=color)
+
+    # Method `OutlineEditor.prepare_solid()`:
+    def prepare_solid(self) -> None:
+        """Make the solid's `.step` in the background, so that [Solid]
+        finds it made (`T.sa~6.11` #843); a failure is left for [Solid]
+        to say."""
+        if not self.drawing.revolve:
+            return
+        try:
+            model: Cacheable = self.solid_model()
+        except ValueError:
+            return
+        path: Path = VIEWER.cache.path(model)
+        if path.exists():
+            return
+
+        # Function `make()`:
+        def make() -> None:
+            """Make the file headless (whole or not at all)."""
+            try:
+                VIEWER.cache.sweep()
+                VIEWER.cache.create_headless(model, path)
+            except OSError:
+                pass
+
+        threading.Thread(target=make, daemon=True).start()
+
+    # Method `OutlineEditor.show_solid()`:
+    def show_solid(self) -> None:
+        """[Solid]: show the drawing's solid in SolidCraft, started if
+        need be, saying so in the message line (#819, #843)."""
+        self.view.message = "Building the solid..."
+        self.show_message()
+        QApplication.processEvents()
+        try:
+            VIEWER.show(self.solid_model())
+        except (ValueError, ViewerError) as error:
+            self.view.message = f"No solid: {error}"
+        else:
+            self.view.message = ""
+        self.show_message()
 
     # Method `OutlineEditor.set_read_only()`:
     def set_read_only(self, read_only: bool) -> None:
@@ -5220,19 +5344,8 @@ class OutlineEditor(QWidget):
             self.path.write_text(text, encoding="utf-8")
             self.saved = text
             picture.write_text(
-                svg(outline_sheet(self.drawing, materials=self.materials())),
-                encoding="utf-8",
+                svg(outline_sheet(self.drawing)), encoding="utf-8"
             )
-
-    # Method `OutlineEditor.materials()`:
-    def materials(self) -> dict[str, tuple[str, str]]:
-        """Return the materials of the outline's own shop (the example
-        shop's for one outside any shop, `T.sa~6.11` #809).
-
-        Returns:
-        * (`dict[str, tuple[str, str]]`): `shops.material_looks()`.
-        """
-        return material_looks(shop_of(self.path))
 
     # Method `OutlineEditor.overlap_problem()`:
     def overlap_problem(self) -> str:

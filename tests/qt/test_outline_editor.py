@@ -6,6 +6,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest import mock
 
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QWheelEvent
@@ -15,7 +16,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QGraphicsSceneMouseEvent,
     QLineEdit,
-    QPushButton,
     QTableWidgetItem,
     QToolButton,
     QWidget,
@@ -24,7 +24,13 @@ from PySide6.QtWidgets import (
 from scraftcam.appearance import STANDARD_HATCHES
 from scraftcam.diagram import TEXT, Stroke, Weight
 from scraftcam.geometry import ArcSegment, LineSegment
-from scraftcam.gui import outline_cuts, outline_editor, outline_values, theme
+from scraftcam.gui import (
+    outline_cuts,
+    outline_editor,
+    outline_values,
+    solid_viewer,
+    theme,
+)
 from scraftcam.gui.dimensions import (
     ANGLE,
     DIAMETER,
@@ -62,6 +68,7 @@ from scraftcam.gui.outline_file import (
     outline_text,
 )
 from scraftcam.gui.values import crossings
+from scraftcam.model_cache import Cacheable
 from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
@@ -2633,7 +2640,7 @@ class PolygonsTest(unittest.TestCase):
 
     def test_polygons_tab(self) -> None:
         """[Polygons] shows a row per polygon in place of the letters;
-        a name, a role and a material are kept, a bad or used name is
+        a name and a role are kept, a bad or used name is
         refused, and a polygon's letters follow its new name (#801)."""
         drawing: Drawing = Drawing(
             [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (2.0, 6.0)]
@@ -2650,17 +2657,15 @@ class PolygonsTest(unittest.TestCase):
         self.assertFalse(values.table.isVisibleTo(values))
         self.assertTrue(table.isVisibleTo(values))
         self.assertEqual(table.rowCount(), 2)
-        corners: QTableWidgetItem | None = table.item(1, 4)
+        corners: QTableWidgetItem | None = table.item(1, 2)
         assert corners is not None
         self.assertEqual(corners.text(), "V4 V3 V5")
 
-        # The role chosen, the material and the name typed.
+        # The role chosen and the name typed.
         role: QWidget | None = table.cellWidget(1, 1)
         assert isinstance(role, QComboBox)
         role.setCurrentText("cutting")
         self.assertEqual(drawing.polygons[1].role, Role.CUTTING)
-        table.setItem(1, 2, QTableWidgetItem("hss"))
-        self.assertEqual(drawing.polygons[1].material, "hss")
         table.setItem(1, 0, QTableWidgetItem("box"))
         self.assertIn("'box' is not a name", editor.view.message)
         self.assertEqual(drawing.polygons[1].name, "roof")
@@ -2672,30 +2677,35 @@ class PolygonsTest(unittest.TestCase):
         editor.deleteLater()
         qt_app.process_events()
 
-    def test_polygon_color(self) -> None:
-        """A polygon's [Colour] opens the picker in the tab, not over
-        the screen; [Done] keeps the colour, [Clear] takes it away
-        (#805)."""
-        drawing: Drawing = Drawing([(0.0, 0.0), (4.0, 0.0), (2.0, 3.0)])
-        editor: OutlineEditor = OutlineEditor(drawing)
-        values: outline_values.ValuesTable = editor.values
-        picker: outline_values.ColorPicker = values.color_picker
-        values.tabs.setCurrentIndex(outline_values.POLYGONS_TAB)
-        button: QWidget | None = values.polygon_table.cellWidget(0, 3)
-        assert isinstance(button, QPushButton)
-        self.assertEqual(button.text(), "Material")
-        button.click()
-        self.assertTrue(picker.isVisibleTo(values))
-        picker.dialog.setCurrentColor(QColor(51, 102, 153, 204))
-        picker.done()
-        self.assertEqual(drawing.polygons[0].color, "R20% G40% B60% T20%")
-        self.assertFalse(picker.isVisibleTo(values))
-        button = values.polygon_table.cellWidget(0, 3)
-        assert isinstance(button, QPushButton)
-        self.assertEqual(button.text(), "R20% G40% B60% T20%")
-        button.click()
-        picker.clear()
-        self.assertEqual(drawing.polygons[0].color, "")
+    def test_solid_button(self) -> None:
+        """[Solid] shows a revolved outline's solid, named after the
+        outline, or after a tool (a letter first), in HSS (#819, #827,
+        #846); a flat outline has none."""
+        path: Path = EXAMPLE_SHOP / "tools" / "drills" / "drill.outline.toml"
+        editor: OutlineEditor = OutlineEditor(drawing_from(path), path=path)
+        shown: list[Cacheable] = []
+
+        # Function `show()`:
+        def show(_viewer: solid_viewer.SolidViewer, model: Cacheable) -> None:
+            """Keep what would be shown, with no SolidCraft."""
+            shown.append(model)
+
+        with mock.patch.object(
+            solid_viewer.SolidViewer, "show", autospec=True, side_effect=show
+        ):
+            editor.solid_button.click()
+            editor.tool_name = "15_64_in_hss_jobber_drill"
+            editor.solid_button.click()
+        self.assertEqual(
+            [model.name for model in shown],
+            ["drill", "drill_15_64_in_hss_jobber_drill"],
+        )
+        self.assertEqual(shown[0].color_of("drill_shank"), "#292b30")
+        self.assertEqual(editor.view.message, "")
+        self.assertTrue(editor.solid_button.isVisibleTo(editor))
+        flat: OutlineEditor = OutlineEditor(Drawing())
+        self.assertFalse(flat.solid_button.isVisibleTo(flat))
+        flat.deleteLater()
         editor.deleteLater()
         qt_app.process_events()
 

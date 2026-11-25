@@ -57,7 +57,6 @@ import tomllib
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from ..appearance import color_problem
 from .dimensions import (
     ANGLE,
     DIAMETER,
@@ -179,21 +178,18 @@ class Polygon:
     * `name` (`str`): Its name, unique in its outline (#767).
     * `role` (`Role`): What it is for (#767a).
     * `vertices` (`list[str]`): Its corners' names, in order.
-    * `material` (`str`): Its material's short name ("" for none,
-      #768).
-    * `color` (`str`): Its own colour, as `R13% G32% B78%`, which
-      overrides its material's ("" for none, #805).
+
+    A polygon has no material or colour: whatever uses the outline
+    gives one, as a tool its `material` (`T.sa~6.11` #838, #840).
 
     Constructor:
-    * `Polygon(name, role, vertices, material, color)`
+    * `Polygon(name, role, vertices)`
     """
 
     # Constructor arguments:
     name: str = field(init=True)
     role: Role = field(init=True)
     vertices: list[str] = field(init=True, default_factory=list)
-    material: str = field(init=True, default="")
-    color: str = field(init=True, default="")
 
 
 # The name of the polygon a drawing starts with.
@@ -536,10 +532,6 @@ def outline_text(outline: Outline) -> str:
             f"name = {_string(polygon.name)}",
             f"role = {_string(polygon.role.value)}",
         ]
-        if polygon.material:
-            lines.append(f"material = {_string(polygon.material)}")
-        if polygon.color:
-            lines.append(f"color = {_string(polygon.color)}")
         lines.append(
             "vertices = ["
             + ", ".join(_string(name) for name in polygon.vertices)
@@ -899,7 +891,7 @@ class _Reader:
     # Method `_Reader.polygons()`:
     def polygons(self, found: object, outline: Outline) -> None:
         """Read the polygons (#765): at least one; each a unique
-        `name`, a `role`, maybe a `material`, and 3 or more of the
+        `name`, a `role`, and 3 or more of the
         outline's vertices by name, none twice.
 
         Arguments:
@@ -919,8 +911,6 @@ class _Reader:
                 continue
             name: object = table.get("name")
             role: object = table.get("role")
-            material: object = table.get("material", "")
-            color: object = table.get("color", "")
             vertices: object = table.get("vertices")
             if not isinstance(name, str) or not VERTEX_NAME.fullmatch(name):
                 self.note(
@@ -932,10 +922,12 @@ class _Reader:
                 self.note(where, f"name = {name!r}: is used twice")
             elif not isinstance(role, str) or role not in tuple(Role):
                 self.note(where, f"role = {role!r}: not one of {roles}")
-            elif not isinstance(material, str):
-                self.note(where, "material is not a name")
-            elif color != "" and color_problem(color):
-                self.note(where, f"color: {color_problem(color)}")
+            elif "material" in table or "color" in table:
+                self.note(
+                    where,
+                    "a polygon has no material or color: what uses the"
+                    " outline gives one (#840)",
+                )
             elif not (
                 isinstance(vertices, list)
                 and len(vertices) >= 3
@@ -949,9 +941,7 @@ class _Reader:
                 )
             else:
                 outline.polygons.append(
-                    Polygon(
-                        name, Role(role), list(vertices), material, str(color)
-                    )
+                    Polygon(name, Role(role), list(vertices))
                 )
 
     # Method `_Reader.holes()`:
