@@ -6,8 +6,30 @@ by the user, whose own text is now `Details.md`.  Designed
 Issue numbers are shared by every task; the next is in
 `TASKS/Issue_Counter.md`.
 
-**Where we are (2026-11-25):** every design issue settled; next is
-#S1.  Nothing built yet.
+**Where we are (2026-11-25):** #S1 done; next is #S2.  #S1:  Done: outline file
+format 5, `[[vertices]]` each with a `name` (`V1`, `V2`, ...; a
+letter then letters, digits, `_`; unique; not `origin`/`x_axis`/
+`y_axis`); dimension ends and hide strips' `below`/`above` by name.
+`Outline.names` beside `points` (`fill_names()`, `new_name()`: the
+next `V` number above any used, never reused; `name(index)`); the
+editor's `Snapshot`, `insert()`, `remove()` keep names.  Shipped
+outlines converted; the v1-v4 reader gone (#773), an old file is
+refused naming its version.  Tests `test_outline_file` (new
+`test_names`, `test_old_version`), the tool outline, editor, panel,
+SVG, steps, shops, exposed, polygon tests pass.  The two drill tool
+`.svg`s were stale since `cf7724b` and are rewritten.  #792 MCP
+targets by name (`Vertex V3`, `Mirror V3`), `state()` lists
+corners, dimension ends, chosen corners and edges by name;
+`move_a_corner` recording's calls and states updated.  #793 is
+#792.  #794 the stale `scratch/` outlines and `scratch/shop_live/`
+deleted (the user).  #795 the [Draw] tab's "Vertex:" field shows
+the one chosen corner's name (a mirror counts); Enter renames it
+(`OutlineView.rename_corner()`, one undo step, refusals in the
+status line); MCP `rename(editor, name)`.  Fillets are `RADIUS`
+dimensions, so by name already.  #796 [Show Names] (View tab,
+checkable) writes each corner's name up and right of it in [Edit]
+only (`OutlineView.draw_names()`, screen pixels); close corners'
+names overlap at small zooms.  186 outline tests pass.
 
 ## What Exists
 

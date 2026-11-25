@@ -66,7 +66,7 @@ class TestRecordings(unittest.TestCase):
         changed: steps.Step = dataclasses.replace(
             recording.steps[0],
             state=recording.steps[0].state.replace(
-                "chosen corners: [0]", "chosen corners: [1]"
+                "chosen corners: [Vertex V1]", "chosen corners: [Vertex V2]"
             ),
         )
         recording = dataclasses.replace(
@@ -76,11 +76,15 @@ class TestRecordings(unittest.TestCase):
         found: list[str] = tutorial.mismatches(editor, recording)
         self.assertEqual(len(found), 1)
         lines: list[str] = found[0].splitlines()
-        self.assertEqual(lines[0], "step 1: click Vertex 0")
+        self.assertEqual(lines[0], "step 1: click Vertex V1")
         self.assertTrue(lines[1].startswith("  * Click the lower left"))
         # Only the line that changed.
         self.assertEqual(
-            lines[2:], ["  -chosen corners: [1]", "  +chosen corners: [0]"]
+            lines[2:],
+            [
+                "  -chosen corners: [Vertex V2]",
+                "  +chosen corners: [Vertex V1]",
+            ],
         )
         editor.deleteLater()
         qt_app.process_events()
@@ -89,7 +93,7 @@ class TestRecordings(unittest.TestCase):
         """A step that fails ends the run, named with its error."""
         recording: Recording = steps.load(FIRST)
         gone: steps.Step = dataclasses.replace(
-            recording.steps[0], arguments={"target": "Vertex 9"}
+            recording.steps[0], arguments={"target": "Vertex V9"}
         )
         recording = dataclasses.replace(
             recording, steps=(gone, *recording.steps[1:])
@@ -97,8 +101,10 @@ class TestRecordings(unittest.TestCase):
         editor: OutlineEditor = editor_for(recording)
         found: list[str] = tutorial.mismatches(editor, recording)
         self.assertEqual(len(found), 1)
-        self.assertTrue(found[0].startswith("step 1: click Vertex 9\n"))
-        self.assertIn("failed: no Vertex 9: there are 3 vertices", found[0])
+        self.assertTrue(found[0].startswith("step 1: click Vertex V9\n"))
+        self.assertIn(
+            "failed: no Vertex V9: the vertices are V1, V2, V3", found[0]
+        )
         editor.deleteLater()
         qt_app.process_events()
 
@@ -206,9 +212,9 @@ class TestRecorder(unittest.TestCase):
             editor.deleteLater()
         calls: list[str] = [step.call for step in made.steps]
         self.assertEqual(calls, ["click", "drag", "button", "button"])
-        self.assertEqual(made.steps[0].arguments, {"target": "Vertex 0"})
+        self.assertEqual(made.steps[0].arguments, {"target": "Vertex V1"})
         self.assertEqual(
-            made.steps[1].arguments, {"target": "Vertex 2", "to": "(1, 6)"}
+            made.steps[1].arguments, {"target": "Vertex V3", "to": "(1, 6)"}
         )
         self.assertEqual(made.steps[2].arguments, {"word": "Undo"})
         self.assertEqual(made.steps[3].arguments, {"word": "Grid"})

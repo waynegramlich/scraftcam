@@ -9,7 +9,6 @@ from scraftcam.gui.dimensions import (
     ORIGIN,
     Y_AXIS,
     Dimension,
-    is_mark,
 )
 from scraftcam.gui.hides import Hide
 from scraftcam.gui.letters import Letter
@@ -57,7 +56,7 @@ class OutlineFileTest(unittest.TestCase):
         """What is written reads back the same, and writes the same."""
         text: str = outline_text(HALF_DRILL)
         self.assertTrue(
-            text.startswith('kind = "outline"\nversion = 4\nrevolve = true')
+            text.startswith('kind = "outline"\nversion = 5\nrevolve = true')
         )
         self.assertIn('to = "y_axis"', text)
         self.assertIn('from = "origin"', text)
@@ -85,24 +84,39 @@ class OutlineFileTest(unittest.TestCase):
         self.assertEqual(back.letters[1].default, "59 deg")
         self.assertEqual(outline_text(back), text)
 
-    def test_old_file_marks(self) -> None:
-        """A file from before marks gets those its drawing showed,
-        first; a version 2 file gets none; others are refused (#233).
-        """
-        old: str = outline_text(HALF_DRILL).replace("version = 4\n", "")
-        back: Outline = outline_from_text(old, "old.outline.toml")
-        marks: int = len(back.dimensions) - len(HALF_DRILL.dimensions)
-        self.assertGreater(marks, 0)
-        self.assertTrue(all(is_mark(each) for each in back.dimensions[:marks]))
-        self.assertEqual(back.dimensions[marks:], HALF_DRILL.dimensions)
-        self.assertIn("version = 4", outline_text(back))
-        two: str = outline_text(HALF_DRILL).replace(
-            "version = 4", "version = 2"
+    def test_old_version(self) -> None:
+        """Only version 5 is read; older files were converted once
+        (#773), and one without a version is refused too."""
+        text: str = outline_text(HALF_DRILL)
+        self.assertEqual(outline_from_text(text), HALF_DRILL)
+        old: str
+        for old in ("version = 4", "version = 7", ""):
+            with self.assertRaises(OutlineError) as caught:
+                outline_from_text(text.replace("version = 5", old))
+            self.assertIn("version", str(caught.exception))
+
+    def test_names(self) -> None:
+        """Corners are written and read by name (#787): a dimension's
+        ends and a strip's corners name them; a bad, doubled or end's
+        word name is refused, and a new corner's name is never one
+        used before."""
+        text: str = outline_text(HALF_DRILL)
+        self.assertIn('name = "V1"', text)
+        self.assertNotIn("[[points]]", text)
+        self.assertIn('below = "V2"', text)
+        renamed: Outline = outline_from_text(text.replace('"V2"', '"Tip"'))
+        self.assertEqual(renamed.names[1], "Tip")
+        self.assertEqual(renamed.hides, HALF_DRILL.hides)
+        bad: str
+        for bad in ('"2x"', '"V1"', '"origin"'):
+            with self.assertRaises(OutlineError) as caught:
+                outline_from_text(text.replace('name = "V2"', f"name = {bad}"))
+            self.assertIn("vertices[1]: name", str(caught.exception))
+        self.assertEqual(
+            Outline([(0.0, 0.0)] * 2, names=["V1", "V7"]).new_name(), "V8"
         )
-        self.assertEqual(outline_from_text(two), HALF_DRILL)
-        with self.assertRaises(OutlineError) as caught:
-            outline_from_text(old.replace("revolve", "version = 7\nrevolve"))
-        self.assertIn("version", str(caught.exception))
+        filled: Outline = Outline([(0.0, 0.0)] * 3, names=["Tip"])
+        self.assertEqual(filled.names, ["Tip", "V1", "V2"])
 
     def test_text_sizes(self) -> None:
         """A text height and font steps are written only when set,
@@ -206,7 +220,9 @@ class OutlineFileTest(unittest.TestCase):
         with self.assertRaises(OutlineError):
             outline_from_text('kind = "tool"', "x")
         with self.assertRaises(OutlineError):
-            outline_from_text('kind = "outline"\n[[points]]\nat = [1]', "x")
+            outline_from_text(
+                'kind = "outline"\nversion = 5\n[[vertices]]\nat = [1]', "x"
+            )
         lengthy: Outline = Outline(
             [(0.0, 0.0)], [], [Dimension("L", LENGTH, 0, 0)]
         )
@@ -224,21 +240,23 @@ class OutlineFileTest(unittest.TestCase):
         (#93, #95)."""
         bad: str = (
             'kind = "outline"\n'
+            "version = 5\n"
             "revolve = true\n"
             '[letters.A]\nname = "a"\ndefault = "1 in"\nhelp = ""\n'
             '[letters.B]\nname = "b"\n'
-            "[[points]]\nat = [0.0, 0.0]\n"
-            "[[points]]\nat = [-1.0, 2.0]\n"
-            "[[points]]\nat = [1]\n"
+            '[[vertices]]\nname = "V1"\nat = [0.0, 0.0]\n'
+            '[[vertices]]\nname = "V2"\nat = [-1.0, 2.0]\n'
+            '[[vertices]]\nname = "V3"\nat = [1]\n'
             '[[dimensions]]\nletter = "A"\nkind = "horizontal"\n'
-            'from = 7\nto = "y_axis"\noffset = 1.0\nalong = 0.5\n'
+            'from = "V9"\nto = "y_axis"\noffset = 1.0\nalong = 0.5\n'
             '[[dimensions]]\nletter = "Q"\nkind = "diagonal"\n'
-            "from = 0\nto = 1\noffset = true\nalong = 0.5\n"
+            'from = "V1"\nto = "V2"\noffset = true\nalong = 0.5\n'
             'rays = [1, 2]\nplaces = [["up", 1.0, 2.0]]\n'
         )
         bad += (
             '[[hides]]\naxis = "z"\n'
-            '[[hides]]\naxis = "y"\nbelow = 9\nabove = 1\nlow = 0\nhigh = 0\n'
+            '[[hides]]\naxis = "y"\nbelow = "V9"\nabove = "V2"\n'
+            "low = 0\nhigh = 0\n"
         )
         with self.assertRaises(OutlineError) as caught:
             outline_from_text(bad, "drill.outline.toml")
@@ -249,9 +267,9 @@ class OutlineFileTest(unittest.TestCase):
         text: str = str(caught.exception)
         for expected in (
             "letters.B: needs name, default (or formula) and help",
-            "points[2]: needs at = [x, y]",
+            "vertices[2]: needs at = [x, y]",
             "a revolved outline has a corner at X < 0",
-            "dimensions[0]: from = 7: not a corner 0-1 or origin",
+            "dimensions[0]: from = 'V9': not a corner's name or origin",
             "dimensions[0]: to = 'y_axis'",
             "dimensions[1]: kind 'diagonal'",
             "dimensions[1]: letter 'Q'",

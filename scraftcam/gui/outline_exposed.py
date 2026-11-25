@@ -104,11 +104,11 @@ def state(editor: str) -> str:
         f"revolve: {drawing.revolve}",
         "corners:",
     ]
-    index: int
+    corner: str
     x: float
     y: float
-    for index, (x, y) in enumerate(drawing.points):
-        lines.append(f"  {index}: ({_number(x)}, {_number(y)})")
+    for corner, (x, y) in zip(drawing.names, drawing.points, strict=True):
+        lines.append(f"  {corner}: ({_number(x)}, {_number(y)})")
 
     # The dimensions and the letters.
     lines.append("dimensions:")
@@ -116,7 +116,8 @@ def state(editor: str) -> str:
     for dimension in drawing.dimensions:
         lines.append(
             f"  {dimension.letter}: {dimension.kind}"
-            f" {dimension.start} -> {dimension.end}"
+            f" {drawing.name(dimension.start)}"
+            f" -> {drawing.name(dimension.end)}"
         )
     lines.append("letters:")
     letter: Letter
@@ -127,9 +128,15 @@ def state(editor: str) -> str:
     # The selection, the problems and the undo depth.
     lines.extend(
         (
-            f"chosen corners: {view.chosen_points}",
+            "chosen corners: ["
+            + ", ".join(
+                _code_name(drawing, code) for code in view.chosen_points
+            )
+            + "]",
             f"chosen dimensions: {view.chosen_dimensions}",
-            f"chosen edges: {view.chosen_edges}",
+            "chosen edges: ["
+            + ", ".join(drawing.names[edge] for edge in view.chosen_edges)
+            + "]",
             "problems:",
         )
     )
@@ -199,9 +206,10 @@ def place_view(view: OutlineView, shown: tuple[float, ...]) -> None:
     view.place_handles()
 
 
-# A target as a step names it (#550): a point by its code, or a spot.
+# A target as a step names it (#550): a point by its corner's name
+# (#787, #792), or a spot.
 TARGET: re.Pattern[str] = re.compile(
-    r"^(?:(?P<kind>Vertex|Mirror) (?P<index>\d+)|(?P<origin>Origin)"
+    r"^(?:(?P<kind>Vertex|Mirror) (?P<name>[A-Za-z]\w*)|(?P<origin>Origin)"
     r"|(?:background )?\((?P<x>[^,()]+),(?P<y>[^,()]+)\))$"
 )
 
@@ -219,10 +227,12 @@ def _spot(value: float) -> str:
     return str(int(value)) if float(value).is_integer() else repr(value)
 
 
-def _code_name(code: int) -> str:
-    """Give a point's name: `Vertex 2`, `Mirror 2` or `Origin`.
+def _code_name(drawing: Drawing, code: int) -> str:
+    """Give a point's name: `Vertex V2`, `Mirror V2` or `Origin`.
 
     Arguments:
+    * `drawing` (`Drawing`):
+        The drawing, for its corners' names (#792).
     * `code` (`int`):
         Its code (`OutlineView.corner_near()`).
 
@@ -236,8 +246,8 @@ def _code_name(code: int) -> str:
     if code == ORIGIN:
         return "Origin"
     if code <= MIRRORED:
-        return f"Mirror {MIRRORED - code}"
-    return f"Vertex {code}"
+        return f"Mirror {drawing.names[MIRRORED - code]}"
+    return f"Vertex {drawing.names[code]}"
 
 
 def target_at(
@@ -256,13 +266,13 @@ def target_at(
         A point not to name (the one being dragged), or `None`.
 
     Returns:
-    * (`tuple[str, int | None]`): `Vertex 2` (or `Mirror 2`,
+    * (`tuple[str, int | None]`): `Vertex V2` (or `Mirror V2`,
       `Origin`) and its code, else `background (x, y)` and `None`.
     """
     code: int | None = view.corner_near(QPointF(x, y))
     if code is None or code == skip:
         return f"background ({_spot(x)}, {_spot(y)})", None
-    return _code_name(code), code
+    return _code_name(view.drawing, code), code
 
 
 def _place(view: OutlineView, target: str) -> tuple[QPointF, int | None]:
@@ -272,7 +282,7 @@ def _place(view: OutlineView, target: str) -> tuple[QPointF, int | None]:
     * `view` (`OutlineView`):
         The editor's view.
     * `target` (`str`):
-        `Vertex 2`, `Mirror 2`, `Origin`, `background (x, y)` or
+        `Vertex V2`, `Mirror V2`, `Origin`, `background (x, y)` or
         `(x, y)`.
 
     Returns:
@@ -289,15 +299,18 @@ def _place(view: OutlineView, target: str) -> tuple[QPointF, int | None]:
     match: re.Match[str] | None = TARGET.match(target.strip())
     if match is None:
         raise ExposedError(
-            f"`{target}` is not `Vertex N`, `Mirror N`, `Origin` or `(x, y)`"
+            f"`{target}` is not `Vertex NAME`, `Mirror NAME`, `Origin`"
+            " or `(x, y)`"
         )
     if match.group("origin"):
         return QPointF(0.0, 0.0), ORIGIN
     if match.group("kind"):
-        index: int = int(match.group("index"))
-        count: int = len(view.drawing.points)
-        if index >= count:
-            raise ExposedError(f"no {target}: there are {count} vertices")
+        if match.group("name") not in view.drawing.names:
+            raise ExposedError(
+                f"no {target}: the vertices are"
+                f" {', '.join(view.drawing.names)}"
+            )
+        index: int = view.drawing.names.index(match.group("name"))
         x: float
         y: float
         x, y = view.drawing.points[index]
@@ -390,6 +403,23 @@ def button(editor: str, word: str) -> str:
         raise ExposedError(f"[{word}] is not enabled now")
     found.click()
     QTest.qWait(1)
+    return state(editor)
+
+
+@exposed.changes
+def rename(editor: str, name: str) -> str:
+    """Type {name} into {editor}'s Vertex field and press Enter,
+    renaming the one chosen corner (`T.sa~6.11` #795)."""
+    # Through the field, so a greyed one fails as it would for a user.
+    shown: OutlineEditor = _editor(editor)
+    if not shown.vertex_name.isEnabled():
+        raise ExposedError("the Vertex field is greyed: choose one corner")
+    corner: int = shown.chosen_corner()
+    shown.vertex_name.setText(name)
+    shown.vertex_name.returnPressed.emit()
+    QTest.qWait(1)
+    if shown.drawing.names[corner] != name.strip():
+        raise ExposedError(f"not renamed: {shown.view.message}")
     return state(editor)
 
 

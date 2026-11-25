@@ -36,3 +36,6 @@ numbers are shared by every task; the next is in
   [Allow Changes]; [Overview] is gone); a tool's [Outline] links to
   its kind's outline.  `T.toasl~6.8` #S7: the shop's `stock/`,
   `tools/materials/`, `tooling/grid_plates/` layout.
+* `T.sa~6.11` #S1: outline files are format 5, corners named
+  `[[vertices]]`; older files are refused (#773).  The [Draw] tab's
+  "Vertex:" field renames the chosen corner (#795).

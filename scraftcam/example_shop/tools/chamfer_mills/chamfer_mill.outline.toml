@@ -1,5 +1,5 @@
 kind = "outline"
-version = 4
+version = 5
 revolve = true
 
 [letters.D]
@@ -37,29 +37,35 @@ name = "Overall length"
 default = "2 in"
 help = "From the tip to the end of the shank."
 
-[[points]]
+[[vertices]]
+name = "V1"
 at = [0.0, 0.0]
 
-[[points]]
+[[vertices]]
+name = "V2"
 at = [1.0, 0.0]
 
-[[points]]
+[[vertices]]
+name = "V3"
 at = [4.0, 3.0]
 
-[[points]]
+[[vertices]]
+name = "V4"
 at = [3.0, 3.0]
 
-[[points]]
+[[vertices]]
+name = "V5"
 at = [3.0, 40.0]
 
-[[points]]
+[[vertices]]
+name = "V6"
 at = [0.0, 40.0]
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
 from = "origin"
-to = 0
+to = "V1"
 offset = 0.0
 along = 0.5
 
@@ -67,39 +73,39 @@ along = 0.5
 letter = ""
 kind = "horizontal"
 from = "origin"
-to = 0
+to = "V1"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
-from = 0
-to = 1
+from = "V1"
+to = "V2"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
-from = 2
-to = 3
+from = "V3"
+to = "V4"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "horizontal"
-from = 3
-to = 4
+from = "V4"
+to = "V5"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
-from = 4
-to = 5
+from = "V5"
+to = "V6"
 offset = 0.0
 along = 0.5
 
@@ -107,7 +113,7 @@ along = 0.5
 letter = ""
 kind = "horizontal"
 from = "origin"
-to = 5
+to = "V6"
 offset = 0.0
 along = 0.5
 
@@ -115,7 +121,7 @@ along = 0.5
 letter = "TD"
 kind = "diameter"
 from = "origin"
-to = 1
+to = "V2"
 offset = -3.0
 along = 1.8107199999999999
 
@@ -123,14 +129,14 @@ along = 1.8107199999999999
 letter = "D"
 kind = "diameter"
 from = "origin"
-to = 2
+to = "V3"
 offset = -6.0
 along = 0.5
 
 [[dimensions]]
 letter = "HA"
 kind = "angle"
-from = 1
+from = "V2"
 to = "y_axis"
 offset = 5.0
 along = 0.5
@@ -140,7 +146,7 @@ rays = [1, 1]
 letter = "SD"
 kind = "diameter"
 from = "origin"
-to = 3
+to = "V4"
 offset = 44.0
 along = 0.5
 
@@ -148,6 +154,6 @@ along = 0.5
 letter = "OAL"
 kind = "vertical"
 from = "origin"
-to = 4
+to = "V5"
 offset = 8.0
 along = 0.5

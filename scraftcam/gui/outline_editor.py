@@ -78,6 +78,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QGraphicsView,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QSizePolicy,
     QSplitter,
     QStackedWidget,
@@ -143,6 +144,8 @@ from .outline_diagram import (  # noqa: E402
 )
 from .outline_diagram import edge_arc as shared_arc  # noqa: E402
 from .outline_file import (  # noqa: E402
+    ENDS,
+    VERTEX_NAME,
     Hole,
     Outline,
     outline_from_text,
@@ -221,6 +224,7 @@ BUTTON_WORDS: tuple[str, ...] = (
     "Redo",
     "New Letter",
     "Show Marks",
+    "Show Names",
 )
 
 # The buttons that change the outline, greyed while it is read only
@@ -284,6 +288,7 @@ BUTTON_TABS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "Font +",
             "Font -",
             "Show Marks",
+            "Show Names",
         ),
     ),
 )
@@ -426,10 +431,11 @@ class Snapshot:  # pylint: disable=too-many-instance-attributes
     * `turns` (`int`): Quarter turns clockwise it is shown (#300).
     * `text_height` (`float`): The diagram's letter height (#273).
     * `holes` (`tuple[Hole, ...]`): Copies of the holes (#447).
+    * `names` (`tuple[str, ...]`): The corners' names (#787).
 
     Constructor:
     * `Snapshot(points, dimensions, letters, revolve, note_radius,
-      hides, turns, text_height, holes)`
+      hides, turns, text_height, holes, names)`
     """
 
     # Constructor arguments:
@@ -442,6 +448,7 @@ class Snapshot:  # pylint: disable=too-many-instance-attributes
     turns: int = field(init=True, default=0)
     text_height: float = field(init=True, default=0.0)
     holes: tuple[Hole, ...] = field(init=True, default=())
+    names: tuple[str, ...] = field(init=True, default=())
 
 
 # Class `Drawing`:
@@ -465,10 +472,11 @@ class Drawing(Outline):
     * `turns` (`int`): Quarter turns clockwise it is shown (#300).
     * `scale` (`float`): Drawing steps per millimeter, once the
       drawing follows the values (#148); 0 before.
+    * `names` (`list[str]`): Each corner's name (#787).
 
     Constructor:
     * `Drawing(points, letters, dimensions, revolve, note_radius,
-      hides, text_height, turns, holes)`
+      hides, text_height, turns, holes, names)`
     """
 
     # Remaining attributes (alphabetized):
@@ -479,6 +487,7 @@ class Drawing(Outline):
         """Start from the first triangle when no corners are given."""
         if not self.points:
             self.points[:] = triangle()
+        self.fill_names()
 
     # Method `Drawing.snapshot()`:
     def snapshot(self) -> Snapshot:
@@ -493,6 +502,7 @@ class Drawing(Outline):
             self.turns,
             self.text_height,
             tuple(replace(hole) for hole in self.holes),
+            tuple(self.names),
         )
 
     # Method `Drawing.restore()`:
@@ -513,6 +523,8 @@ class Drawing(Outline):
         self.turns = snapshot.turns
         self.text_height = snapshot.text_height
         self.holes[:] = [replace(hole) for hole in snapshot.holes]
+        self.names[:] = snapshot.names
+        self.fill_names()
 
     # Method `Drawing.follow_angles()`:
     def follow_angles(self) -> None:
@@ -554,6 +566,7 @@ class Drawing(Outline):
             if mark_edge(dimension, len(self.points)) != split
         ]
         self.points.insert(index, point)
+        self.names.insert(index, self.new_name())
         dimension: Dimension
         for dimension in self.dimensions:
             if dimension.start >= index:
@@ -578,6 +591,7 @@ class Drawing(Outline):
         * `index` (`int`): The corner.
         """
         del self.points[index]
+        del self.names[index]
         self.dimensions[:] = [
             dimension
             for dimension in self.dimensions
@@ -2295,6 +2309,8 @@ class OutlineView(QGraphicsView):
       Called after a new dimension adds a letter (the window sets it).
     * `armed` (`str | None`): The fillet letter a corner clicked takes
       ("" makes it sharp), armed in [Fillets] (#214); `None`: none.
+    * `names_shown` (`bool`): Whether [Edit] writes the corners'
+      names beside them, [Show Names] (#796).
     * `released` (`Callable[[], None]`):
       Called after a mouse button comes up (the window saves).
     * `overview` (`bool`): Whether the whole drawing is shown, its
@@ -2351,6 +2367,7 @@ class OutlineView(QGraphicsView):
         self.drawing: Drawing = drawing
         self.grid_shown: bool = True
         self.marks_shown: bool = False
+        self.names_shown: bool = False
         # The corner being dragged, whose own marks are left out until
         # it is dropped (#451), or -1.
         self.dragged: int = -1
@@ -3501,6 +3518,39 @@ class OutlineView(QGraphicsView):
         self.resetCachedContent()
         self.follow()
 
+    # Method `OutlineView.rename_corner()`:
+    def rename_corner(self, corner: int, name: str) -> bool:
+        """Rename a corner, as one change (#795); refused, saying why,
+        when read only or when the name is bad or used (#787).
+
+        Arguments:
+        * `corner` (`int`): The corner's index.
+        * `name` (`str`): Its new name.
+
+        Returns:
+        * (`bool`): Whether it was renamed.
+        """
+        problem: str = ""
+        if self.read_only:
+            problem = self.read_only_message
+        elif not VERTEX_NAME.fullmatch(name):
+            problem = (
+                f"{name!r} is not a vertex name: a letter, then letters,"
+                " digits or _."
+            )
+        elif name in ENDS.values():
+            problem = f"{name!r} names an end; choose another name."
+        elif name in self.drawing.names and (
+            self.drawing.names.index(name) != corner
+        ):
+            problem = f"{name} is already a vertex's name."
+        self.message = problem
+        if not problem and self.drawing.names[corner] != name:
+            self.history.remember(self.drawing.snapshot())
+            self.drawing.names[corner] = name
+        self.scene().update()
+        return not problem
+
     # Method `OutlineView.turn_view()`:
     def turn_view(self) -> None:
         """Show the drawing turned its `turns` quarter turns clockwise
@@ -3767,6 +3817,38 @@ class OutlineView(QGraphicsView):
             circle.place()
         self.viewport().update()
 
+    # Method `OutlineView.toggle_names()`:
+    def toggle_names(self) -> None:
+        """[Show Names] (#796): write each corner's name beside it in
+        [Edit], or not."""
+        self.names_shown = not self.names_shown
+        self.viewport().update()
+
+    # Method `OutlineView.draw_names()`:
+    def draw_names(self, painter: QPainter) -> None:
+        """Write each corner's name up and right of its circle (#796),
+        in screen pixels so it stays one size at every zoom.
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, in scene coordinates.
+        """
+        painter.save()
+        painter.resetTransform()
+        painter.setPen(QColor(theme.colors().ink))
+        painter.setFont(QFont("sans-serif", LETTER_POINTS))
+        name: str
+        x: float
+        y: float
+        for name, (x, y) in zip(
+            self.drawing.names, self.drawing.points, strict=True
+        ):
+            spot: QPoint = self.mapFromScene(QPointF(x, y))
+            painter.drawText(
+                QPointF(spot.x() + SQUARE_PIXELS, spot.y() - SQUARE_PIXELS),
+                name,
+            )
+        painter.restore()
+
     # Method `OutlineView.toggle_grid()`:
     def toggle_grid(self) -> None:
         """Show the grid, or hide it."""
@@ -3778,10 +3860,13 @@ class OutlineView(QGraphicsView):
         self, painter: QPainter, exposed: QRectF | QRect
     ) -> None:
         """Shade the hide strips in the overview (#168), or cut them out
-        in the working view (#170); write the fillets' note in the
+        in the working view (#170); in the overview, the corners' names
+        under [Show Names] (#796); write the fillets' note in the
         lower left, when any fillet has no radius of its own (#118)."""
         if self.overview:
             self.shade_hides(painter, QRectF(exposed))
+            if self.names_shown:
+                self.draw_names(painter)
         elif self.drawing.hides:
             self.draw_cut(painter, QRectF(exposed))
         note: str = self.drawing.note_radius
@@ -4310,6 +4395,7 @@ class OutlineEditor(QWidget):
         self.splitter.addWidget(self.letters)
         self.splitter.setSizes([450, 150])
         layout.addWidget(self.splitter)
+        self.vertex_name: QLineEdit = QLineEdit()
         self.make_buttons()
         self.hook_view()
         self.letters.fill_table()
@@ -4328,7 +4414,7 @@ class OutlineEditor(QWidget):
             # [Dim. Kind] cycles, so it shows a cycle arrow (U+21BB).
             cycle: str = " \u21bb" if word == "Dim. Kind" else ""
             self.button_actions[word] = QAction(f"{word}{cycle}", self)
-        for word in ("Grid", "Snap", "Revolve", "Show Marks"):
+        for word in ("Grid", "Snap", "Revolve", "Show Marks", "Show Names"):
             self.button_actions[word].setCheckable(True)
         for word in ("Grid", "Snap"):
             self.button_actions[word].setChecked(True)
@@ -4346,6 +4432,8 @@ class OutlineEditor(QWidget):
                 button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
                 row.addWidget(button)
                 self.buttons.setdefault(word, button)
+            if title == "Draw":
+                self.add_vertex_name(row)
             row.addStretch(1)
             self.button_tabs.addTab(page, title)
 
@@ -4358,6 +4446,7 @@ class OutlineEditor(QWidget):
             "Dimension": self.view.dimension_selected,
             "Dim. Kind": self.view.cycle_kind,
             "Show Marks": self.view.toggle_marks,
+            "Show Names": self.view.toggle_names,
             "Revolve": self.toggle_revolve,
             "Rotate Diagram": self.view.rotate_diagram,
             "Font +": partial(self.view.step_font, 1),
@@ -4370,6 +4459,60 @@ class OutlineEditor(QWidget):
         does_it: Callable[[], None]
         for word, does_it in does.items():
             self.button_actions[word].triggered.connect(does_it)
+
+    # Method `OutlineEditor.add_vertex_name()`:
+    def add_vertex_name(self, row: QHBoxLayout) -> None:
+        """Add the chosen corner's name to a row of buttons (#795):
+        shown when one corner is chosen, renamed by typing a new one
+        and pressing Enter.
+
+        Arguments:
+        * `row` (`QHBoxLayout`): The [Draw] tab's row.
+        """
+        row.addWidget(QLabel("Vertex:"))
+        self.vertex_name.setMaximumWidth(90)
+        self.vertex_name.setToolTip(
+            "The chosen corner's name: type a new one and press Enter."
+        )
+        self.vertex_name.returnPressed.connect(self.rename_vertex)
+        row.addWidget(self.vertex_name)
+
+    # Method `OutlineEditor.chosen_corner()`:
+    def chosen_corner(self) -> int:
+        """Return the one corner chosen (its mirror counts), else -1.
+
+        Returns:
+        * (`int`): Its index, or -1 unless one corner is chosen.
+        """
+        corners: set[int] = {
+            real_point(code)
+            for code in self.view.chosen_points
+            if real_point(code) >= 0
+        }
+        return corners.pop() if len(corners) == 1 else -1
+
+    # Method `OutlineEditor.show_vertex_name()`:
+    def show_vertex_name(self) -> None:
+        """Show the chosen corner's name, unless it is being typed
+        (#795); with no corner (or several) chosen, nothing."""
+        corner: int = self.chosen_corner()
+        self.vertex_name.setEnabled(corner >= 0 and not self.read_only)
+        if not self.vertex_name.hasFocus() or corner < 0:
+            self.vertex_name.setText(
+                self.drawing.names[corner] if corner >= 0 else ""
+            )
+
+    # Method `OutlineEditor.rename_vertex()`:
+    def rename_vertex(self) -> None:
+        """[Enter] in the vertex name: rename the chosen corner (#795);
+        a refusal is said in the status line and the name kept to be
+        fixed."""
+        corner: int = self.chosen_corner()
+        if corner >= 0 and self.view.rename_corner(
+            corner, self.vertex_name.text().strip()
+        ):
+            self.view.setFocus()
+        self.show_message()
 
     # Method `OutlineEditor.drawing_tabs()`:
     def drawing_tabs(self) -> QWidget:
@@ -4669,6 +4812,7 @@ class OutlineEditor(QWidget):
         )
         # [Revolve] shows the drawing's state (a refusal, an undo).
         self.button_actions["Revolve"].setChecked(self.view.drawing.revolve)
+        self.show_vertex_name()
         self.save()
         # A refusal in red; else the armed letter's hint (#214).
         hint: str = ""
@@ -4790,4 +4934,5 @@ def drawing_from_text(text: str, source: str = "") -> Drawing:
         outline.text_height,
         outline.turns,
         outline.holes,
+        outline.names,
     )

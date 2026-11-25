@@ -10,9 +10,9 @@ A new outline starts as a triangle.
 ## Corners
 
 * Click the lower left corner.  It turns yellow.
-  <!-- do: click Vertex 0 -->
+  <!-- do: click Vertex V1 -->
 * Drag the top corner up and to the right.
-  <!-- do: drag Vertex 2 -> (1, 6) -->
+  <!-- do: drag Vertex V3 -> (1, 6) -->
 * A step with no `do:` is there to be read.
 
 <!-- recording
@@ -21,7 +21,7 @@ scraftcam = "0.1.0"
 outline = ''
 [[states]]
 step = 1
-call = "click Vertex 0"
+call = "click Vertex V1"
 state = '''
 ...
 '''
@@ -770,7 +770,7 @@ class Player:
             The step, from 0.
 
         Returns:
-        * (`str`): `step 2: drag Vertex 2 -> (1, 6)` and its bullet's
+        * (`str`): `step 2: drag Vertex V3 -> (1, 6)` and its bullet's
           first line.
         """
         step: Step = self.recording.steps[index]

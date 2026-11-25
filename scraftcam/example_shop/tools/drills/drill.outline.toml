@@ -1,5 +1,5 @@
 kind = "outline"
-version = 4
+version = 5
 revolve = true
 
 [letters.D]
@@ -31,26 +31,31 @@ name = "Overall length"
 default = "4 in"
 help = "From the point's tip to the end of the shank."
 
-[[points]]
+[[vertices]]
+name = "V1"
 at = [0.0, 0.0]
 
-[[points]]
+[[vertices]]
+name = "V2"
 at = [1.9971353788206216, 1.2]
 
-[[points]]
+[[vertices]]
+name = "V3"
 at = [1.9971353788206216, 43.93697833405368]
 
-[[points]]
+[[vertices]]
+name = "V4"
 at = [1.9971353788206216, 63.90833212225989]
 
-[[points]]
+[[vertices]]
+name = "V5"
 at = [0.0, 63.90833212225989]
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
 from = "origin"
-to = 0
+to = "V1"
 offset = 0.0
 along = 0.5
 
@@ -58,7 +63,7 @@ along = 0.5
 letter = ""
 kind = "horizontal"
 from = "origin"
-to = 0
+to = "V1"
 offset = 0.0
 along = 0.5
 
@@ -66,15 +71,15 @@ along = 0.5
 letter = ""
 kind = "horizontal"
 from = "origin"
-to = 4
+to = "V5"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "horizontal"
-from = 1
-to = 2
+from = "V2"
+to = "V3"
 offset = 0.0
 along = 0.5
 moved = [0.0, 8.0]
@@ -82,23 +87,23 @@ moved = [0.0, 8.0]
 [[dimensions]]
 letter = ""
 kind = "horizontal"
-from = 2
-to = 3
+from = "V3"
+to = "V4"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
-from = 3
-to = 4
+from = "V4"
+to = "V5"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = "HPA"
 kind = "angle"
-from = 0
+from = "V1"
 to = "y_axis"
 offset = 5.0
 along = 1.9005102093924737
@@ -108,7 +113,7 @@ rays = [1, 1]
 letter = "D"
 kind = "diameter"
 from = "origin"
-to = 1
+to = "V2"
 offset = -8.0
 along = -1.6666666666666667
 
@@ -116,7 +121,7 @@ along = -1.6666666666666667
 letter = "FL"
 kind = "vertical"
 from = "origin"
-to = 2
+to = "V3"
 offset = 10.0
 along = 0.92
 
@@ -124,14 +129,14 @@ along = 0.92
 letter = "OAL"
 kind = "vertical"
 from = "origin"
-to = 3
+to = "V4"
 offset = 18.0
 along = 0.97
 
 [[hides]]
 axis = "y"
-below = 1
-above = 2
+below = "V2"
+above = "V3"
 low = 4.8073512190297425
 high = 5.920307933029633
 under = 7.192551984933616
@@ -139,8 +144,8 @@ over = 5.195416606112994
 
 [[hides]]
 axis = "y"
-below = 2
-above = 3
+below = "V3"
+above = "V4"
 low = 3.045887916268491
 high = 3.9244818904554464
 under = 7.192551984933616

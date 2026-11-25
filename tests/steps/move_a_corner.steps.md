@@ -5,9 +5,9 @@ move one, and take the move back.
 
 * Click the lower left corner to choose it: the buttons that act
   on corners now act on it.
-  <!-- do: click Vertex 0 -->
+  <!-- do: click Vertex V1 -->
 * Drag the top corner up and to the right.  The edges follow it.
-  <!-- do: drag Vertex 2 -> (1, 6) -->
+  <!-- do: drag Vertex V3 -> (1, 6) -->
 * Press [Undo] to take the move back: the corner goes back.
   <!-- do: button Undo -->
 
@@ -18,17 +18,17 @@ outline = ""
 
 [[states]]
 step = 1
-call = "click Vertex 0"
+call = "click Vertex V1"
 state = '''
 file: (new)
 revolve: False
 corners:
-  0: (-4, -3)
-  1: (4, -3)
-  2: (0, 4)
+  V1: (-4, -3)
+  V2: (4, -3)
+  V3: (0, 4)
 dimensions:
 letters:
-chosen corners: [0]
+chosen corners: [Vertex V1]
 chosen dimensions: []
 chosen edges: []
 problems:
@@ -38,17 +38,17 @@ undo depth: 0
 
 [[states]]
 step = 2
-call = "drag Vertex 2 -> (1, 6)"
+call = "drag Vertex V3 -> (1, 6)"
 state = '''
 file: (new)
 revolve: False
 corners:
-  0: (-4, -3)
-  1: (4, -3)
-  2: (1, 6)
+  V1: (-4, -3)
+  V2: (4, -3)
+  V3: (1, 6)
 dimensions:
 letters:
-chosen corners: [0, 2]
+chosen corners: [Vertex V1, Vertex V3]
 chosen dimensions: []
 chosen edges: []
 problems:
@@ -63,9 +63,9 @@ state = '''
 file: (new)
 revolve: False
 corners:
-  0: (-4, -3)
-  1: (4, -3)
-  2: (0, 4)
+  V1: (-4, -3)
+  V2: (4, -3)
+  V3: (0, 4)
 dimensions:
 letters:
 chosen corners: []

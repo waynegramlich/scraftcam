@@ -95,7 +95,7 @@ class Recorder(QObject):  # pylint: disable=too-many-instance-attributes
         When the latest gesture began, in seconds from `started`
         (#522): a step's time, to match it with what was said.
     * `target` (`str`):
-        What the held press is on (#550): `Vertex 2`, or
+        What the held press is on (#550): `Vertex V3`, or
         `background (x, y)`.
     * `code` (`int | None`):
         That point's code, or `None` for the background.

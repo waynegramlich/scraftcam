@@ -49,7 +49,9 @@ one is in `TASKS/Issue_Counter.md`.  Every list continues them.
   that raises ends the run as `failed:`).
 * `gui/outline_exposed.py`: `editors()`, `state()`, `click(target)`,
   `drag(target, *, to)` (#550: `Vertex N`, `Mirror N`, `Origin`,
-  `background (x, y)`, a drop also `(x, y)`; `_hit()` refuses a
+  `background (x, y)`, a drop also `(x, y)`; since `T.sa~6.11`
+  #792 a vertex by its name, `Vertex V3`, and `state()` names
+  corners, dimension ends and the selection; `_hit()` refuses a
   target that is not what is there), `press(keys)`, `button(word)`,
   `screenshot(name)` (#567: PNG in `~/.scraftcam/screenshots/`,
   read with Read); `view_of()`, `place_view()` (the centre within ~1
@@ -77,7 +79,7 @@ one is in `TASKS/Issue_Counter.md`.  Every list continues them.
 ```
 python3 -m scraftcam.exposed.client start FILE      # port 8766, scraftcam.run --outline
 python3 -m scraftcam.exposed.client start --gui --shown [SHOP]   # the whole GUI, on screen
-python3 -m scraftcam.exposed.client call click editor="OutlineEditor 1" target="Vertex 3"
+python3 -m scraftcam.exposed.client call click editor="OutlineEditor 1" target="Vertex V3"
 python3 -m scraftcam.exposed.client call screenshot editor="OutlineEditor 1" name=x
 python3 -m scraftcam.exposed.client stop
 ```

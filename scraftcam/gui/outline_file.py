@@ -14,13 +14,14 @@ name = "Half point angle"
 default = "59 deg"
 help = ""
 
-[[points]]
+[[vertices]]
+name = "V1"
 at = [0.0, 0.0]
 
 [[dimensions]]
 letter = "A"
 kind = "angle"
-from = 0
+from = "V1"
 to = "y_axis"
 offset = 0.6
 along = 0.5
@@ -42,9 +43,12 @@ along Y.  Since version 4 (#290) `[[holes]]` hold round holes:
 (`letter` its socket head cap screw's size, the holes from
 `screws.py`, #328), `at` its center as drawn, and, written only
 when they differ from the table, `clearance`, `counterbore` and
-`depth` (lengths with units).  A dimension's `from` and `to`
-are a corner's index or `"origin"`, and for an angle an edge (by the
-corner it leaves) or `"x_axis"` / `"y_axis"`.
+`depth` (lengths with units).  Since version 5 (`T.sa~6.11`
+#787) the corners are `[[vertices]]`, each with a `name` (earlier
+files had `[[points]]`, by index).  A dimension's `from` and `to`
+are a corner's name or `"origin"`, and for an angle an edge (by the
+corner it leaves) or `"x_axis"` / `"y_axis"`; a hide strip's `below`
+and `above` are corners' names.
 """
 
 import json
@@ -63,7 +67,6 @@ from .dimensions import (
     X_AXIS,
     Y_AXIS,
     Dimension,
-    drawn_marks,
 )
 from .hides import Hide
 from .letters import Letter
@@ -81,10 +84,13 @@ ENDS: dict[int, str] = {
 AXES: tuple[str, ...] = ("x", "y")
 
 # The file format's version: 2 since marks (#233), 3 since text sizes
-# (`T.sfoe~6.4` #280), 4 since holes (#290); a file without one is
-# 1, and gets the marks its drawing showed.
-VERSION: int = 4
-VERSIONS: tuple[int, ...] = (1, 2, 3, 4)
+# (`T.sfoe~6.4` #280), 4 since holes (#290), 5 since named vertices
+# (`T.sa~6.11` #787).  Only version 5 is read: the shipped outlines
+# were converted once (#773).
+VERSION: int = 5
+
+# A vertex's name (#787): a letter, then letters, digits or `_`.
+VERTEX_NAME: re.Pattern[str] = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 
 # The kinds of hole (#290): a plain one is sized by its letter, a
 # counterbored one by its screw's.
@@ -163,10 +169,12 @@ class Outline:  # pylint: disable=too-many-instance-attributes
       #280).
     * `turns` (`int`): How many quarter turns clockwise its diagram
       is shown turned, 0 to 3, letters upright (#300).
+    * `names` (`list[str]`): Each corner's name, beside `points`
+      (#787); missing ones are given `V1`, `V2`, ... unused.
 
     Constructor:
     * `Outline(points, letters, dimensions, revolve, note_radius,
-      hides, text_height, turns, holes)`
+      hides, text_height, turns, holes, names)`
     """
 
     # Constructor arguments:
@@ -179,6 +187,52 @@ class Outline:  # pylint: disable=too-many-instance-attributes
     text_height: float = field(init=True, default=0.0)
     turns: int = field(init=True, default=0)
     holes: list[Hole] = field(init=True, default_factory=list)
+    names: list[str] = field(init=True, default_factory=list)
+
+    # Method `Outline.__post_init__()`:
+    def __post_init__(self) -> None:
+        """Name the corners that have no name yet."""
+        self.fill_names()
+
+    # Method `Outline.fill_names()`:
+    def fill_names(self) -> None:
+        """Make `names` as long as `points`: extra names go, and each
+        corner without one gets the next `V` number above every name
+        used (#787), so a deleted corner's name is not given again.
+        """
+        del self.names[len(self.points) :]
+        while len(self.names) < len(self.points):
+            self.names.append(self.new_name())
+
+    # Method `Outline.new_name()`:
+    def new_name(self) -> str:
+        """Return a name for a new corner (#787).
+
+        Returns:
+        * (`str`): The next `V` number above every name used.
+        """
+        number: int = max(
+            (
+                int(name[1:])
+                for name in self.names
+                if name[:1] == "V" and name[1:].isdigit()
+            ),
+            default=0,
+        )
+        return f"V{number + 1}"
+
+    # Method `Outline.name()`:
+    def name(self, index: int) -> str:
+        """Return a dimension end's or corner's name in file form.
+
+        Arguments:
+        * `index` (`int`): A corner's index, or `ORIGIN`, `X_AXIS`,
+          `Y_AXIS`.
+
+        Returns:
+        * (`str`): Its name.
+        """
+        return ENDS[index] if index in ENDS else self.names[index]
 
 
 # Function `outline_text()`:
@@ -221,17 +275,24 @@ def outline_text(outline: Outline) -> str:
         if letter.fillet:
             lines.append("fillet = true")
 
-    # The corners, then the dimensions.
+    # The corners, named (#787), then the dimensions.
+    outline.fill_names()
+    name: str
     x: float
     y: float
-    for x, y in outline.points:
-        lines += ["", "[[points]]", f"at = [{_number(x)}, {_number(y)}]"]
+    for name, (x, y) in zip(outline.names, outline.points, strict=True):
+        lines += [
+            "",
+            "[[vertices]]",
+            f"name = {_string(name)}",
+            f"at = [{_number(x)}, {_number(y)}]",
+        ]
     dimension: Dimension
     for dimension in outline.dimensions:
-        lines += _dimension_lines(dimension)
+        lines += _dimension_lines(dimension, outline)
     hide: Hide
     for hide in outline.hides:
-        lines += _hide_lines(hide)
+        lines += _hide_lines(hide, outline)
     hole: Hole
     for hole in outline.holes:
         lines += _hole_lines(hole)
@@ -239,11 +300,12 @@ def outline_text(outline: Outline) -> str:
 
 
 # Function `_dimension_lines()`:
-def _dimension_lines(dimension: Dimension) -> list[str]:
+def _dimension_lines(dimension: Dimension, outline: Outline) -> list[str]:
     """Return a dimension's table, its optional fields only when set.
 
     Arguments:
     * `dimension` (`Dimension`): The dimension.
+    * `outline` (`Outline`): Its outline, for the corners' names.
 
     Returns:
     * (`list[str]`): Its lines, a blank one first.
@@ -253,8 +315,8 @@ def _dimension_lines(dimension: Dimension) -> list[str]:
         "[[dimensions]]",
         f"letter = {_string(dimension.letter)}",
         f"kind = {_string(dimension.kind)}",
-        f"from = {_end(dimension.start)}",
-        f"to = {_end(dimension.end)}",
+        f"from = {_string(outline.name(dimension.start))}",
+        f"to = {_string(outline.name(dimension.end))}",
         f"offset = {_number(dimension.offset)}",
         f"along = {_number(dimension.along)}",
     ]
@@ -277,11 +339,12 @@ def _dimension_lines(dimension: Dimension) -> list[str]:
 
 
 # Function `_hide_lines()`:
-def _hide_lines(hide: Hide) -> list[str]:
+def _hide_lines(hide: Hide, outline: Outline) -> list[str]:
     """Return a hide strip's table.
 
     Arguments:
     * `hide` (`Hide`): The strip.
+    * `outline` (`Outline`): Its outline, for the corners' names.
 
     Returns:
     * (`list[str]`): Its lines, a blank one first.
@@ -290,8 +353,8 @@ def _hide_lines(hide: Hide) -> list[str]:
         "",
         "[[hides]]",
         f"axis = {_string(AXES[hide.axis])}",
-        f"below = {hide.below}",
-        f"above = {hide.above}",
+        f"below = {_string(outline.name(hide.below))}",
+        f"above = {_string(outline.name(hide.above))}",
         f"low = {_number(hide.low)}",
         f"high = {_number(hide.high)}",
         f"under = {_number(hide.under)}",
@@ -357,6 +420,8 @@ class _Reader:
 
     Attributes:
     * `source` (`str`): The file's name, for messages.
+    * `corners` (`dict[str, int]`): Each corner's index by its name
+      (#787).
     * `problems` (`list[str]`): What is wrong, a line each.
 
     Constructor:
@@ -367,6 +432,7 @@ class _Reader:
     source: str = field(init=True)
 
     # Remaining attributes (alphabetized):
+    corners: dict[str, int] = field(init=False, default_factory=dict)
     problems: list[str] = field(init=False, default_factory=list)
 
     # Method `_Reader.note()`:
@@ -407,14 +473,25 @@ class _Reader:
         if not _is_number(height) or float(height) < 0.0:  # type: ignore[arg-type]  # Checked.
             self.note("text_height", "is not a number, 0 or more")
             height = 0.0
+        version: object = data.get("version")
+        if version != VERSION:
+            self.note(
+                "version",
+                f"is {version!r}; only {VERSION} is read (#773)",
+            )
+        names: list[str] = []
+        points: list[tuple[float, float]] = self.vertices(
+            data.get("vertices", []), names
+        )
         outline: Outline = Outline(
-            self.points(data.get("points", [])),
+            points,
             self.letters(data.get("letters", {})),
             [],
             revolve,
             note,
             text_height=float(height),  # type: ignore[arg-type]  # Checked.
             turns=turns,
+            names=names,
         )
         if revolve and any(x < 0.0 for x, _ in outline.points):
             self.note("points", "a revolved outline has a corner at X < 0")
@@ -433,17 +510,6 @@ class _Reader:
         self.hides(data.get("hides", []), outline)
         self.holes(data.get("holes", []), outline)
 
-        # A file from before marks (#233) took its level and upright
-        # edges and its corners on an axis from the drawing: they are
-        # its marks now.
-        version: object = data.get("version", 1)
-        if version not in VERSIONS:
-            self.note(
-                "version", f"is not one of {', '.join(map(str, VERSIONS))}"
-            )
-        elif version == 1:
-            # First, as the old solving took them before any dimension.
-            outline.dimensions[:0] = drawn_marks(outline.points)
         return outline
 
     # Method `_Reader.hides()`:
@@ -464,24 +530,28 @@ class _Reader:
             if not isinstance(table, dict) or table.get("axis") not in AXES:
                 self.note(where, 'needs axis = "x" or "y"')
                 continue
-            corners: list[object] = [table.get("below"), table.get("above")]
+            corners: list[int | None] = [
+                self.corner(table.get("below")),
+                self.corner(table.get("above")),
+            ]
             sides: list[object] = [
                 table.get(key, 1.0) for key in ("low", "high", "under", "over")
             ]
             sides[:2] = [table.get("low"), table.get("high")]
-            if not all(
-                isinstance(corner, int)
-                and not isinstance(corner, bool)
-                and 0 <= corner < len(outline.points)
-                for corner in corners
-            ) or not all(_is_number(side) for side in sides):
+            below: int | None = corners[0]
+            above: int | None = corners[1]
+            if (
+                below is None
+                or above is None
+                or not all(_is_number(side) for side in sides)
+            ):
                 self.note(where, "needs corners below, above and numbers")
                 continue
             outline.hides.append(
                 Hide(
                     AXES.index(str(table["axis"])),
-                    int(table["below"]),
-                    int(table["above"]),
+                    below,
+                    above,
                     float(table["low"]),
                     float(table["high"]),
                     float(table.get("under", 1.0)),
@@ -535,34 +605,55 @@ class _Reader:
                     )
                 )
 
-    # Method `_Reader.points()`:
-    def points(self, found: object) -> list[tuple[float, float]]:
-        """Read the corners: at least 3, each `at = [x, y]`.
+    # Method `_Reader.vertices()`:
+    def vertices(
+        self, found: object, names: list[str]
+    ) -> list[tuple[float, float]]:
+        """Read the named corners (version 5 on, #787): at least 3,
+        each `name` (unique, not an end's word) and `at = [x, y]`.
 
         Arguments:
-        * `found` (`object`): The file's `points`.
+        * `found` (`object`): The file's `vertices`.
+        * `names` (`list[str]`): Given the good ones' names.
 
         Returns:
-        * (`list[tuple[float, float]]`): The good ones.
+        * (`list[tuple[float, float]]`): The good ones' places.
         """
         points: list[tuple[float, float]] = []
         if not isinstance(found, list):
-            self.note("points", "is not a list of tables")
+            self.note("vertices", "is not a list of tables")
             return points
         index: int
         table: object
         for index, table in enumerate(found):
-            at: object = table.get("at") if isinstance(table, dict) else None
-            if (
+            where: str = f"vertices[{index}]"
+            if not isinstance(table, dict):
+                self.note(where, "is not a table")
+                continue
+            name: object = table.get("name")
+            at: object = table.get("at")
+            if not (
                 isinstance(at, list)
                 and len(at) == 2
                 and all(_is_number(value) for value in at)
             ):
-                points.append((float(at[0]), float(at[1])))
+                self.note(where, "needs at = [x, y]")
+            elif not isinstance(name, str) or not VERTEX_NAME.fullmatch(name):
+                self.note(
+                    where,
+                    f"name = {name!r}: not a letter, then"
+                    " letters, digits or _",
+                )
+            elif name in ENDS.values():
+                self.note(where, f"name = {name!r}: is an end's word")
+            elif name in self.corners:
+                self.note(where, f"name = {name!r}: is used twice")
             else:
-                self.note(f"points[{index}]", "needs at = [x, y]")
+                self.corners[name] = len(points)
+                names.append(name)
+                points.append((float(at[0]), float(at[1])))
         if len(found) < 3:
-            self.note("points", f"has {len(found)} corners; 3 at least")
+            self.note("vertices", f"has {len(found)} corners; 3 at least")
         return points
 
     # Method `_Reader.letters()`:
@@ -658,7 +749,7 @@ class _Reader:
             # A mark is letterless (#233).
             self.note(where, f"letter {letter!r} is not in [letters]")
         ends: list[int] = [
-            self.end(where, key, table.get(key), kind == ANGLE, outline)
+            self.end(where, key, table.get(key), kind == ANGLE)
             for key in ("from", "to")
         ]
         numbers: list[object] = [table.get("offset"), table.get("along")]
@@ -707,17 +798,15 @@ class _Reader:
         key: str,
         value: object,
         angle: bool,
-        outline: Outline,
     ) -> int:
         """Read one end of a dimension: a corner (or an edge, for an
-        angle) by index, `"origin"`, or, for an angle, an axis.
+        angle) by name, `"origin"`, or, for an angle, an axis.
 
         Arguments:
         * `where` (`str`): The entry, for messages.
         * `key` (`str`): `from` or `to`.
         * `value` (`object`): What the file has.
         * `angle` (`bool`): Whether the dimension is an angle.
-        * `outline` (`Outline`): The corners read.
 
         Returns:
         * (`int`): The end (`ORIGIN` when bad: the problem is noted).
@@ -727,18 +816,27 @@ class _Reader:
         )
         if isinstance(value, str) and value in allowed:
             return {word: end for end, word in ENDS.items()}[value]
-        if (
-            isinstance(value, int)
-            and not isinstance(value, bool)
-            and 0 <= value < len(outline.points)
-        ):
-            return value
+        corner: int | None = self.corner(value)
+        if corner is not None:
+            return corner
         self.note(
             where,
-            f"{key} = {value!r}: not a corner 0-{len(outline.points) - 1}"
+            f"{key} = {value!r}: not a corner's name"
             f" or {' or '.join(allowed)}",
         )
         return ORIGIN
+
+    # Method `_Reader.corner()`:
+    def corner(self, value: object) -> int | None:
+        """Return the corner a file names, by its name (#787).
+
+        Arguments:
+        * `value` (`object`): What the file has.
+
+        Returns:
+        * (`int | None`): Its index, or `None` when it is not one.
+        """
+        return self.corners.get(value) if isinstance(value, str) else None
 
     # Method `_Reader.places()`:
     def places(
@@ -784,19 +882,6 @@ def _is_number(value: object) -> bool:
     * (`bool`): Whether it is an `int` or a `float`.
     """
     return isinstance(value, (int, float)) and not isinstance(value, bool)
-
-
-# Function `_end()`:
-def _end(end: int) -> str:
-    """Return a dimension's end in file form.
-
-    Arguments:
-    * `end` (`int`): A corner's index, or `ORIGIN`, `X_AXIS`, `Y_AXIS`.
-
-    Returns:
-    * (`str`): The TOML value.
-    """
-    return _string(ENDS[end]) if end in ENDS else str(end)
 
 
 # Function `_string()`:

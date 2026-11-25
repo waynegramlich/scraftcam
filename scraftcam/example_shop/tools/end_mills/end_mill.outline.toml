@@ -1,5 +1,5 @@
 kind = "outline"
-version = 4
+version = 5
 revolve = true
 
 [letters.D]
@@ -26,29 +26,35 @@ name = "Shank Diameter"
 default = "1 in"
 help = "The diameter of the the shank."
 
-[[points]]
+[[vertices]]
+name = "V1"
 at = [0.0, 0.0]
 
-[[points]]
+[[vertices]]
+name = "V2"
 at = [3.175, 0.0]
 
-[[points]]
+[[vertices]]
+name = "V3"
 at = [3.175, 19.05]
 
-[[points]]
+[[vertices]]
+name = "V4"
 at = [10.0, 19.05]
 
-[[points]]
+[[vertices]]
+name = "V5"
 at = [10.0, 63.5]
 
-[[points]]
+[[vertices]]
+name = "V6"
 at = [0.0, 63.5]
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
 from = "origin"
-to = 0
+to = "V1"
 offset = 0.0
 along = 0.5
 
@@ -56,7 +62,7 @@ along = 0.5
 letter = ""
 kind = "horizontal"
 from = "origin"
-to = 0
+to = "V1"
 offset = 0.0
 along = 0.5
 
@@ -64,23 +70,23 @@ along = 0.5
 letter = ""
 kind = "horizontal"
 from = "origin"
-to = 5
+to = "V6"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
-from = 0
-to = 1
+from = "V1"
+to = "V2"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "horizontal"
-from = 1
-to = 2
+from = "V2"
+to = "V3"
 offset = 0.0
 along = 0.5
 
@@ -88,7 +94,7 @@ along = 0.5
 letter = "D"
 kind = "diameter"
 from = "origin"
-to = 1
+to = "V2"
 offset = -6.0
 along = 1.8378064516129027
 
@@ -96,7 +102,7 @@ along = 1.8378064516129027
 letter = "LOC"
 kind = "vertical"
 from = "origin"
-to = 2
+to = "V3"
 offset = 16.0
 along = 0.5
 
@@ -104,7 +110,7 @@ along = 0.5
 letter = "OAL"
 kind = "vertical"
 from = "origin"
-to = 4
+to = "V5"
 offset = -16.0
 along = 0.5825806451612904
 
@@ -112,30 +118,30 @@ along = 0.5825806451612904
 letter = "SD"
 kind = "diameter"
 from = "origin"
-to = 4
+to = "V5"
 offset = 68.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
-from = 4
-to = 5
+from = "V5"
+to = "V6"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "vertical"
-from = 2
-to = 3
+from = "V3"
+to = "V4"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "horizontal"
-from = 3
-to = 4
+from = "V4"
+to = "V5"
 offset = 0.0
 along = 0.5

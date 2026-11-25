@@ -1,5 +1,5 @@
 kind = "outline"
-version = 4
+version = 5
 revolve = true
 turns = 1
 
@@ -33,40 +33,47 @@ name = "Drill Radius"
 default = "1 in"
 help = ""
 
-[[points]]
+[[vertices]]
+name = "V1"
 at = [0.0, -10.0]
 
-[[points]]
+[[vertices]]
+name = "V2"
 at = [2.0, -8.5]
 
-[[points]]
+[[vertices]]
+name = "V3"
 at = [2.0, -5.5]
 
-[[points]]
+[[vertices]]
+name = "V4"
 at = [2.0, 2.0]
 
-[[points]]
+[[vertices]]
+name = "V5"
 at = [1.0, 2.0]
 
-[[points]]
+[[vertices]]
+name = "V6"
 at = [1.0, 7.5]
 
-[[points]]
+[[vertices]]
+name = "V7"
 at = [0.0, 7.5]
 
 [[dimensions]]
 letter = "OAL"
 kind = "vertical"
-from = 5
-to = 0
+from = "V6"
+to = "V1"
 offset = 7.0
 along = 0.8285714285714286
 
 [[dimensions]]
 letter = "HPA"
 kind = "angle"
-from = 0
-to = 6
+from = "V1"
+to = "V7"
 offset = 2.23606797749979
 along = 0.5
 rays = [1, -1]
@@ -74,64 +81,64 @@ rays = [1, -1]
 [[dimensions]]
 letter = "SL"
 kind = "length"
-from = 4
-to = 5
+from = "V5"
+to = "V6"
 offset = -2.5
 along = 0.2727272727272727
 
 [[dimensions]]
 letter = "FL"
 kind = "vertical"
-from = 0
-to = 2
+from = "V1"
+to = "V3"
 offset = 3.5
 along = 0.6363636363636364
 
 [[dimensions]]
 letter = "SR"
 kind = "length"
-from = 5
-to = 6
+from = "V6"
+to = "V7"
 offset = -1.5
 along = -2.0
 
 [[dimensions]]
 letter = "DR"
 kind = "horizontal"
-from = 0
-to = 1
+from = "V1"
+to = "V2"
 offset = -12.0
 along = 2.25
 
 [[dimensions]]
 letter = ""
 kind = "horizontal"
-from = 1
-to = 2
+from = "V2"
+to = "V3"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "horizontal"
-from = 4
-to = 5
+from = "V5"
+to = "V6"
 offset = 0.0
 along = 0.5
 
 [[dimensions]]
 letter = ""
 kind = "horizontal"
-from = 6
-to = 0
+from = "V7"
+to = "V1"
 offset = 0.0
 along = 0.5
 moved = [0.0, -4.0]
 
 [[hides]]
 axis = "y"
-below = 3
-above = 5
+below = "V4"
+above = "V6"
 low = 2.73200158227848
 high = 1.6638647151898747
 under = 3.225
@@ -139,8 +146,8 @@ over = 6.872502966772149
 
 [[hides]]
 axis = "y"
-below = 2
-above = 3
+below = "V3"
+above = "V4"
 low = 2.187598892405064
 high = 3.4511471518987342
 under = 3.375

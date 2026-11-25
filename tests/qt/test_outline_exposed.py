@@ -44,9 +44,9 @@ class TestOutlineExposed(unittest.TestCase):
                 "file: (new)",
                 "revolve: False",
                 "corners:",
-                "  0: (-4, -3)",
-                "  1: (4, -3)",
-                "  2: (0, 4)",
+                "  V1: (-4, -3)",
+                "  V2: (4, -3)",
+                "  V3: (0, 4)",
             ],
         )
         self.assertIn("chosen corners: []", lines)
@@ -84,24 +84,55 @@ class TestOutlineExposed(unittest.TestCase):
         self.editor.view.fit()
         qt_app.process_events()
         handle: dict[str, object] = {"editor": "OutlineEditor 1"}
-        text: object = exposed.call("click", {**handle, "target": "Vertex 0"})
-        self.assertIn("chosen corners: [0]", str(text))
+        text: object = exposed.call("click", {**handle, "target": "Vertex V1"})
+        self.assertIn("chosen corners: [Vertex V1]", str(text))
         text = exposed.call(
-            "drag", {**handle, "target": "Vertex 2", "to": "(1, 6)"}
+            "drag", {**handle, "target": "Vertex V3", "to": "(1, 6)"}
         )
-        self.assertIn("  2: (1, 6)", str(text))
+        self.assertIn("  V3: (1, 6)", str(text))
         self.assertIn("undo depth: 1", str(text))
         text = exposed.call("button", {**handle, "word": "Undo"})
-        self.assertIn("  2: (0, 4)", str(text))
+        self.assertIn("  V3: (0, 4)", str(text))
         # A target must be what is there now (#550).
-        with self.assertRaisesRegex(ExposedError, "there are 3 vertices"):
-            exposed.call("click", {**handle, "target": "Vertex 5"})
+        with self.assertRaisesRegex(
+            ExposedError, "the vertices are V1, V2, V3"
+        ):
+            exposed.call("click", {**handle, "target": "Vertex V6"})
         with self.assertRaisesRegex(ExposedError, "is not what is there"):
             exposed.call("click", {**handle, "target": "background (0, 4)"})
         with self.assertRaisesRegex(ExposedError, "not revolved"):
-            exposed.call("click", {**handle, "target": "Mirror 1"})
-        with self.assertRaisesRegex(ExposedError, "is not `Vertex N`"):
+            exposed.call("click", {**handle, "target": "Mirror V2"})
+        with self.assertRaisesRegex(ExposedError, "is not `Vertex NAME`"):
             exposed.call("click", {**handle, "target": "Corner 1"})
+
+    def test_rename(self) -> None:
+        """The chosen corner is renamed through its Vertex field, as
+        one change; a bad or used name is refused, saying why (#795).
+        """
+        exposed.call("editors", {})
+        self.editor.resize(1280, 800)
+        self.editor.show()
+        self.editor.view.fit()
+        qt_app.process_events()
+        handle: dict[str, object] = {"editor": "OutlineEditor 1"}
+        with self.assertRaisesRegex(ExposedError, "choose one corner"):
+            exposed.call("rename", {**handle, "name": "Tip"})
+        exposed.call("click", {**handle, "target": "Vertex V3"})
+        text: object = exposed.call("rename", {**handle, "name": "Tip"})
+        self.assertIn("  Tip: (0, 4)", str(text))
+        self.assertIn("chosen corners: [Vertex Tip]", str(text))
+        bad: str
+        for bad in ("V1", "2x", "origin"):
+            with self.assertRaisesRegex(ExposedError, "not renamed: "):
+                exposed.call("rename", {**handle, "name": bad})
+        text = exposed.call("button", {**handle, "word": "Undo"})
+        self.assertIn("  V3: (0, 4)", str(text))
+        # [Show Names] writes them beside the corners in [Edit] (#796).
+        exposed.call("button", {**handle, "word": "Show Names"})
+        self.assertTrue(self.editor.view.names_shown)
+        self.editor.view.grab()
+        exposed.call("button", {**handle, "word": "Show Names"})
+        self.assertFalse(self.editor.view.names_shown)
 
     def test_screenshot(self) -> None:
         """A picture of the window is written where it says (#567)."""

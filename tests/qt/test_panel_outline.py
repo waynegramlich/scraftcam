@@ -78,7 +78,7 @@ class OutlineTabTest(unittest.TestCase):
         editor.view.fit()
         handle: str = outline_exposed.HANDLES.handle(editor)
         before: list[tuple[float, float]] = list(editor.drawing.points)
-        outline_exposed.drag(handle, "Vertex 1", to="(1, 1)")
+        outline_exposed.drag(handle, "Vertex V2", to="(1, 1)")
         self.assertEqual(editor.drawing.points, before)
         self.assertIn("Only this tool's values", editor.status.text())
 
@@ -87,7 +87,7 @@ class OutlineTabTest(unittest.TestCase):
         tool: ToolValues | None = editor.letters.tool
         assert tool is not None
         self.assertTrue(tool.editing)
-        outline_exposed.drag(handle, "Vertex 1", to="(1, 1)")
+        outline_exposed.drag(handle, "Vertex V2", to="(1, 1)")
         self.assertEqual(editor.drawing.points, before)
         own: Panel = Panel(2)
         self.addCleanup(own.deleteLater)
