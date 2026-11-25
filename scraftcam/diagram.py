@@ -19,6 +19,7 @@ from enum import Enum
 from html import escape
 
 from . import hershey
+from .appearance import Hatch, HatchLines
 from .geometry import ArcSegment, LineSegment, Point, XYSegment
 
 # Line widths and the margin, as fractions of the text height (#277).
@@ -83,9 +84,12 @@ class Stroke:
     * `title` (`str`):
       What a viewer shows when the pointer rests on it (#267); ""
       for none.
+    * `hatch` (`Hatch | None`):
+      When set, the stroke is not inked: it is a closed area filled
+      with this hatch (a material, `T.sa~6.11` #781).
 
     Constructor:
-    * `Stroke(segments, weight, filled, dashed, role, title)`
+    * `Stroke(segments, weight, filled, dashed, role, title, hatch)`
     """
 
     # Constructor arguments:
@@ -95,6 +99,7 @@ class Stroke:
     dashed: bool = field(init=True, default=False)
     role: str = field(init=True, default="")
     title: str = field(init=True, default="")
+    hatch: Hatch | None = field(init=True, default=None)
 
 
 # Class `Sheet`:
@@ -897,6 +902,11 @@ def svg(
         ),
     ]
 
+    # A pattern per set of hatch lines, its lengths on the page.
+    patterns: dict[HatchLines, str] = _patterns(
+        sheet.strokes, ink, print_scale, lines
+    )
+
     # One path per stroke, its width from its weight; strokes with a
     # title grouped under it, over an unseen box the pointer can rest
     # on (#267).
@@ -911,6 +921,13 @@ def svg(
             lines.append(_hover_box(group, sheet.text_height))
         stroke: Stroke
         for stroke in group:
+            if stroke.hatch is not None:
+                lines.extend(
+                    f'<path d="{_path(stroke)}" class="hatch"'
+                    f' fill="url(#{patterns[hatch_lines]})" stroke="none"/>'
+                    for hatch_lines in stroke.hatch.lines
+                )
+                continue
             share: float = THICK if stroke.weight is Weight.THICK else THIN
             lines.append(
                 f'<path d="{_path(stroke)}"'
@@ -928,6 +945,81 @@ def svg(
             lines.append("</g>")
     lines.append("</svg>")
     return "\n".join(lines) + "\n"
+
+
+# Function `_patterns()`:
+def _patterns(
+    strokes: tuple[Stroke, ...],
+    ink: str,
+    print_scale: float,
+    lines: list[str],
+) -> dict[HatchLines, str]:
+    """Add the `<defs>` of the strokes' hatch patterns, if any.
+
+    Arguments:
+    * `strokes` (`tuple[Stroke, ...]`): The sheet's strokes.
+    * `ink` (`str`): The lines' SVG color.
+    * `print_scale` (`float`): Millimeters on the page per sheet unit.
+    * `lines` (`list[str]`): The SVG's lines, added to.
+
+    Returns:
+    * (`dict[HatchLines, str]`): Each set of lines' pattern `id`.
+    """
+    patterns: dict[HatchLines, str] = {}
+    stroke: Stroke
+    for stroke in strokes:
+        if stroke.hatch is not None:
+            hatch_lines: HatchLines
+            for hatch_lines in stroke.hatch.lines:
+                patterns.setdefault(hatch_lines, f"hatch{len(patterns) + 1}")
+    if patterns:
+        lines.append("<defs>")
+        lines.extend(
+            _pattern(hatch_lines, name, ink, print_scale)
+            for hatch_lines, name in patterns.items()
+        )
+        lines.append("</defs>")
+    return patterns
+
+
+# Function `_pattern()`:
+def _pattern(
+    lines: HatchLines, name: str, ink: str, print_scale: float
+) -> str:
+    """Return the SVG pattern of one set of hatch lines.
+
+    Arguments:
+    * `lines` (`HatchLines`): The lines (their lengths in inches on
+      the page).
+    * `name` (`str`): The pattern's `id`.
+    * `ink` (`str`): The lines' SVG color.
+    * `print_scale` (`float`): Millimeters on the page per sheet unit.
+
+    Returns:
+    * (`str`): The `<pattern>` element.
+    """
+    # The sheet's units are page millimeters over `print_scale`; SVG's
+    # Y runs down, so the angle turns the other way.
+    spacing: float = lines.spacing * 25.4 / print_scale
+    thickness: float = lines.thickness * 25.4 / print_scale
+    half: str = _n(spacing / 2)
+    whole: str = _n(spacing)
+
+    # Qt's SVG renderer drops a pattern turned 89 degrees or more
+    # (#815), so the turn is kept within 45 degrees: lines repeat
+    # every 180, and a vertical line takes a quarter turn off.
+    turn: float = (-lines.angle + 90.0) % 180.0 - 90.0
+    line: str = f'x1="0" y1="{half}" x2="{whole}" y2="{half}"'
+    if abs(turn) > 45.0:
+        turn -= math.copysign(90.0, turn)
+        line = f'x1="{half}" y1="0" x2="{half}" y2="{whole}"'
+    return (
+        f'<pattern id="{name}" patternUnits="userSpaceOnUse"'
+        f' width="{whole}" height="{whole}"'
+        f' patternTransform="rotate({_n(turn)})">'
+        f'<line {line} stroke="{ink}"'
+        f' stroke-width="{_n(thickness)}"/></pattern>'
+    )
 
 
 # Function `_title()`:

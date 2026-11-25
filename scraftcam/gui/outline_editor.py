@@ -90,8 +90,10 @@ from PySide6.QtWidgets import (  # noqa: E402
     QWidget,
 )
 
+from ..appearance import Hatch, Look, looks  # noqa: E402
 from ..diagram import FONT_STEP, TEXT, Stroke, Weight, svg  # noqa: E402
 from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
+from ..shops import material_looks, shop_of  # noqa: E402
 from . import theme  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
@@ -1033,12 +1035,47 @@ class CornerCircle(QGraphicsEllipseItem):
             self.editor.placing = False
 
 
+# The hatch angles Qt draws, and their brushes (#810), by the set of
+# angles, each turned to 0, 45, 90 or 135 degrees.
+HATCH_STYLES: dict[frozenset[int], Qt.BrushStyle] = {
+    frozenset({0}): Qt.BrushStyle.HorPattern,
+    frozenset({90}): Qt.BrushStyle.VerPattern,
+    frozenset({45}): Qt.BrushStyle.BDiagPattern,
+    frozenset({135}): Qt.BrushStyle.FDiagPattern,
+    frozenset({0, 90}): Qt.BrushStyle.CrossPattern,
+    frozenset({45, 135}): Qt.BrushStyle.DiagCrossPattern,
+}
+
+
+# Function `hatch_style()`:
+def hatch_style(hatch: Hatch) -> Qt.BrushStyle:
+    """Return the Qt brush nearest a hatch, for the screen (#810).
+
+    Arguments:
+    * `hatch` (`Hatch`): The hatch.
+
+    Returns:
+    * (`Qt.BrushStyle`): Its lines' angles, each to the nearest 45
+      degrees; a pair Qt has no brush for takes its first set's.
+    """
+    angles: list[int] = [
+        round(lines.angle / 45.0) * 45 % 180 for lines in hatch.lines
+    ]
+    return HATCH_STYLES.get(
+        frozenset(angles), HATCH_STYLES[frozenset(angles[:1])]
+    )
+
+
 # Class `OutlineItem`:
 class OutlineItem(QGraphicsItem):
-    """The outline: thick edges, each ending in a small arrowhead.
+    """The outline: thick edges, each ending in a small arrowhead,
+    each polygon hatched by its material (`T.sa~6.11` #808, #812).
 
     Attributes:
     * `drawing` (`Drawing`): What it draws.
+    * `materials` (`dict[str, tuple[str, str]]`): The outline's
+      shop's materials' colours and hatches
+      (`shops.material_looks()`); empty colours and hatches nothing.
     """
 
     # Method `OutlineItem.__init__()`:
@@ -1050,6 +1087,7 @@ class OutlineItem(QGraphicsItem):
         """
         super().__init__()
         self.drawing: Drawing = drawing
+        self.materials: dict[str, tuple[str, str]] = {}
         self.setZValue(1.0)
 
     # Method `OutlineItem.refresh()`:
@@ -1095,6 +1133,39 @@ class OutlineItem(QGraphicsItem):
         for start, end in sorted(crossed):
             painter.drawLine(corners[start], corners[end])
 
+    # Method `OutlineItem.paint_looks()`:
+    def paint_looks(self, painter: QPainter, thick: list[Stroke]) -> None:
+        """Hatch each polygon by its material, in ink, under the
+        outline: drawings are monochrome, colour is for solids (#812).
+        The hatch is Qt's, its spacing fixed on screen at any zoom
+        (#810).
+
+        Arguments:
+        * `painter` (`QPainter`): What draws, in drawing steps.
+        * `thick` (`list[Stroke]`): A closed stroke per polygon.
+        """
+        if not self.materials:
+            return
+        found: list[Look] = looks(
+            [
+                (polygon.material, polygon.color)
+                for polygon in self.drawing.polygons
+            ],
+            self.materials,
+        )
+        # The hatch's pattern is kept in screen pixels.
+        unscaled: QTransform = painter.worldTransform().inverted()[0]
+        ink: QColor = QColor(theme.colors().ink)
+        stroke: Stroke
+        look: Look
+        for stroke, look in zip(thick, found, strict=False):
+            if look.hatch is not None:
+                path: QPainterPath = stroke_path(stroke)
+                path.closeSubpath()
+                brush: QBrush = QBrush(ink, hatch_style(look.hatch))
+                brush.setTransform(unscaled)
+                painter.fillPath(path, brush)
+
     # Method `OutlineItem.paint()`:
     def paint(
         self,
@@ -1118,6 +1189,7 @@ class OutlineItem(QGraphicsItem):
         thick: list[Stroke] = [
             stroke for stroke in strokes if stroke.weight == Weight.THICK
         ]
+        self.paint_looks(painter, thick)
         painter.setPen(pen)
         stroke: Stroke
         for stroke in thick:
@@ -1227,7 +1299,12 @@ def tool_svg(outline: Path, values: dict[str, str]) -> str:
     Returns:
     * (`str`): The `.svg`, as the outline's own is written.
     """
-    return svg(outline_sheet(tool_drawing(drawing_from(outline), values)))
+    return svg(
+        outline_sheet(
+            tool_drawing(drawing_from(outline), values),
+            materials=material_looks(shop_of(outline)),
+        )
+    )
 
 
 # Function `svg_path()`:
@@ -4711,6 +4788,7 @@ class OutlineEditor(QWidget):
         layout: QVBoxLayout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self.view: OutlineView = OutlineView(self.drawing)
+        self.view.outline.materials = self.materials()
 
         # The buttons in tabs (#319) over the status line.
         self.button_tabs: QTabWidget = QTabWidget()
@@ -4971,7 +5049,7 @@ class OutlineEditor(QWidget):
         colors: theme.Colors = theme.colors()
         self.picture.load(
             svg(
-                outline_sheet(self.drawing),
+                outline_sheet(self.drawing, materials=self.materials()),
                 colors.ink,
                 colors.paper,
             ).encode("utf-8")
@@ -5142,8 +5220,19 @@ class OutlineEditor(QWidget):
             self.path.write_text(text, encoding="utf-8")
             self.saved = text
             picture.write_text(
-                svg(outline_sheet(self.drawing)), encoding="utf-8"
+                svg(outline_sheet(self.drawing, materials=self.materials())),
+                encoding="utf-8",
             )
+
+    # Method `OutlineEditor.materials()`:
+    def materials(self) -> dict[str, tuple[str, str]]:
+        """Return the materials of the outline's own shop (the example
+        shop's for one outside any shop, `T.sa~6.11` #809).
+
+        Returns:
+        * (`dict[str, tuple[str, str]]`): `shops.material_looks()`.
+        """
+        return material_looks(shop_of(self.path))
 
     # Method `OutlineEditor.overlap_problem()`:
     def overlap_problem(self) -> str:

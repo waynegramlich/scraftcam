@@ -335,7 +335,8 @@ def looks(
     * `polygons` (`list[tuple[str, str]]`): Each polygon's material
       ("" for none) and own colour text ("" for none).
     * `materials` (`dict[str, tuple[str, str]]`): Each known
-      material's colour and hatch texts ("" for none), by its name.
+      material's colour and hatch texts ("" for none), by its name in
+      lower case (a polygon's material is matched in any capitals).
 
     Returns:
     * (`list[Look]`): Each polygon's look, in order.
@@ -343,6 +344,9 @@ def looks(
     Raises:
     * `ValueError`: When a colour or hatch text is bad.
     """
+    # Materials in any capitals (as the shop matches them).
+    polygons = [(material.lower(), own) for material, own in polygons]
+
     # Each material's hatch: its own, then the standard ones unused.
     taken: set[tuple[HatchLines, ...]] = {
         Hatch.parse(hatch).lines

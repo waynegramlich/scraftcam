@@ -43,3 +43,8 @@ numbers are shared by every task; the next is in
   overlaps refused, shared corners), letters' scopes (outline,
   internal, a polygon's); the letters' table is now the Values
   table, with a [Polygons] tab.
+* `T.sa~6.11` #S3: materials' `color` (`R13% G32% B78% T40%`) and
+  `hatch` (`A45 S2mm T0.25mm`, `+` for a crosshatch) fields; a
+  polygon's material hatches it in drawings (monochrome, #812), a
+  standard hatch given when none; a polygon's own colour (for
+  solids) in the [Polygons] tab's picker.

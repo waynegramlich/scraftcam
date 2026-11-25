@@ -78,7 +78,7 @@ class LooksTest(unittest.TestCase):
             "steel": ("R50% G50% B50%", "A45 S2mm T0.25mm"),
         }
         found: list[Look] = looks(
-            [("hss", ""), ("steel", "R1% G2% B3%"), ("", ""), ("hss", "")],
+            [("hss", ""), ("steel", "R1% G2% B3%"), ("", ""), ("HSS", "")],
             materials,
         )
         self.assertEqual(found[0].color, Color(65.0, 67.0, 70.0))

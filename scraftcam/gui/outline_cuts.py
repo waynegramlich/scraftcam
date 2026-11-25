@@ -9,6 +9,7 @@ each side of the gap where it crosses the part, the two meshing
 
 import itertools
 import math
+from dataclasses import replace
 
 from ..diagram import LINE, Stroke, placed, polyline
 from ..geometry import ArcSegment, LineSegment, Point, XYSegment
@@ -66,7 +67,9 @@ def cut_strokes(
         for left, right, dx in across_x:
             for bottom, top, dy in across_y:
                 found.extend(
-                    _clipped(stroke, (left, right, bottom, top), (dx, dy))
+                    _clipped_area(stroke, (left, right, bottom, top), (dx, dy))
+                    if stroke.hatch is not None
+                    else _clipped(stroke, (left, right, bottom, top), (dx, dy))
                 )
     found.extend(_breaks(outline, across_x, across_y, height))
     found.extend(_esses(outline, strokes, (across_x, across_y), height))
@@ -234,6 +237,105 @@ def _inside(
         left <= point[0] <= right and bottom <= point[1] <= top
         for point in (segment.start, segment.end)
     )
+
+
+# Function `_clipped_area()`:
+def _clipped_area(
+    stroke: Stroke,
+    box: tuple[float, float, float, float],
+    move: Point,
+) -> list[Stroke]:
+    """Return what of a hatched area lies in a box, moved, as one
+    closed area (`T.sa~6.11` #781): its corners clipped to each side
+    of the box in turn (Sutherland and Hodgman), arcs as chords.
+
+    Arguments:
+    * `stroke` (`Stroke`): The hatched area.
+    * `box` (`tuple[float, float, float, float]`): Left, right, bottom
+      and top.
+    * `move` (`Point`): How far to move what is kept.
+
+    Returns:
+    * (`list[Stroke]`): The area kept, or none when it misses the box.
+    """
+    # Whole inside: moved as it is.
+    if all(_inside(segment, box) for segment in stroke.segments):
+        return [
+            replace(
+                stroke,
+                segments=tuple(
+                    placed(segment, move) for segment in stroke.segments
+                ),
+            )
+        ]
+
+    # Each side keeps the corners on its inner side, adding where an
+    # edge crosses it.
+    left, right, bottom, top = box
+    points: list[Point] = [
+        line.start for segment in stroke.segments for line in _lines(segment)
+    ]
+    axis: int
+    limit: float
+    low: bool
+    for axis, limit, low in (
+        (0, left, True),
+        (0, right, False),
+        (1, bottom, True),
+        (1, top, False),
+    ):
+        points = _clip_side(points, axis, limit, low=low)
+    if len(points) < 3:
+        return []
+    shifted: list[Point] = [(x + move[0], y + move[1]) for x, y in points]
+    return [
+        replace(
+            stroke,
+            segments=tuple(
+                LineSegment(shifted[index - 1], shifted[index])
+                for index in range(len(shifted))
+            ),
+        )
+    ]
+
+
+# Function `_clip_side()`:
+def _clip_side(
+    points: list[Point], axis: int, limit: float, *, low: bool
+) -> list[Point]:
+    """Return a closed area's corners on one side of a line, adding
+    where an edge crosses it.
+
+    Arguments:
+    * `points` (`list[Point]`): The area's corners, in order.
+    * `axis` (`int`): 0 for a line of constant X, 1 for constant Y.
+    * `limit` (`float`): Where the line is.
+    * `low` (`bool`): True to keep what is at or above `limit`, False
+      at or below.
+
+    Returns:
+    * (`list[Point]`): The corners kept.
+    """
+    kept: list[Point] = []
+    index: int
+    point: Point
+    for index, point in enumerate(points):
+        before: Point = points[index - 1]
+        inside: bool = point[axis] >= limit if low else point[axis] <= limit
+        was: bool = before[axis] >= limit if low else before[axis] <= limit
+        if inside != was:
+            share: float = (limit - before[axis]) / (
+                point[axis] - before[axis]
+            )
+            kept.append(
+                (
+                    before[0] + share * (point[0] - before[0]),
+                    before[1] + share * (point[1] - before[1]),
+                )
+            )
+        if inside:
+            kept.append(point)
+    return kept
 
 
 # Function `_lines()`:

@@ -7,8 +7,11 @@ by the user, whose own text is now `Details.md`.  Designed
 Issue numbers are shared by every task; the next is in
 `TASKS/Issue_Counter.md`.
 
-**Where we are (2026-11-25):** #S1, #S2 done; #S3 under way.
-#S4 starts with the drill split (#800 (a)).
+**Where we are (2026-11-25):** #S1, #S2, #S3 done (the user
+approved the look on screen).  Next: #S4, starting with the drill
+split (#800 (a)), its polygons given materials (#806), and solids
+coloured from `appearance.looks()`.  #814 open: keep or hide the
+[Polygons] Colour column until #S4 uses it.
 
 ## #S3 Progress
 
@@ -30,9 +33,29 @@ Issue numbers are shared by every task; the next is in
   outside any shop, the example shop's.  #810 in [Edit] hatch
   spacing is fixed on screen (like line widths); [SVG] uses the page
   lengths as written.  #811 the embedded picker is preferred.
-* Next: draw them: the editor ([Edit] fill and hatch, [Drawing]
-  hatch) and the `.svg` (`diagram.svg()` patterns); find the
-  outline's shop's materials (#809).
+* SVG done: `Stroke.hatch` (a hatched area, not inked);
+  `diagram.svg()` writes a `<pattern>` per `HatchLines` (page
+  lengths via `letter_mm`); `outline_cuts._clipped_area()` clips
+  areas to hide strip pieces; `outline_sheet(..., materials=)` puts
+  `hatch_strokes()` under the ink; `shops.shop_of()`,
+  `shops.material_looks()` (names lower case; #802 check is
+  case-blind too); the editor's [SVG], its saved `.svg` and
+  `tool_svg()` pass the outline's shop's materials.
+* Screen done: `OutlineItem.paint_looks()` fills each polygon in
+  its colour in [Edit] only (`view.overview`) and hatches it in both
+  tabs with Qt's pattern brushes (`hatch_style()`, nearest 45
+  degrees; brush transform undoes the zoom, #810);
+  `OutlineItem.materials` set by the editor from its shop; the
+  picker starts at the material's colour.  Checked by offscreen
+  screenshots (steel 45, HSS 135).
+* #812 drawings are monochrome: no colour fill on screen, hatches
+  in ink; colour is for solids (#S4).  #814 (open): keep or hide the
+  Colour column until #S4.  #815 Qt's SVG renderer drops a
+  `<pattern>` turned 89 degrees or more: `diagram._pattern()` keeps
+  the turn within 45 (a vertical line for steep ones); all eight
+  standard hatches checked rendered.
+* Not done: a revolved outline's mirror
+  half is not hatched (#782 says it is its own section).
 
 ## Built (#S1, #S2)
 
@@ -138,7 +161,7 @@ Issue numbers are shared by every task; the next is in
 ## Steps
 
 * #S1, #S2 done (above).
-* #S3 colours (material, `QColorDialog`) and hatches.
+* #S3 done: colours (material, embedded `QColorDialog`) and hatches.
 * #S4 the drill split into flutes and shank (#800 (a)); [Solid] and
   the `.step` (several polygons make an assembly), shown in
   SolidCraft, cached.

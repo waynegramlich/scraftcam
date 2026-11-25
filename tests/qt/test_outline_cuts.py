@@ -2,7 +2,9 @@
 
 import math
 import unittest
+from dataclasses import replace
 
+from scraftcam.appearance import Hatch
 from scraftcam.diagram import LINE, Stroke, Weight, polyline
 from scraftcam.geometry import ArcSegment, Point
 from scraftcam.gui.hides import HIDE_X, HIDE_Y, Hide
@@ -74,6 +76,25 @@ class TestCut(unittest.TestCase):
         self.assertEqual(kept[:2], [0.0, 3.0])
         self.assertAlmostEqual(kept[2], 3.0 + GAP * 0.5)
         self.assertAlmostEqual(kept[3], 10.0 - 4.0 + GAP * 0.5)
+
+    def test_hatched_area(self) -> None:
+        """A hatched area is cut into closed areas, one per piece,
+        each closed up with its piece (#781)."""
+        area: Stroke = replace(
+            polyline([*TALL, TALL[0]]),
+            hatch=Hatch.parse("A45 S2mm T0.25mm"),
+        )
+        found: list[Stroke] = [
+            stroke
+            for stroke in cut_strokes(tall(), [area], 0.5)
+            if stroke.hatch is not None
+        ]
+        self.assertEqual(len(found), 2)
+        stroke: Stroke
+        for stroke in found:
+            self.assertEqual(stroke.segments[0].start, stroke.segments[-1].end)
+        self.assertEqual(max(ys(found[:1])), 3.0)
+        self.assertAlmostEqual(min(ys(found[1:])), 3.0 + GAP * 0.5)
 
     def test_breaks(self) -> None:
         """A zigzag break line on each side, across the part."""

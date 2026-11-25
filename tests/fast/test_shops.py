@@ -187,10 +187,10 @@ class TestReader(CopiedShop):
         self.change(
             "tools/materials/carbide.toml",
             'name = "carbide"',
-            'name = "aluminum"',
+            'name = "Aluminum"',
         )
         self.assertIn(
-            "tools/materials: 'aluminum' is also a stock material "
+            "tools/materials: 'Aluminum' is also a stock material "
             "(stock/materials); a material's name must be in one list only",
             self.problems(),
         )

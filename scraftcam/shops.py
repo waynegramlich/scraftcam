@@ -586,6 +586,59 @@ CHAMFER_MILL_LETTERS: dict[str, str] = outline_keys("chamfer_mill")
 CATALOG_PAGES: str = "pages"
 
 
+# Function `shop_of()`:
+def shop_of(path: Path | None) -> Path:
+    """Return the shop a file is in (`T.sa~6.11` #809).
+
+    Arguments:
+    * `path` (`Path | None`): A file or directory, or `None`.
+
+    Returns:
+    * (`Path`): The nearest directory at or above it holding a
+      `shop.toml`; the example shop when there is none.
+    """
+    if path is not None:
+        parent: Path
+        for parent in (path.resolve(), *path.resolve().parents):
+            if (parent / SHOP_FILE).is_file():
+                return parent
+    return EXAMPLE_SHOP
+
+
+# Function `material_looks()`:
+def material_looks(shop: Path) -> dict[str, tuple[str, str]]:
+    """Return a shop's materials' colour and hatch texts, by name: its
+    stock and tool materials (`T.sa~6.11` #802, #809), read as they
+    are, without checking the rest of the shop.
+
+    Arguments:
+    * `shop` (`Path`): The shop's directory.
+
+    Returns:
+    * (`dict[str, tuple[str, str]]`): Each material's `color` and
+      `hatch` ("" for none), by its `name` in lower case; a file
+      that does not read is left out (the shop's own check names
+      it).
+    """
+    found: dict[str, tuple[str, str]] = {}
+    directory: str
+    for directory in ("stock/materials", "tools/materials"):
+        file: Path
+        for file in sorted((shop / directory).glob("*.toml")):
+            try:
+                data: dict[str, object] = tomllib.loads(
+                    file.read_text(encoding="utf-8")
+                )
+            except (OSError, tomllib.TOMLDecodeError):
+                continue
+            if data.get("kind") in ("material", "tool_material"):
+                found[str(data.get("name", "")).lower()] = (
+                    str(data.get("color", "")),
+                    str(data.get("hatch", "")),
+                )
+    return found
+
+
 # Function `kind_directory()`:
 def kind_directory(directory: Path, top: Path) -> bool:
     """Say whether a directory under `tools/` holds tools.
@@ -2872,12 +2925,13 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
 
         # A polygon's `material` names either list, so no name may be
         # in both (`T.sa~6.11` #802).
-        stock: set[object] = {
-            entry.get("name") for entry in found.get("material", [])
+        stock: set[str] = {
+            str(entry.get("name")).lower()
+            for entry in found.get("material", [])
         }
         entry: dict[str, object]
         for entry in found.get("tool_material", []):
-            if entry.get("name") in stock:
+            if str(entry.get("name")).lower() in stock:
                 self.problems.append(
                     f"tools/materials: {entry.get('name')!r} is also a "
                     "stock material (stock/materials); a material's name "

@@ -4,6 +4,7 @@ import math
 import unittest
 import xml.etree.ElementTree as ET
 
+from scraftcam.appearance import Hatch
 from scraftcam.diagram import (
     MARGIN,
     TEXT,
@@ -299,6 +300,30 @@ class TestDimensions(unittest.TestCase):
             'class="ink solid" fill="black"',
             svg(on_paper(tuple(strokes), 2.0)),
         )
+
+    def test_hatched_svg(self) -> None:
+        """A hatched stroke is an area filled by a pattern per set of
+        lines, never inked, the patterns' lengths on the page (#781)."""
+        loop: Loop = square(10.0)
+        cross: Hatch = Hatch.parse("A45 S2mm T0.25mm + A135 S2mm T0.25mm")
+        strokes: tuple[Stroke, ...] = (
+            Stroke(loop.segments, Weight.THIN, hatch=cross),
+            Stroke(loop.segments, Weight.THICK),
+        )
+        root: ET.Element = ET.fromstring(
+            svg(on_paper(strokes, 2.0), letter_mm=4.0)
+        )
+        patterns: list[ET.Element] = root.findall(f"{SVG}defs/{SVG}pattern")
+        self.assertEqual(len(patterns), 2)
+        self.assertEqual(patterns[0].get("width"), "1")
+        # Turned within 45 degrees, as Qt drops more (#815): 135 is a
+        # vertical line turned 45.
+        self.assertEqual(patterns[0].get("patternTransform"), "rotate(-45)")
+        self.assertEqual(patterns[1].get("patternTransform"), "rotate(45)")
+        fills: list[str | None] = [
+            path.get("fill") for path in root.findall(f"{SVG}path")
+        ]
+        self.assertEqual(fills, ["url(#hatch1)", "url(#hatch2)", "none"])
 
 
 class TestMarks(unittest.TestCase):

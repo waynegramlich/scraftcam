@@ -435,16 +435,19 @@ class ColorPicker(QWidget):
 
     # Method `ColorPicker.choose()`:
     def choose(self, row: int) -> None:
-        """Show the picker on a polygon, at its own colour.
+        """Show the picker on a polygon, at its own colour, else its
+        material's.
 
         Arguments:
         * `row` (`int`): The polygon's row.
         """
         self.row = row
         polygon: Polygon = self.values.drawing.polygons[row]
-        color: Color = (
-            Color.parse(polygon.color) if polygon.color else (NO_COLOR)
-        )
+        material: str = self.values.view.outline.materials.get(
+            polygon.material.lower(), ("", "")
+        )[0]
+        text: str = polygon.color or material
+        color: Color = Color.parse(text) if text else NO_COLOR
         self.dialog.setCurrentColor(QColor(*color.rgba()))
         self.setVisible(True)
 

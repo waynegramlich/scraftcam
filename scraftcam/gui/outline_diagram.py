@@ -13,6 +13,7 @@ import math
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 
+from ..appearance import Look, looks
 from ..diagram import (
     FONT_STEP,
     TEXT,
@@ -92,7 +93,12 @@ class Fillet:
 
 
 # Function `outline_sheet()`:
-def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
+def outline_sheet(
+    outline: Outline,
+    text_height: float = 0.0,
+    *,
+    materials: dict[str, tuple[str, str]] | None = None,
+) -> Sheet:
     """Return an outline's diagram.
 
     Arguments:
@@ -100,6 +106,10 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
     * `text_height` (`float`):
       The text height (drawing steps); 0 takes the outline's own, or
       when it has none picks one from its size (#280).
+    * `materials` (`dict[str, tuple[str, str]] | None`):
+      Each material's colour and hatch texts, by name
+      (`shops.material_looks()`), to hatch each polygon that has a
+      material (`T.sa~6.11` #781, #808); `None` hatches none.
 
     Returns:
     * (`Sheet`): The diagram, its paper the drawing plus a margin.
@@ -117,6 +127,10 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
                 stroke for stroke in strokes if stroke.weight == Weight.THICK
             )
         )
+
+    # Each polygon with a material hatched, under the ink (#808).
+    if materials is not None:
+        strokes[:0] = hatch_strokes(outline, fillets, materials)
 
     # The holes, each with its center mark (#290).
     scale: float = _scale(outline)
@@ -165,6 +179,40 @@ def outline_sheet(outline: Outline, text_height: float = 0.0) -> Sheet:
     for _turn in range(outline.turns % 4):
         cut = turned_strokes(cut)
     return on_paper(tuple(cut), text_height)
+
+
+# Function `hatch_strokes()`:
+def hatch_strokes(
+    outline: Outline,
+    fillets: dict[int, Fillet],
+    materials: dict[str, tuple[str, str]],
+) -> list[Stroke]:
+    """Return a hatched area per polygon that has a material, no two
+    materials sharing a hatch (`appearance.looks()`, #781).
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
+    * `materials` (`dict[str, tuple[str, str]]`): Each material's
+      colour and hatch texts, by name.
+
+    Returns:
+    * (`list[Stroke]`): The hatched areas, corners rounded.
+    """
+    outline.fill_polygons()
+    found: list[Look] = looks(
+        [(polygon.material, polygon.color) for polygon in outline.polygons],
+        materials,
+    )
+    return [
+        Stroke(
+            _rounded(outline.points, loop, fillets),
+            Weight.THIN,
+            hatch=look.hatch,
+        )
+        for loop, look in zip(outline.loops(), found, strict=True)
+        if look.hatch is not None
+    ]
 
 
 # Function `turned_strokes()`:

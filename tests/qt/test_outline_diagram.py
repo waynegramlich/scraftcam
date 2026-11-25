@@ -4,6 +4,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from scraftcam.appearance import STANDARD_HATCHES
 from scraftcam.diagram import TEXT, Sheet, Stroke, Weight, svg
 from scraftcam.geometry import ArcSegment, LineSegment, Point
 from scraftcam.gui import outline_diagram
@@ -30,7 +31,7 @@ from scraftcam.gui.outline_file import (
     Role,
     outline_from_text,
 )
-from scraftcam.shops import EXAMPLE_SHOP
+from scraftcam.shops import EXAMPLE_SHOP, material_looks
 
 DRILL: Path = EXAMPLE_SHOP / "tools/drills/drill.outline.toml"
 
@@ -121,6 +122,22 @@ class TestOutlineDiagram(unittest.TestCase):  # pylint: disable=too-many-public-
         self.assertEqual(len(outline.segments), 4)
         self.assertEqual(outline.segments[-1].end, (0.0, 0.0))
         self.assertAlmostEqual(outline_sheet(box()).text_height, 4.0 / 30)
+
+    def test_hatched(self) -> None:
+        """A polygon with a material is hatched under its ink, from the
+        shop's materials; one without is not (#781, #808, #809)."""
+        outline: Outline = box()
+        outline.fill_polygons()
+        outline.polygons[0].material = "HSS"
+        materials: dict[str, tuple[str, str]] = material_looks(EXAMPLE_SHOP)
+        sheet: Sheet = outline_sheet(outline, 0.5, materials=materials)
+        self.assertEqual(len(sheet.strokes), 2)
+        self.assertEqual(sheet.strokes[0].hatch, STANDARD_HATCHES[0])
+        self.assertIn('fill="url(#hatch1)"', svg(sheet))
+        outline.polygons[0].material = ""
+        self.assertEqual(
+            len(outline_sheet(outline, 0.5, materials=materials).strokes), 1
+        )
 
     def test_horizontal(self) -> None:
         """A horizontal dimension's line sits at its offset's Y."""

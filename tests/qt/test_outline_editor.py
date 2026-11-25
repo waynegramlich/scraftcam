@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from scraftcam.appearance import STANDARD_HATCHES
 from scraftcam.diagram import TEXT, Stroke, Weight
 from scraftcam.geometry import ArcSegment, LineSegment
 from scraftcam.gui import outline_cuts, outline_editor, outline_values, theme
@@ -2697,6 +2698,22 @@ class PolygonsTest(unittest.TestCase):
         self.assertEqual(drawing.polygons[0].color, "")
         editor.deleteLater()
         qt_app.process_events()
+
+    def test_hatch_style(self) -> None:
+        """Each standard hatch has a Qt brush of its angles (#810)."""
+        self.assertEqual(
+            [outline_editor.hatch_style(each) for each in STANDARD_HATCHES],
+            [
+                Qt.BrushStyle.BDiagPattern,
+                Qt.BrushStyle.FDiagPattern,
+                Qt.BrushStyle.DiagCrossPattern,
+                Qt.BrushStyle.HorPattern,
+                Qt.BrushStyle.VerPattern,
+                Qt.BrushStyle.BDiagPattern,
+                Qt.BrushStyle.FDiagPattern,
+                Qt.BrushStyle.CrossPattern,
+            ],
+        )
 
     def test_shared_fillet(self) -> None:
         """A corner of two polygons is not filleted, saying why (#798);
