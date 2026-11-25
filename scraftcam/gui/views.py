@@ -23,7 +23,7 @@ import importlib
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, assert_never
 
 from ..packages import require
 from ..shops import (
@@ -68,13 +68,12 @@ from .templates import (
 )
 from .theme import colors, sketch_text
 from .tree import (
-    DIRECTORY,
     ERROR,
     EXPLANATIONS,
     FILE,
     OUTLINE,
-    PACKAGE,
     SHOP,
+    Kind,
     Node,
     docstring,
     edit_path,
@@ -186,21 +185,26 @@ def item_text(node: Node) -> str:
     Returns:
     * (`str`): Its problem, its text, its docstring, or a count.
     """
-    if node.kind == ERROR:
-        return f"{node.path}:\n{node.error}"
-    if node.kind in (SHOP, FILE):
-        try:
-            return node.path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as error:
-            return f"{node.path}: can not be read: {error}"
-    if node.kind == DIRECTORY:
-        return EXPLANATIONS.get(
-            shop_relative(node.path),
-            f"{node.path}\n{len(node.children)} items.",
-        )
-    if node.kind == PACKAGE and not (node.path / "__init__.py").is_file():
-        return f"{node.path}"
-    return docstring(node.path)
+    # Every kind, so that `mypy` names a new one left out (#761).
+    match node.kind:
+        case Kind.ERROR:
+            return f"{node.path}:\n{node.error}"
+        case Kind.SHOP | Kind.FILE | Kind.OUTLINE:
+            try:
+                return node.path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as error:
+                return f"{node.path}: can not be read: {error}"
+        case Kind.DIRECTORY:
+            return EXPLANATIONS.get(
+                shop_relative(node.path),
+                f"{node.path}\n{len(node.children)} items.",
+            )
+        case Kind.PACKAGE if not (node.path / "__init__.py").is_file():
+            return f"{node.path}"
+        case Kind.PACKAGE | Kind.DESIGN | Kind.PYTHON:
+            return docstring(node.path)
+        case _:
+            assert_never(node.kind)
 
 
 # Function `toggle_help()`:
@@ -494,6 +498,8 @@ class Panel(QFrame):
       (#578), if shown; it is read only unless [Allow Changes] is
       checked (#588, #590), and saves every change (#578c).
     * `outline_path` (`Path | None`): Its outline file.
+    * `outline_item` (`Path | None`): The item its [Outline] tab was
+      made for: a tool, or the outline file itself (#750, #751).
     * `pages` (`QWidget | None`): A catalog's pages in `catxtract`,
       in the [Pages] tab ([Open Pages], #600), if open; closed (its
       marks saved) when the panel shows anything else.
@@ -572,6 +578,7 @@ class Panel(QFrame):
         self.own: QWidget | None = None
         self.outline: OutlineEditor | None = None
         self.outline_path: Path | None = None
+        self.outline_item: Path | None = None
         self.pages: QWidget | None = None
         layout.addWidget(self.tabs, 1)
         self.text.viewport().installEventFilter(self)
@@ -894,22 +901,29 @@ class Panel(QFrame):
     def show_outline(self, path: Path | None) -> None:
         """Show `path` in the [Outline] tab, or take the tab away.
 
-        The same file keeps its editor, so a redraw (the editor saving
-        its own change) leaves it alone.
+        The same file for the same item keeps its editor, so a redraw
+        (the editor saving its own change) leaves it alone.  Another
+        item gets a new one, though its kind's outline is the same
+        file: each tool shows its own values, and the outline itself
+        none (#750, #751).
 
         Arguments:
         * `path` (`Path | None`): The outline file, or `None` for no
           [Outline] tab.
         """
-        # The same file: the same editor (none, none).
-        if path == self.outline_path and (self.outline is not None) == (
-            path is not None
+        # The same file and item: the same editor (none, none).
+        item: Path | None = None if self.node is None else self.node.path
+        if (
+            path == self.outline_path
+            and item == self.outline_item
+            and (self.outline is not None) == (path is not None)
         ):
             return
 
         # The old editor goes.
         self.drop_outline()
         self.outline_path = path
+        self.outline_item = item
         if path is None:
             return
 
@@ -1038,6 +1052,7 @@ class Panel(QFrame):
             self.outline.deleteLater()
             self.outline = None
         self.outline_path = None
+        self.outline_item = None
 
     def hold_editor(self, editor: "OutlineEditor", title: str) -> None:
         """Show `editor`, on no item, as the panel's [Outline] (#595).

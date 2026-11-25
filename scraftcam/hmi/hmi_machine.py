@@ -280,6 +280,8 @@ def tool_speeds(shop: dict[str, object], machine: str, material: str) -> str:
     return "\n".join(lines)
 
 
+# Closed set: a `StrEnum` with `match`/`assert_never()` would let
+# mypy catch a missed value (#762).
 # Function `line_kind()`:
 def line_kind(line: str) -> str:
     """Return whether a line reads as RS-274 words, with comments left out.

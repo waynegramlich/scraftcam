@@ -17,6 +17,54 @@ and #708 (checkboxes and [Copy Marked], now possible after #S5);
 #715 (a stray traceback); the LinuxCNC suite and `--show-demo`
 were last run at #S1.
 
+## GUI Testing (2026-11-24 late)
+
+* #750/#751 fixed (found over MCP): `Panel.show_outline()` kept its
+  editor for the same outline file, so a second drill showed the
+  first's values, and "Drill outline" after a drill stayed in tool
+  mode (its shape never editable).  Now kept only for the same item
+  (`Panel.outline_item`); `test_panel_outline.test_same_panel`.
+  The shape is edited from the kind's outline item, never a tool's
+  [Outline] tab (#736).
+* #752/#760 fixed: `views.item_text()` had no case for an outline
+  and ran Python's parser over the `.toml` (line 52 is `from = ...`,
+  a keyword); now it shows the file (`test_outline_text`).  #761
+  done first: `tree.Kind` is a `StrEnum` (the old names are
+  aliases), `Node.kind: Kind`, and `item_text()` is a `match`
+  ending in `assert_never()`; mypy named `Kind.OUTLINE` missing
+  before the fix.  Other kind tests (`in (SHOP, FILE)`) are not
+  checked so.
+* Agreed for #S8 (the user): #755 tabs [Drawing] (look only),
+  [SVG], [Edit] (overview, editable, no checkbox), no [Overview]
+  button; #756 [Edit] greyed where read only, every greyed tab or
+  button has a tooltip; #757 a tool's [Outline] has a link "Edit
+  the Drill outline" in place of [Edit]; #758 no [Allow Changes] on
+  an outline's panel (kept where there are fields); #759 the
+  letters table editable only in [Edit].
+* #762a/b, #763 done 2026-11-24 (the user): closed sets the code
+  branches on are marked where defined, `grep -rn '(#762)'` (14
+  in 12 files: `TableField.form`, dimension kinds, `HIDE_X/Y`, hole
+  kinds, `LINE_*`, `StripHandle.part`, catxtract `Region.kind`,
+  `AssemblyItem.kind`, `model` units, `line_kind()`; already
+  `Literal`: `ToolKind`, `DrillCycle`, `CutMode`, `ViolationKind`).
+  Comments only.  Not marked (open, from shop data): tooling and
+  machine kinds; nor parsers, CLI words, protocol methods.  #763:
+  the rule is in `aicontexts/rule_sources/Python_Coding_Rules.md`,
+  refreshed into `aicontexts` and here (`R.pcr`).
+* Test run 2026-11-24 22:04: `fast` 417 OK (64 s), `qt` 361 OK
+  (21 s).  #715 seen again: 35 tracebacks printed (not failures)
+  from `machine_panel.py:1683` (`HMI.show_drawing()`, `done, total
+  = self.drawer.view.progress` got 0 values) fired by `poll()` in
+  `test_outline_editor` tests, after `test_machine_panel`; #764 a
+  machine panel's timer outlives its test.  #753 open: [Allow Changes] can not
+  be pressed over MCP.
+* #754 (found over MCP, after the #750 fix): the drill outline's
+  vertices can not be chosen in the working view, because an
+  outline with hide strips is look-and-pan only there (#171,
+  `outline_editor.py:3613-3615`); [View] > [Overview] makes it
+  editable (checked headless).  A click there silently does
+  nothing: the user's to decide what should happen.
+
 ## The Shop (decided and built)
 
 * #433/#438 the example shop ships in the package,

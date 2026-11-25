@@ -159,6 +159,8 @@ class Length:
 
     # Constructor arguments:
     value: Fraction | int = field()
+    # Closed set: a `StrEnum` with `match`/`assert_never()` would let
+    # mypy catch a missed value (#762).
     unit: str = field()
 
     def __post_init__(self) -> None:

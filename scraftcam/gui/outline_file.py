@@ -88,6 +88,8 @@ VERSIONS: tuple[int, ...] = (1, 2, 3, 4)
 
 # The kinds of hole (#290): a plain one is sized by its letter, a
 # counterbored one by its screw's.
+# Closed set: a `StrEnum` with `match`/`assert_never()` would let
+# mypy catch a missed value (#762).
 PLAIN: str = "plain"
 COUNTERBORED: str = "counterbored"
 HOLE_KINDS: tuple[str, ...] = (PLAIN, COUNTERBORED)

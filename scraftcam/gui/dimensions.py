@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 ORIGIN: int = -1
 
 # The kinds of dimension, and the coordinate each one measures.
+# Closed set: a `StrEnum` with `match`/`assert_never()` would let
+# mypy catch a missed value (#762).
 HORIZONTAL: str = "horizontal"
 VERTICAL: str = "vertical"
 AXIS: dict[str, int] = {HORIZONTAL: 0, VERTICAL: 1}

@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from typing import Literal, TypeAlias, get_args
 
 # The kinds of tools.
+# Closed set: already a `Literal`; dispatching with `match` ending
+# in `assert_never()` would let mypy catch a missed value (#762).
 ToolKind: TypeAlias = Literal[
     "end mill",
     "roughing end mill",
@@ -31,6 +33,8 @@ ToolKind: TypeAlias = Literal[
 
 # How holes are drilled: a canned cycle (straight, chip breaking, or
 # pecking with full retracts), or the pecks written out as moves.
+# Closed set: already a `Literal`; dispatching with `match` ending
+# in `assert_never()` would let mypy catch a missed value (#762).
 DrillCycle: TypeAlias = Literal["G81", "G73", "G83", "moves"]
 
 

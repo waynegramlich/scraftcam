@@ -24,6 +24,11 @@ HTML comments stay: imports strip them, so they cost no tokens.
 
 * Annotate every variable, not just the signatures `--strict` requires:
   the hints catch bugs.  `Any` only as a last resort.
+* A closed set of values that code branches on (fixed by the code,
+  not read from data files) is a `StrEnum`, dispatched with `match`
+  ending in `case _: assert_never(...)`, so that `mypy` names every
+  place a new value is missed.  One not yet converted carries a
+  comment at its definition (or main dispatch) saying so.
 
 ## Test Suites
 

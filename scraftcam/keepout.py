@@ -53,6 +53,8 @@ from .tooling.shop_registries import use_shop
 from .tooling.tools import GRID_PLATE, Cylinder, Point, Prism
 
 # What a violation can be.
+# Closed set: already a `Literal`; dispatching with `match` ending
+# in `assert_never()` would let mypy catch a missed value (#762).
 ViolationKind: TypeAlias = Literal["keep out", "rapid", "unchecked"]
 
 # The demonstration plate's setup.

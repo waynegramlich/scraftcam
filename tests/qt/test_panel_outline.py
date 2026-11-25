@@ -14,13 +14,14 @@ from scraftcam.gui.outline_file import outline_text
 from scraftcam.gui.outline_letters import ToolValues
 from scraftcam.gui.tree import FILE, Node
 from scraftcam.gui.tree import OUTLINE as OUTLINE_KIND
-from scraftcam.gui.views import Panel, outline_of
+from scraftcam.gui.views import Panel, item_text, outline_of
 from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
 
 # The example shop's tools, an end mill and its kind's outline.
 TOOLS: Path = EXAMPLE_SHOP / "tools/end_mills"
 TOOL: str = "1_4_in_2_flute_carbide_end_mill.toml"
+OTHER_TOOL: str = "1_2_in_2_flute_carbide_end_mill.toml"
 OUTLINE: str = "end_mill.outline.toml"
 
 # The kept recordings (`tests/qt/test_steps.py` replays them alone).
@@ -105,6 +106,42 @@ class OutlineTabTest(unittest.TestCase):
         self.panel.show_node(Node(other.name, FILE, other, ""), "in")
         self.assertIsNone(self.panel.outline)
         self.assertEqual(self.panel.tabs.count(), 1)
+
+    def test_outline_text(self) -> None:
+        """An outline item's text is its file, never Python's parse of
+        it (#760: "syntax error at line 52")."""
+        outline: Path = self.directory / OUTLINE
+        node: Node = Node("end_mill", OUTLINE_KIND, outline, "")
+        self.assertEqual(item_text(node), outline.read_text(encoding="utf-8"))
+
+    def test_same_panel(self) -> None:
+        """One panel: a tool, its kind's outline, another tool; each
+        gets its own editor, though the file is the same (#750,
+        #751)."""
+        shutil.copy(TOOLS / OTHER_TOOL, self.directory)
+        outline: Path = self.directory / OUTLINE
+        self.panel.show_node(Node(TOOL, FILE, self.tool, ""), "in")
+        first: OutlineEditor | None = self.panel.outline
+        assert first is not None
+        self.assertIsNotNone(first.letters.tool)
+
+        # The outline itself: no tool's values, and it may be changed.
+        self.panel.show_node(Node("end_mill", OUTLINE_KIND, outline, ""), "in")
+        self.panel.set_editing(True)
+        shape: OutlineEditor | None = self.panel.outline
+        assert shape is not None
+        self.assertIsNot(shape, first)
+        self.assertIsNone(shape.letters.tool)
+        self.assertFalse(shape.read_only)
+
+        # Another tool shows its own values.
+        other: Path = self.directory / OTHER_TOOL
+        self.panel.show_node(Node(OTHER_TOOL, FILE, other, ""), "in")
+        second: OutlineEditor | None = self.panel.outline
+        assert second is not None
+        tool: ToolValues | None = second.letters.tool
+        assert tool is not None
+        self.assertEqual(tool.values["D"], "1/2 in")
 
     def test_tool_table(self) -> None:
         """One table: default and this tool's value; an edit writes

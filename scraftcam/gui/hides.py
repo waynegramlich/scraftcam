@@ -16,6 +16,8 @@ strip hides more and the working view stays the same (#160).
 from dataclasses import dataclass, field
 
 # The axes a strip hides a stretch of.
+# Closed set: a `StrEnum` with `match`/`assert_never()` would let
+# mypy catch a missed value (#762).
 HIDE_X: int = 0
 HIDE_Y: int = 1
 

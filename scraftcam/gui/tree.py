@@ -26,7 +26,9 @@ import sys
 import textwrap
 import tomllib
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
+from typing import Final
 
 from ..shops import (
     CATALOG,
@@ -45,17 +47,47 @@ ABOUT_WIDTH: int = 60
 # The most items the design tree shows (#126).
 DESIGN_LIMIT: int = 100
 
-# The kinds of items.
-SHOP: str = "shop"
-DIRECTORY: str = "directory"
-FILE: str = "file"
-DESIGN: str = "design"
-PYTHON: str = "python"
-PACKAGE: str = "package"
-ERROR: str = "error"
-# A kind's outline file, opened in the outline editor (`T.toasl~6.8`
-# #615, #730).
-OUTLINE: str = "outline"
+
+# Class `Kind`:
+class Kind(StrEnum):
+    """The kinds of items, one per member.
+
+    An enumeration, so that `match node.kind:` ending in
+    `assert_never()` lets `mypy` name every place a new kind is
+    missed (`T.toasl~6.8` #761).  Its values are the words the tree
+    shows, "NAME (KIND)".
+
+    Attributes:
+    * `SHOP`: The shop itself (`shop.toml`).
+    * `DIRECTORY`: A directory.
+    * `FILE`: A shop's `.toml` item.
+    * `DESIGN`: A Python file with `main()`.
+    * `PYTHON`: Another Python file.
+    * `PACKAGE`: A Python package.
+    * `ERROR`: A file that does not read cleanly.
+    * `OUTLINE`: A kind's outline file, opened in the outline editor
+      (`T.toasl~6.8` #615, #730).
+    """
+
+    SHOP = "shop"
+    DIRECTORY = "directory"
+    FILE = "file"
+    DESIGN = "design"
+    PYTHON = "python"
+    PACKAGE = "package"
+    ERROR = "error"
+    OUTLINE = "outline"
+
+
+# The kinds by their old names, as most code tests them.
+SHOP: Final = Kind.SHOP
+DIRECTORY: Final = Kind.DIRECTORY
+FILE: Final = Kind.FILE
+DESIGN: Final = Kind.DESIGN
+PYTHON: Final = Kind.PYTHON
+PACKAGE: Final = Kind.PACKAGE
+ERROR: Final = Kind.ERROR
+OUTLINE: Final = Kind.OUTLINE
 
 # Directories never shown.
 SKIPPED: tuple[str, ...] = ("__pycache__",)
@@ -69,8 +101,7 @@ class Node:  # pylint: disable=too-many-instance-attributes
 
     Attributes:
     * `name` (`str`): What the tree shows, before its kind.
-    * `kind` (`str`): `SHOP`, `DIRECTORY`, `FILE`, `OUTLINE`,
-      `DESIGN`, `PYTHON`, `PACKAGE` or `ERROR`.
+    * `kind` (`Kind`): What it is.
     * `path` (`Path`): Its file or directory.
     * `error` (`str`): Why it does not read cleanly, or "".
     * `children` (`list[Node]`): The items under it.
@@ -87,7 +118,7 @@ class Node:  # pylint: disable=too-many-instance-attributes
 
     # Constructor arguments:
     name: str = field(init=True)
-    kind: str = field(init=True)
+    kind: Kind = field(init=True)
     path: Path = field(init=True)
     error: str = field(init=True, default="")
 
@@ -109,8 +140,8 @@ class Node:  # pylint: disable=too-many-instance-attributes
           shop's root included, is "(directory)", or "(folder)" on
           Windows (#147).
         """
-        kind: str = self.kind
-        if kind in (SHOP, DIRECTORY):
+        kind: str = self.kind.value
+        if self.kind in (SHOP, DIRECTORY):
             kind = "folder" if sys.platform == "win32" else "directory"
         return self.shown or f"{self.name} ({kind})"
 
@@ -632,7 +663,7 @@ class DesignReader:
         path: Path
         for path in entries(directory):
             if path.is_dir():
-                kind: str = (
+                kind: Kind = (
                     PACKAGE if (path / "__init__.py").is_file() else DIRECTORY
                 )
                 if not self.room():

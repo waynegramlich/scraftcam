@@ -258,6 +258,8 @@ class AssemblyItem:  # pylint: disable=too-many-instance-attributes
     """
 
     # Constructor arguments:
+    # Closed set: a `StrEnum` with `match`/`assert_never()` would let
+    # mypy catch a missed value (#762).
     kind: str = field(init=True)
     name: str = field(init=True)
     call: str = field(init=True)

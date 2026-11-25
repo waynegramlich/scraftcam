@@ -235,6 +235,8 @@ class TableField:  # pylint: disable=too-many-instance-attributes
 
     # Constructor arguments:
     key: str = field(init=True)
+    # Closed set: a `StrEnum` with `match`/`assert_never()` would let
+    # mypy catch a missed value (#762).
     form: str = field(init=True)
     meaning: str = field(init=True)
     required: bool = field(init=True, default=False)

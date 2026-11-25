@@ -59,6 +59,8 @@ RS274: TypeAlias = dict[str, float | int | str]
 # hole (likewise), led into from inside (where its rings are cut
 # first), or cut straight into (a ring too small to ramp into, cut
 # after the ring around it).
+# Closed set: already a `Literal`; dispatching with `match` ending
+# in `assert_never()` would let mypy catch a missed value (#762).
 CutMode: TypeAlias = Literal["ramp", "drilled", "lead", "plain"]
 
 # How much of a cut a pass makes: all of it, with one tool ("full"); or

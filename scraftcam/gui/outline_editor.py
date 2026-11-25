@@ -307,6 +307,8 @@ def real_point(code: int) -> int:
 
 
 # The parts of a dimension's line its circles sit on (#469, #470).
+# Closed set: a `StrEnum` with `match`/`assert_never()` would let
+# mypy catch a missed value (#762).
 LINE_MIDDLE: str = "middle"
 LINE_START: str = "start"
 LINE_END: str = "end"
@@ -1423,6 +1425,8 @@ class StripHandle(QGraphicsEllipseItem):
         super().__init__(-half, -half, GRIP_PIXELS, GRIP_PIXELS)
         self.editor: OutlineView = editor
         self.index: int = index
+        # Closed set: a `StrEnum` with `match`/`assert_never()`
+        # would let mypy catch a missed value (#762).
         self.part: str = part
         self.before: Snapshot | None = None
         self.grabbed: tuple[float, float] = (0.0, 0.0)

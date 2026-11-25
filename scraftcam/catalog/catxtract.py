@@ -120,6 +120,8 @@ class Region:
     """
 
     # Constructor arguments:
+    # Closed set: a `StrEnum` with `match`/`assert_never()` would let
+    # mypy catch a missed value (#762).
     kind: str = field(init=True)
     x0: float = field(init=True)
     y0: float = field(init=True)
