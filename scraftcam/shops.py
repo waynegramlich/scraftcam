@@ -578,6 +578,9 @@ CATALOG: str = "catalog.toml"
 # items in `tools/` and `tooling/`; not items themselves.
 OUTLINE_SUFFIX: str = ".outline.toml"
 
+# An assembly file's name ends so (`T.sa~6.11` #783h).
+ASSEMBLY_SUFFIX: str = ".assembly.toml"
+
 # A drill's, an end mill's and a chamfer mill's sizes, by key: the
 # letters of their outlines, which their files write (#720).
 DRILL_LETTERS: dict[str, str] = outline_keys("drill")
@@ -2906,8 +2909,8 @@ class _Reader:  # pylint: disable=too-many-instance-attributes
                 for path in (self.directory / directory).glob(pattern)
             )
             for path in paths:
-                if path.name.endswith(OUTLINE_SUFFIX):
-                    continue  # A drawing, not an item.
+                if path.name.endswith((OUTLINE_SUFFIX, ASSEMBLY_SUFFIX)):
+                    continue  # A drawing or an assembly, not an item.
                 if directory == "tools" and not kind_directory(
                     path.parent, self.directory / directory
                 ):

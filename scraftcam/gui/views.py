@@ -68,6 +68,7 @@ from .templates import (
 )
 from .theme import colors, sketch_text
 from .tree import (
+    ASSEMBLY,
     ERROR,
     EXPLANATIONS,
     FILE,
@@ -189,7 +190,7 @@ def item_text(node: Node) -> str:
     match node.kind:
         case Kind.ERROR:
             return f"{node.path}:\n{node.error}"
-        case Kind.SHOP | Kind.FILE | Kind.OUTLINE:
+        case Kind.SHOP | Kind.FILE | Kind.OUTLINE | Kind.ASSEMBLY:
             try:
                 return node.path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as error:
@@ -528,7 +529,7 @@ class Panel(QFrame):
         self.node: Node | None = None
         self.machines: list[MachineControl] = []
         self.header: MachineTab | None = None
-        self.summary: MachinesView | None = None
+        self.summary: QWidget | None = None
         self.controls: Callable[[], list[MachineControl]] = no_controls
         self.open_machine: Callable[[str], None] = no_machine
         self.open_path: Callable[[str], None] = no_machine
@@ -673,7 +674,7 @@ class Panel(QFrame):
         """
         if self.header is not None:
             self.header.show_due(self.machines[0].due(), blink)
-        if self.summary is not None:
+        if isinstance(self.summary, MachinesView):
             self.summary.refresh(blink)
 
     def set_editing(self, editing: bool) -> None:
@@ -1039,6 +1040,53 @@ class Panel(QFrame):
         tool.editing = self.editing
         editor.show_tool(tool)
 
+    def show_summary(self, node: Node) -> bool:
+        """Show the `machines/` directory's summary, or an assembly
+        file (`T.sa~6.11` #S6), when the item is one.
+
+        Arguments:
+        * `node` (`Node`): The item.
+
+        Returns:
+        * (`bool`): True when it was shown here.
+        """
+        if is_machines_directory(node):
+            self.show_outline(None)
+            self.title.setText(node.label())
+            self.title.setStyleSheet("")
+            self.summary = MachinesView(node, self.controls, self.open_machine)
+            self.show_own(self.summary, "Machines")
+            return True
+        if node.kind == ASSEMBLY:
+            self.show_assembly(node)
+            return True
+        return False
+
+    def show_assembly(self, node: Node) -> None:
+        """Show an assembly file: its text, and in front its parts and
+        [Solid] (`T.sa~6.11` #S6).
+
+        Arguments:
+        * `node` (`Node`): The assembly's item.
+        """
+        # By name, as the outline editor is: it needs SolidCraft's
+        # viewer, which nothing else here does.
+        panels: ModuleType = importlib.import_module(
+            f"{__package__}.assembly_panel"
+        )
+        self.show_outline(None)
+        self.title.setText(node.label())
+        self.title.setToolTip(shop_relative(node.path))
+        self.title.setStyleSheet("")
+        self.item = {}
+        self.rows = []
+        self.show_sketches([])
+        self.fields.hide()
+        self.text.show()
+        self.text.setPlainText(item_text(node))
+        self.summary = panels.AssemblyView(node.path)
+        self.show_own(self.summary, "Assembly")
+
     def show_outline_of(self, node: Node) -> None:
         """Show an item's outline: its kind's, or itself, in front.
 
@@ -1156,14 +1204,10 @@ class Panel(QFrame):
         self.missing.hide()
         self.copied.hide()
 
-        # The `machines/` directory: its summary, in place of the rest.
+        # The `machines/` directory's summary, or an assembly's parts,
+        # in place of the rest.
         self.hide_own_guide()
-        if is_machines_directory(node):
-            self.show_outline(None)
-            self.title.setText(node.label())
-            self.title.setStyleSheet("")
-            self.summary = MachinesView(node, self.controls, self.open_machine)
-            self.show_own(self.summary, "Machines")
+        if self.show_summary(node):
             return
 
         # The title, its tooltip the file's place in the shop (#733),

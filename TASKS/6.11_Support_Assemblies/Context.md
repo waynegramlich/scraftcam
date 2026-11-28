@@ -10,7 +10,7 @@ Issue numbers are shared by every task; the next is in
 
 **Where we are (2026-11-27):** #S1-#S5 done (#S5 built 2026-11-27,
 after the user's Kubuntu 26.04.1 upgrade; checkers clean, outline
-tests pass).  Next: #S6 (assembly files).  Deferred: the ISO
+tests pass; committed `d0d2771`).  #S6 under way (below).  Deferred: the ISO
 chain line on cutting edges (#830, "fun to have"); a revolved
 outline's mirror half is not hatched (#782).  The user is short of
 weekly tokens: small chunks, timed with `date`.
@@ -93,6 +93,31 @@ weekly tokens: small chunks, timed with `date`.
   block, slot, two counterbored holes, cut A; its `.step` checked
   headless (17 faces).  Tests: `tests/qt/test_outline_tree.py`.
   The old `[[holes]]` remain, still refused by solids (#290).
+
+* #S6 so far (2026-11-27): `gui/assembly_file.py` (no Qt):
+  `KIND.assembly.toml` (`shops.ASSEMBLY_SUFFIX`, skipped by the
+  shop reader), version 1: `[letters]` (exported, #783b) and
+  `[[parts]]` (`Part`: name, `outline` relative to the file,
+  `letters` = formulas in the assembly's, `on`, `at` a vertex of
+  `on`'s outline, `face` a polygon/circle whose `z` it stands at,
+  `turn`, `flip`).  Placed in order, no solver (#783c); revolved
+  parent: drawing Y is Z.  `assembly_solid()`,
+  `assembly_cacheable()` (via `outline_polygon.solid_cacheable()`,
+  hashed on each leaf's shape and placement), `assembly_text()`,
+  `used_by()`, `move_outline()` (moves the `.svg` too, rewrites the
+  assemblies).  Tree `Kind.ASSEMBLY` ("Z setter assembly", first in
+  its directory); a panel's own [Assembly] tab
+  (`gui/assembly_panel.py` `AssemblyView`: parts table, [Solid]),
+  `Panel.show_summary()` / `show_assembly()`.  Shipped
+  `tooling/z_setters/`: `z_setter_block` (flat), `z_setter_plunger`
+  (revolved, chamfered), `z_setter.assembly.toml`; its `.step`
+  checked headless (block to 44.45, plunger top 50.8 mm).  Tests:
+  `tests/qt/test_assembly_file.py`.
+* #S6 left: [Move]/[Rename] buttons and "used by" in the GUI;
+  keep-out polygons grown by the cutter radius (#783g); `offers`
+  (#783l); `slide`/`turn` motions (#783d); `library:` root (#791);
+  a `.step` part (#783f); the vise as an assembly; the setter's dial
+  (a side-wall mate, Later).
 
 ## Decided, Not Yet Built
 

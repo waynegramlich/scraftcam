@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="301.5mm" height="159mm" viewBox="-10.6667 -10.8333 33.5 17.6667">
+<rect x="-10.6667" y="-10.8333" width="33.5" height="17.6667" class="paper" fill="white"/>
+<path d="M 0 0 L 10 0 L 10 -3 L 8 -5 L 0 -5 L 0 0" class="ink" fill="none" stroke="black" stroke-width="0.0667" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 0 L -10 0" class="ink" fill="none" stroke="black" stroke-dasharray="0.3333 0.1667" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 0 L -10 -3" class="ink" fill="none" stroke="black" stroke-dasharray="0.3333 0.1667" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 -3 L -8 -5" class="ink" fill="none" stroke="black" stroke-dasharray="0.3333 0.1667" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -8 -5 L 0 -5" class="ink" fill="none" stroke="black" stroke-dasharray="0.3333 0.1667" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 0.1667 L -10 6.1667" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 10 0.1667 L 10 6.1667" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 6 L -0.3333 6" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0.3333 6 L 10 6" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -10 6 L -9.6667 5.9444 L -9.6667 6.0556 L -10 6" class="ink solid" fill="black" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 10 6 L 9.6667 6.0556 L 9.6667 5.9444 L 10 6" class="ink solid" fill="black" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>D: Diameter = 1 in.  The plunger&#x27;s diameter.</title>
+<rect x="-0.4365" y="5.5" width="0.8889" height="1" fill="none" pointer-events="all"/>
+<path d="M -0.1032 5.8333 L -0.1032 6.1667" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -0.1032 5.8333 L 0.0079 5.8333 L 0.0556 5.8492 L 0.0873 5.881 L 0.1032 5.9127 L 0.119 5.9603 L 0.119 6.0397 L 0.1032 6.0873 L 0.0873 6.119 L 0.0556 6.1508 L 0.0079 6.1667 L -0.1032 6.1667" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 10.1667 0 L 16.1667 0" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 10.1667 -3 L 16.1667 -3" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16 0 L 16 -1.1667" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16 -1.8333 L 16 -3" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16 0 L 15.9444 -0.3333 L 16.0556 -0.3333 L 16 0" class="ink solid" fill="black" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16 -3 L 16.0556 -2.6667 L 15.9444 -2.6667 L 16 -3" class="ink solid" fill="black" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>RC: Rise to chamfer = R - C.  From its bottom to the chamfer.</title>
+<rect x="15.3968" y="-2" width="1.2222" height="1" fill="none" pointer-events="all"/>
+<path d="M 15.7302 -1.6667 L 15.7302 -1.3333" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 15.7302 -1.6667 L 15.873 -1.6667 L 15.9206 -1.6508 L 15.9365 -1.6349 L 15.9524 -1.6032 L 15.9524 -1.5714 L 15.9365 -1.5397 L 15.9206 -1.5238 L 15.873 -1.5079 L 15.7302 -1.5079" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 15.8413 -1.5079 L 15.9524 -1.3333" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 16.2857 -1.5873 L 16.2698 -1.619 L 16.2381 -1.6508 L 16.2063 -1.6667 L 16.1429 -1.6667 L 16.1111 -1.6508 L 16.0794 -1.619 L 16.0635 -1.5873 L 16.0476 -1.5397 L 16.0476 -1.4603 L 16.0635 -1.4127 L 16.0794 -1.381 L 16.1111 -1.3492 L 16.1429 -1.3333 L 16.2063 -1.3333 L 16.2381 -1.3492 L 16.2698 -1.381 L 16.2857 -1.4127" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 0 -5.1667 L 0 -10.1667" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8 -5.1667 L 8 -10.1667" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 -10 L 3.5 -10" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.5 -10 L 8 -10" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 -10 L 0.3333 -10.0556 L 0.3333 -9.9444 L 0 -10" class="ink solid" fill="black" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8 -10 L 7.6667 -9.9444 L 7.6667 -10.0556 L 8 -10" class="ink solid" fill="black" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>DC: Chamfer radius = D / 2 - C.  From the axis to the chamfer&#x27;s top.</title>
+<rect x="3.3968" y="-10.5" width="1.2222" height="1" fill="none" pointer-events="all"/>
+<path d="M 3.7302 -10.1667 L 3.7302 -9.8333" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.7302 -10.1667 L 3.8413 -10.1667 L 3.8889 -10.1508 L 3.9206 -10.119 L 3.9365 -10.0873 L 3.9524 -10.0397 L 3.9524 -9.9603 L 3.9365 -9.9127 L 3.9206 -9.881 L 3.8889 -9.8492 L 3.8413 -9.8333 L 3.7302 -9.8333" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.2857 -10.0873 L 4.2698 -10.119 L 4.2381 -10.1508 L 4.2063 -10.1667 L 4.1429 -10.1667 L 4.1111 -10.1508 L 4.0794 -10.119 L 4.0635 -10.0873 L 4.0476 -10.0397 L 4.0476 -9.9603 L 4.0635 -9.9127 L 4.0794 -9.881 L 4.1111 -9.8492 L 4.1429 -9.8333 L 4.2063 -9.8333 L 4.2381 -9.8492 L 4.2698 -9.881 L 4.2857 -9.9127" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 10.1667 0 L 22.1667 0" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.1667 -5 L 22.1667 -5" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 22 0 L 22 -2.1667" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 22 -2.8333 L 22 -5" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 22 0 L 21.9444 -0.3333 L 22.0556 -0.3333 L 22 0" class="ink solid" fill="black" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 22 -5 L 22.0556 -4.6667 L 21.9444 -4.6667 L 22 -5" class="ink solid" fill="black" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>R: Rise = 1/4 in.  How far it stands above the block.</title>
+<rect x="21.5635" y="-3" width="0.8889" height="1" fill="none" pointer-events="all"/>
+<path d="M 21.8968 -2.6667 L 21.8968 -2.3333" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 21.8968 -2.6667 L 22.0397 -2.6667 L 22.0873 -2.6508 L 22.1032 -2.6349 L 22.119 -2.6032 L 22.119 -2.5714 L 22.1032 -2.5397 L 22.0873 -2.5238 L 22.0397 -2.5079 L 21.8968 -2.5079" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 22.0079 -2.5079 L 22.119 -2.3333" class="ink" fill="none" stroke="black" stroke-width="0.0333" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

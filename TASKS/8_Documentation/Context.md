@@ -57,3 +57,8 @@ numbers are shared by every task; the next is in
   ([New Circle], [Cut Line], the [Polygons] tab's Parent, Z and
   diameter); [Solid] for flat outlines; inches in formulas
   (`1/2 in`); the vise block outline in `tooling/vises/`.
+* `T.sa~6.11` #S6 (part): assembly files (`KIND.assembly.toml`:
+  exported letters, parts with letter formulas and mates `on`, `at`,
+  `face`, `turn`, `flip`); the Z setter assembly in
+  `tooling/z_setters/`; the tree's "... assembly" item with its
+  [Assembly] tab and [Solid].

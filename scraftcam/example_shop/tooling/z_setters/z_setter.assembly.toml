@@ -1,0 +1,35 @@
+kind = "assembly"
+version = 1
+
+[letters.H]
+name = "Height"
+default = "2 in"
+help = "From the base to the plunger's top: the height the dial reads zero at."
+
+[letters.W]
+name = "Width"
+default = "2.05 in"
+help = "The block's side."
+
+[letters.PD]
+name = "Plunger diameter"
+default = "1 in"
+help = "The plunger's diameter."
+
+[letters.PR]
+name = "Plunger rise"
+default = "1/4 in"
+help = "How far the plunger stands above the block."
+
+[[parts]]
+name = "block"
+outline = "z_setter_block.outline.toml"
+letters = { W = "W", BH = "H - PR" }
+
+[[parts]]
+name = "plunger"
+outline = "z_setter_plunger.outline.toml"
+letters = { D = "PD", R = "PR" }
+on = "block"
+at = "V5"
+face = "body"

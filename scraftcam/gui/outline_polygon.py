@@ -29,6 +29,7 @@ from ..solid import (
     ZERO,
     Appearance,
     Layer,
+    Leaf,
     Placed,
     RoundedPolygon,
     Solid,
@@ -377,23 +378,45 @@ def outline_cacheable(
     Raises:
     * `ValueError`: As `outline_solid()`.
     """
-    solid: Solid = outline_solid(outline, name, color=color)
-    parts: list[Solid] = (
-        [part.solid for part in solid.parts]
-        if isinstance(solid, SolidAssembly)
-        else [solid]
+    return solid_cacheable(
+        outline_solid(outline, name, color=color),
+        "outline_revolved" if outline.revolve else "outline_extruded",
     )
+
+
+# Function `solid_cacheable()`:
+def solid_cacheable(solid: Solid, kind: str) -> Cacheable:
+    """Return a solid made from outlines (one, or an assembly's,
+    `T.sa~6.11` #S6) as a model for the cache, hashed on what shapes
+    each part and where it is placed.
+
+    Arguments:
+    * `solid` (`Solid`): The solid, its parts `SolidRevolved` or
+      `SolidRoundedPolygon`.
+    * `kind` (`str`): What made it, kept in the hash.
+
+    Returns:
+    * (`Cacheable`): The model.
+    """
+    leaves: list[Leaf] = solid.leaves()
     shape: JSON = {
-        "kind": "outline_revolved" if outline.revolve else "outline_extruded",
+        "kind": kind,
         "source": source_digest(
             [Path(__file__), Path(str(solid_module.__file__))]
         ),
-        "parts": [_part_shape(part) for part in parts],
+        "parts": [
+            {
+                **cast(dict[str, JSON], _part_shape(leaf.solid)),
+                "at": list(leaf.placement.mm()),
+                "turned": list(leaf.placement.xyzw()),
+            }
+            for leaf in leaves
+        ],
     }
     looks: dict[str, Appearance] = {
-        part.name: part.appearance
-        for part in parts
-        if part.appearance is not None
+        leaf.solid.name: leaf.appearance
+        for leaf in leaves
+        if leaf.appearance is not None
     }
 
     # Function `look_of()`:
@@ -415,7 +438,11 @@ def outline_cacheable(
         return 1.0 if look is None else 1.0 - look.t
 
     return Cacheable(
-        name, shape, solid.build, color_of=color_of, opacity_of=opacity_of
+        solid.name,
+        shape,
+        solid.build,
+        color_of=color_of,
+        opacity_of=opacity_of,
     )
 
 

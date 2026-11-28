@@ -1,0 +1,133 @@
+kind = "outline"
+version = 6
+revolve = true
+
+[letters.D]
+name = "Diameter"
+default = "1 in"
+help = "The plunger's diameter."
+
+[letters.R]
+name = "Rise"
+default = "1/4 in"
+help = "How far it stands above the block."
+
+[letters.C]
+name = "Chamfer"
+default = "0.1 in"
+help = "The 45 degree chamfer at its top edge."
+
+[letters.RC]
+name = "Rise to chamfer"
+formula = "R - C"
+help = "From its bottom to the chamfer."
+
+[letters.DC]
+name = "Chamfer radius"
+formula = "D / 2 - C"
+help = "From the axis to the chamfer's top."
+
+[[vertices]]
+name = "V1"
+at = [0.0, 0.0]
+
+[[vertices]]
+name = "V2"
+at = [10.0, 0.0]
+
+[[vertices]]
+name = "V3"
+at = [10.0, 3.0]
+
+[[vertices]]
+name = "V4"
+at = [8.0, 5.0]
+
+[[vertices]]
+name = "V5"
+at = [0.0, 5.0]
+
+[[polygons]]
+name = "plunger"
+role = "other"
+vertices = ["V1", "V2", "V3", "V4", "V5"]
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = "V1"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "origin"
+to = "V1"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "D"
+kind = "diameter"
+from = "origin"
+to = "V2"
+offset = -6.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V1"
+to = "V2"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "V2"
+to = "V3"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "RC"
+kind = "vertical"
+from = "origin"
+to = "V3"
+offset = 16.0
+along = 0.5
+
+[[dimensions]]
+letter = "DC"
+kind = "horizontal"
+from = "origin"
+to = "V4"
+offset = 10.0
+along = 0.5
+
+[[dimensions]]
+letter = "R"
+kind = "vertical"
+from = "origin"
+to = "V4"
+offset = 22.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = "V5"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V4"
+to = "V5"
+offset = 0.0
+along = 0.5

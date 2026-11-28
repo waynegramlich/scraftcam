@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Final
 
 from ..shops import (
+    ASSEMBLY_SUFFIX,
     CATALOG,
     CATALOG_PAGES,
     KINDS,
@@ -67,6 +68,8 @@ class Kind(StrEnum):
     * `ERROR`: A file that does not read cleanly.
     * `OUTLINE`: A kind's outline file, opened in the outline editor
       (`T.toasl~6.8` #615, #730).
+    * `ASSEMBLY`: An assembly file, its parts and [Solid]
+      (`T.sa~6.11` #S6).
     """
 
     SHOP = "shop"
@@ -77,6 +80,7 @@ class Kind(StrEnum):
     PACKAGE = "package"
     ERROR = "error"
     OUTLINE = "outline"
+    ASSEMBLY = "assembly"
 
 
 # The kinds by their old names, as most code tests them.
@@ -88,6 +92,7 @@ PYTHON: Final = Kind.PYTHON
 PACKAGE: Final = Kind.PACKAGE
 ERROR: Final = Kind.ERROR
 OUTLINE: Final = Kind.OUTLINE
+ASSEMBLY: Final = Kind.ASSEMBLY
 
 # Directories never shown.
 SKIPPED: tuple[str, ...] = ("__pycache__",)
@@ -277,6 +282,24 @@ def entries(directory: Path) -> list[Path]:
     except OSError:
         return []
     return sorted(found, key=order)
+
+
+# Function `assembly_node()`:
+def assembly_node(path: Path) -> Node:
+    """Make an assembly file's item: "Z setter assembly" (`T.sa~6.11`
+    #S6), first in its directory.
+
+    Arguments:
+    * `path` (`Path`): The `KIND.assembly.toml`.
+
+    Returns:
+    * (`Node`): Its item.
+    """
+    kind: str = path.name.removesuffix(ASSEMBLY_SUFFIX)
+    node: Node = Node(kind, ASSEMBLY, path)
+    node.shown = f"{kind.replace('_', ' ').capitalize()} assembly"
+    node.order = ("", -1.0)
+    return node
 
 
 # Function `outline_node()`:
@@ -575,6 +598,8 @@ def shop_children(directory: Path, skip: Path | None = None) -> list[Node]:
             children.append(branch)
         elif path.name.endswith(OUTLINE_SUFFIX):
             children.append(outline_node(path))
+        elif path.name.endswith(ASSEMBLY_SUFFIX):
+            children.append(assembly_node(path))
         elif path.suffix == ".toml" and path != skip:
             children.append(toml_node(path))
 
