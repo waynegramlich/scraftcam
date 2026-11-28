@@ -13,7 +13,7 @@ import math
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 
-from ..appearance import Hatch
+from ..appearance import STANDARD_HATCHES, Hatch
 from ..diagram import (
     FONT_STEP,
     TEXT,
@@ -55,8 +55,16 @@ from .dimensions import (
 )
 from .letters import Letter
 from .outline_cuts import cut_strokes
-from .outline_file import COUNTERBORED, Hole, Outline
+from .outline_file import COUNTERBORED, Circle, Cut, Hole, Outline
+from .outline_section import (
+    GAP,
+    Shape,
+    cut_line_strokes,
+    ring_of,
+    section_strokes,
+)
 from .values import (
+    evaluate,
     first_scale,
     letter_values,
     real_coordinates,
@@ -137,6 +145,16 @@ def outline_sheet(
     hole: Hole
     for hole in outline.holes:
         strokes.extend(hole_strokes(outline, hole, scale, text_height))
+
+    # Each cut line's ends, arrows and letters, and its section right
+    # of the outline (`T.sa~6.11` #776, #861).
+    strokes.extend(
+        _sections(outline, fillets, scale, text_height, hatch, strokes)
+    )
+
+    # Each circle's center mark (`T.sa~6.11` #789); the circles are
+    # among the outline's own strokes.
+    strokes.extend(_circle_marks(outline, scale, text_height))
 
     # Then each dimension, its letter grown or shrunk by its font
     # steps, and the fillets' note; marks are read from the drawing,
@@ -453,6 +471,29 @@ def outline_strokes(
     shared: list[Stroke] = []
     if thin_shared:
         strokes, shared = _thin_shared(outline, strokes)
+
+    # Each cut line, thin and dashed (#776, #861).
+    cut: Cut
+    for cut in outline.cuts:
+        strokes.append(
+            Stroke(
+                (LineSegment(*_cut_ends(outline, cut)[:2]),),
+                Weight.THIN,
+                dashed=True,
+            )
+        )
+
+    # The circles, thick (`T.sa~6.11` #789).
+    if outline.circles:
+        scale: float = _scale(outline)
+        circle: Circle
+        for circle in outline.circles:
+            strokes.append(
+                _circle(
+                    outline.points[outline.names.index(circle.center)],
+                    circle_radius(outline, circle, scale),
+                )
+            )
     if outline.revolve:
         strokes.extend(
             Stroke(
@@ -589,6 +630,214 @@ def hole_strokes(
         _circle(hole.at, radius) for radius in radii if radius > 0.0
     ]
     return strokes + center_mark(hole.at, max(radii), height)
+
+
+# Function `_circle_marks()`:
+def _circle_marks(
+    outline: Outline, scale: float, height: float
+) -> list[Stroke]:
+    """Return each circle's center mark (`T.sa~6.11` #789).
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `scale` (`float`): Drawing steps per millimeter.
+    * `height` (`float`): The text height.
+
+    Returns:
+    * (`list[Stroke]`): The marks.
+    """
+    strokes: list[Stroke] = []
+    circle: Circle
+    for circle in outline.circles:
+        center: Point = outline.points[outline.names.index(circle.center)]
+        strokes.extend(
+            center_mark(center, circle_radius(outline, circle, scale), height)
+        )
+    return strokes
+
+
+# Function `_cut_ends()`:
+def _cut_ends(outline: Outline, cut: Cut) -> tuple[Point, Point, Point]:
+    """Return a cut line's ends and its side point, as drawn.
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `cut` (`Cut`): The cut line.
+
+    Returns:
+    * (`tuple[Point, Point, Point]`): Its start, end and side point.
+    """
+    found: list[Point] = [
+        outline.points[outline.names.index(name)] for name in cut.vertices
+    ]
+    return found[0], found[1], found[2]
+
+
+# Function `_sections()`:
+# The outline and how its diagram is drawn.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+def _sections(
+    outline: Outline,
+    fillets: dict[int, Fillet],
+    scale: float,
+    height: float,
+    hatch: Hatch | None,
+    drawn: list[Stroke],
+) -> list[Stroke]:
+    """Return each cut line's marks and section (#776, #861); only
+    the marks while a `z` can not be worked out.
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
+    * `scale` (`float`): Drawing steps per millimeter.
+    * `height` (`float`): The text height.
+    * `hatch` (`Hatch | None`): The material's hatch; `None` takes the
+      first standard one (a section is always hatched).
+    * `drawn` (`list[Stroke]`): What is drawn so far, to stand right of.
+
+    Returns:
+    * (`list[Stroke]`): The strokes.
+    """
+    if not outline.cuts:
+        return []
+    shapes: list[Shape] | None = _shapes(outline, fillets, scale)
+    lowest: Point
+    highest: Point
+    lowest, highest = _extent(drawn)
+    corner: Point = (highest[0] + GAP * height, lowest[1])
+    strokes: list[Stroke] = []
+    cut: Cut
+    for cut in outline.cuts:
+        ends: tuple[Point, Point, Point] = _cut_ends(outline, cut)
+        strokes.extend(
+            cut_line_strokes(cut.name, ends, height, with_line=False)
+        )
+        if shapes is None:
+            continue
+        section: list[Stroke] = section_strokes(
+            cut.name,
+            ends,
+            shapes,
+            scale=scale,
+            corner=corner,
+            height=height,
+            hatch=STANDARD_HATCHES[0] if hatch is None else hatch,
+        )
+        strokes.extend(section)
+        if section:
+            right: Point = _extent(section)[1]
+            corner = (right[0] + GAP * height, corner[1])
+    return strokes
+
+
+# Function `_extent()`:
+def _extent(strokes: list[Stroke]) -> tuple[Point, Point]:
+    """Return a box around strokes (an arc's whole circle counted).
+
+    Arguments:
+    * `strokes` (`list[Stroke]`): The strokes, at least one.
+
+    Returns:
+    * (`tuple[Point, Point]`): Its lowest and highest corners.
+    """
+    xs: list[float] = []
+    ys: list[float] = []
+    stroke: Stroke
+    for stroke in strokes:
+        segment: XYSegment
+        for segment in stroke.segments:
+            xs += [segment.start[0], segment.end[0]]
+            ys += [segment.start[1], segment.end[1]]
+            if isinstance(segment, ArcSegment):
+                xs += [
+                    segment.center[0] - segment.radius,
+                    segment.center[0] + segment.radius,
+                ]
+                ys += [
+                    segment.center[1] - segment.radius,
+                    segment.center[1] + segment.radius,
+                ]
+    return (min(xs), min(ys)), (max(xs), max(ys))
+
+
+# Function `_shapes()`:
+def _shapes(
+    outline: Outline, fillets: dict[int, Fillet], scale: float
+) -> list[Shape] | None:
+    """Return the tree's polygons and circles as drawn, for sections.
+
+    Arguments:
+    * `outline` (`Outline`): The outline.
+    * `fillets` (`dict[int, Fillet]`): From `fillet_arcs()`.
+    * `scale` (`float`): Drawing steps per millimeter.
+
+    Returns:
+    * (`list[Shape] | None`): The shapes; `None` while a `z` is
+      missing or can not be worked out.
+    """
+    values: dict[str, float] = letter_values(outline.letters)
+    shapes: list[Shape] = []
+    try:
+        loop: list[int]
+        for polygon, loop in zip(
+            outline.polygons, outline.loops(), strict=True
+        ):
+            shapes.append(
+                Shape(
+                    polygon.name,
+                    polygon.parent,
+                    evaluate(polygon.z, values),
+                    ring_of(_rounded(outline.points, loop, fillets)),
+                )
+            )
+        circle: Circle
+        for circle in outline.circles:
+            shapes.append(
+                Shape(
+                    circle.name,
+                    circle.parent,
+                    evaluate(circle.z, values),
+                    ring_of(
+                        _circle(
+                            outline.points[outline.names.index(circle.center)],
+                            circle_radius(outline, circle, scale),
+                        ).segments
+                    ),
+                )
+            )
+    except (ValueError, SyntaxError):
+        return None
+    return shapes
+
+
+# The drawn radius of a circle whose size is not known (drawing
+# steps), so that it still shows.
+UNKNOWN_RADIUS: float = 1.0
+
+
+# Function `circle_radius()`:
+def circle_radius(outline: Outline, circle: Circle, scale: float) -> float:
+    """Return a circle's radius as drawn (`T.sa~6.11` #789).
+
+    Arguments:
+    * `outline` (`Outline`): The outline, for its letters.
+    * `circle` (`Circle`): The circle.
+    * `scale` (`float`): Drawing steps per millimeter (`_scale()`).
+
+    Returns:
+    * (`float`): Its diameter's value at the scale, halved;
+      `UNKNOWN_RADIUS` when the scale or the diameter is not known.
+    """
+    try:
+        diameter: float = evaluate(
+            circle.diameter, letter_values(outline.letters)
+        )
+    except ValueError:
+        return UNKNOWN_RADIUS
+    if scale <= 0.0 or diameter <= 0.0:
+        return UNKNOWN_RADIUS
+    return diameter * scale / 2.0
 
 
 # Function `_circle()`:

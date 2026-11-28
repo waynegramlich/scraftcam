@@ -3,7 +3,8 @@ the letters' table, `T.sa~6.11` #802).
 
 [Dimensions] (every letter) and [Fillets] (only those checked
 "Fillet", #213) over one table of the letters, a row each, and
-[Polygons] (a row per polygon: name, role, corners, #801)
+[Polygons] (a row per polygon and circle: name, role, parent, `z`,
+corners or diameter, #801, `T.sa~6.11` #766, #789)
 over its own table, with the
 letters' problems right under it, in red (#141).  Each cell is kept
 and checked at every keystroke (#47).  It edits the editor's
@@ -57,10 +58,18 @@ from .letters import (  # noqa: E402
     use_problem,
     value_problem,
 )
-from .outline_file import VERTEX_NAME, Hole, Polygon, Role  # noqa: E402
+from .outline_file import (  # noqa: E402
+    VERTEX_NAME,
+    Circle,
+    Hole,
+    Polygon,
+    Role,
+)
 from .values import (  # noqa: E402
+    evaluate,
     fillet_problems,
     formula_problem,
+    letter_values,
     refresh_formulas,
 )
 
@@ -75,9 +84,21 @@ DIMENSIONS_TAB: int = 0
 FILLETS_TAB: int = 1
 POLYGONS_TAB: int = 2
 
-# The [Polygons] table's columns (`T.sa~6.11` #801): its name and role
-# are typed or chosen; its corners are only shown.
-POLYGON_COLUMNS: tuple[str, ...] = ("Name", "Role", "Corners")
+# The [Polygons] table's columns (`T.sa~6.11` #801): its name, role,
+# parent and `z` are typed or chosen (#766); its corners are only
+# shown, and a circle's diameter is typed there (#789).
+POLYGON_COLUMNS: tuple[str, ...] = (
+    "Name",
+    "Role",
+    "Parent",
+    "Z",
+    "Corners / Diameter",
+)
+NAME_COLUMN: int = 0
+ROLE_COLUMN: int = 1
+PARENT_COLUMN: int = 2
+Z_COLUMN: int = 3
+SHAPE_COLUMN: int = 4
 
 # The table's first row, shown only in [Fillets]: "No fillet", a
 # fixed entry never edited, deleted or saved (#219, #222); the letters
@@ -142,8 +163,10 @@ DEFAULT_TOOL_MATERIAL: str = "HSS"
 
 
 # Class `ToolValues`:
+# It only holds a tool's values and the editor's hooks for them;
+# splitting it would only scatter them.
 @dataclass(slots=True)
-class ToolValues:
+class ToolValues:  # pylint: disable=too-many-instance-attributes
     """A tool's own values for its kind's letters (#735, #736).
 
     Attributes:
@@ -245,7 +268,9 @@ class LiveDelegate(QStyledItemDelegate):
 # Class `PolygonsTable`:
 class PolygonsTable(QTableWidget):
     """The Values table's [Polygons] (`T.sa~6.11` #801): a row per
-    polygon, its name typed, its role chosen, its corners shown.
+    polygon, then per circle (#789): its name typed, its role and
+    parent chosen, its `z` typed (a flat outline's, #766), and its
+    corners shown or, for a circle, its diameter typed.
 
     Attributes:
     * `values` (`ValuesTable`): The Values table it is in, for its
@@ -266,29 +291,58 @@ class PolygonsTable(QTableWidget):
         self.verticalHeader().setVisible(False)
         self.itemChanged.connect(self.edited)
 
+    # Method `PolygonsTable.shapes()`:
+    def shapes(self) -> list[Polygon | Circle]:
+        """Return the rows' polygons, then circles.
+
+        Returns:
+        * (`list[Polygon | Circle]`): A shape per row.
+        """
+        drawing: Drawing = self.values.drawing
+        return [*drawing.polygons, *drawing.circles]
+
     # Method `PolygonsTable.fill()`:
     def fill(self) -> None:
-        """Show every polygon, a row each."""
+        """Show every polygon and circle, a row each."""
         drawing: Drawing = self.values.drawing
         read_only: bool = self.values.read_only
+        flat: bool = not drawing.revolve
+        shapes: list[Polygon | Circle] = self.shapes()
         self.blockSignals(True)
-        self.setRowCount(len(drawing.polygons))
+        self.setRowCount(len(shapes))
         loops: list[list[int]] = drawing.loops()
         row: int
-        polygon: Polygon
-        for row, polygon in enumerate(drawing.polygons):
-            self.setItem(row, 0, QTableWidgetItem(polygon.name))
+        shape: Polygon | Circle
+        for row, shape in enumerate(shapes):
+            self.setItem(row, NAME_COLUMN, QTableWidgetItem(shape.name))
             role: QComboBox = QComboBox()
             role.addItems([each.value for each in Role])
-            role.setCurrentText(polygon.role.value)
+            role.setCurrentText(shape.role.value)
             role.setEnabled(not read_only)
             role.currentTextChanged.connect(self.role_chooser(row))
-            self.setCellWidget(row, 1, role)
-            corners: QTableWidgetItem = QTableWidgetItem(
-                " ".join(drawing.names[at] for at in loops[row])
-            )
-            corners.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self.setItem(row, 2, corners)
+            self.setCellWidget(row, ROLE_COLUMN, role)
+            parent: QComboBox = QComboBox()
+            parent.addItems(["", *self.parent_choices(shape.name)])
+            parent.setCurrentText(shape.parent)
+            parent.setEnabled(flat and not read_only)
+            parent.currentTextChanged.connect(self.parent_chooser(row))
+            self.setCellWidget(row, PARENT_COLUMN, parent)
+            z: QTableWidgetItem = QTableWidgetItem(shape.z)
+            if not flat:
+                z.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.setItem(row, Z_COLUMN, z)
+            last: QTableWidgetItem
+            if isinstance(shape, Circle):
+                last = QTableWidgetItem(shape.diameter)
+                last.setToolTip(
+                    f"The diameter of a circle about {shape.center}"
+                )
+            else:
+                last = QTableWidgetItem(
+                    " ".join(drawing.names[at] for at in loops[row])
+                )
+                last.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.setItem(row, SHAPE_COLUMN, last)
         triggers: type[QAbstractItemView.EditTrigger] = (
             QAbstractItemView.EditTrigger
         )
@@ -301,58 +355,161 @@ class PolygonsTable(QTableWidget):
         )
         self.blockSignals(False)
 
+    # Method `PolygonsTable.parent_choices()`:
+    def parent_choices(self, name: str) -> list[str]:
+        """Return the shapes a shape may stand on: any but itself and
+        those standing on it (#766).
+
+        Arguments:
+        * `name` (`str`): The shape's name.
+
+        Returns:
+        * (`list[str]`): Their names, in row order.
+        """
+        drawing: Drawing = self.values.drawing
+        parents: dict[str, str] = drawing.parents()
+
+        # Function `on()`:
+        def on(other: str) -> bool:
+            """Return whether `other` stands on `name`, at any depth."""
+            seen: set[str] = set()
+            here: str = other
+            while here and here not in seen:
+                if here == name:
+                    return True
+                seen.add(here)
+                here = parents.get(here, "")
+            return False
+
+        return [shape.name for shape in self.shapes() if not on(shape.name)]
+
     # Method `PolygonsTable.role_chooser()`:
     def role_chooser(self, row: int) -> Callable[[str], None]:
         """Return what a role choice in a row does.
 
         Arguments:
-        * `row` (`int`): The polygon's row.
+        * `row` (`int`): The shape's row.
 
         Returns:
-        * (`Callable[[str], None]`): Sets its polygon's role and saves.
+        * (`Callable[[str], None]`): Sets its shape's role and saves.
         """
 
         # Function `chosen()`:
         def chosen(text: str) -> None:
-            """Set the polygon's role.
+            """Set the shape's role.
 
             Arguments:
             * `text` (`str`): The role chosen.
             """
-            self.values.drawing.polygons[row].role = Role(text)
+            self.shapes()[row].role = Role(text)
+            self.values.save()
+
+        return chosen
+
+    # Method `PolygonsTable.parent_chooser()`:
+    def parent_chooser(self, row: int) -> Callable[[str], None]:
+        """Return what a parent choice in a row does.
+
+        Arguments:
+        * `row` (`int`): The shape's row.
+
+        Returns:
+        * (`Callable[[str], None]`): Sets its shape's parent and saves.
+        """
+
+        # Function `chosen()`:
+        def chosen(text: str) -> None:
+            """Set the shape's parent ("" for none).
+
+            Arguments:
+            * `text` (`str`): The parent chosen.
+            """
+            self.shapes()[row].parent = text
             self.values.save()
 
         return chosen
 
     # Method `PolygonsTable.edited()`:
     def edited(self, item: QTableWidgetItem) -> None:
-        """Keep a polygon's typed name: a name must be a name and not
-        another polygon's; its letters keep to it.
+        """Keep a typed cell: a name must be a name and not another
+        shape's (its letters and children keep to it); a `z` or a
+        diameter must be a formula the letters work out.
 
         Arguments:
         * `item` (`QTableWidgetItem`): The cell.
         """
         drawing: Drawing = self.values.drawing
-        polygon: Polygon = drawing.polygons[item.row()]
+        shape: Polygon | Circle = self.shapes()[item.row()]
         text: str = item.text().strip()
-        if item.column() == 0 and text != polygon.name:
-            names: list[str] = [each.name for each in drawing.polygons]
-            if not VERTEX_NAME.fullmatch(text) or text in names:
-                self.values.view.message = (
-                    f"{text!r} is not a name for a polygon: a letter, then"
-                    " letters, digits or _, not another polygon's."
-                )
-                self.fill()
-                self.values.show_message()
-                return
-            letter: Letter
-            for letter in drawing.letters:
-                if letter.polygon == polygon.name:
-                    letter.polygon = text
-            polygon.name = text
+        problem: str = ""
+        column: int = item.column()
+        if column == NAME_COLUMN and text != shape.name:
+            problem = self.rename(shape, text)
+        elif column == Z_COLUMN:
+            problem = _formula_check(text, drawing, empty=True)
+            if not problem:
+                shape.z = text
+        elif column == SHAPE_COLUMN and isinstance(shape, Circle):
+            problem = _formula_check(text, drawing, empty=False)
+            if not problem:
+                shape.diameter = text
+        if problem:
+            self.values.view.message = problem
+            self.fill()
+            self.values.show_message()
+            return
         self.values.view.message = ""
         self.values.save()
         self.values.show_message()
+
+    # Method `PolygonsTable.rename()`:
+    def rename(self, shape: Polygon | Circle, text: str) -> str:
+        """Rename a shape, its letters and children keeping to it.
+
+        Arguments:
+        * `shape` (`Polygon | Circle`): The shape.
+        * `text` (`str`): Its new name.
+
+        Returns:
+        * (`str`): Why the name is refused, or "" when renamed.
+        """
+        drawing: Drawing = self.values.drawing
+        if not VERTEX_NAME.fullmatch(text) or text in drawing.shape_names():
+            return (
+                f"{text!r} is not a name for a polygon: a letter, then"
+                " letters, digits or _, not another polygon's."
+            )
+        letter: Letter
+        for letter in drawing.letters:
+            if letter.polygon == shape.name:
+                letter.polygon = text
+        other: Polygon | Circle
+        for other in self.shapes():
+            if other.parent == shape.name:
+                other.parent = text
+        shape.name = text
+        return ""
+
+
+# Function `_formula_check()`:
+def _formula_check(text: str, drawing: Drawing, *, empty: bool) -> str:
+    """Say why a `z` or diameter formula is refused, or "".
+
+    Arguments:
+    * `text` (`str`): The formula typed.
+    * `drawing` (`Drawing`): The drawing, for its letters.
+    * `empty` (`bool`): True when "" is allowed (no `z` yet).
+
+    Returns:
+    * (`str`): The problem, or "".
+    """
+    if not text:
+        return "" if empty else "A circle needs a diameter."
+    try:
+        evaluate(text, letter_values(drawing.letters))
+    except ValueError as error:
+        return f"{text!r} can not be worked out: {error}"
+    return ""
 
 
 # Class `ValuesTable`:

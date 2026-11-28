@@ -474,7 +474,7 @@ def solid(editor: str) -> str:
     # Pressed as a user presses it, so a hidden one fails as it would.
     shown: OutlineEditor = _editor(editor)
     if not shown.solid_button.isVisible():
-        raise ExposedError("[Solid] is not shown here (not revolved)")
+        raise ExposedError("[Solid] is not shown here")
     shown.solid_button.click()
     QTest.qWait(1)
     told: str = shown.view.message

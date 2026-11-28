@@ -48,7 +48,16 @@ when they differ from the table, `clearance`, `counterbore` and
 files had `[[points]]`, by index).  A dimension's `from` and `to`
 are a corner's name or `"origin"`, and for an angle an edge (by the
 corner it leaves) or `"x_axis"` / `"y_axis"`; a hide strip's `below`
-and `above` are corners' names.
+and `above` are corners' names.  For a flat outline (`T.sa~6.11`
+#766, #789) a polygon may name its `parent` polygon and its `z`, the
+height it ends at (a formula in the letters): it is extruded from its
+parent's `z` to its own, up to add material, down to cut it away,
+and lies wholly inside its parent (#790).  `[[circles]]` are round
+polygons for holes and pegs: a `name`, a `role`, a `center` vertex,
+a `diameter` (a formula) and, like a polygon, a `parent` and `z`.
+`[[cuts]]` are cut lines (#776, #861): a `name` (`A` for "SECTION
+A-A") and three `vertices`, its two ends and a point on the side the
+section looks toward; they need no dimensions.
 """
 
 import json
@@ -178,18 +187,79 @@ class Polygon:
     * `name` (`str`): Its name, unique in its outline (#767).
     * `role` (`Role`): What it is for (#767a).
     * `vertices` (`list[str]`): Its corners' names, in order.
+    * `parent` (`str`): The polygon (or circle) it stands on, "" for
+      none (`T.sa~6.11` #766).
+    * `z` (`str`): The height it is extruded to, a formula in the
+      letters ("" in a revolved outline).
 
     A polygon has no material or colour: whatever uses the outline
     gives one, as a tool its `material` (`T.sa~6.11` #838, #840).
 
     Constructor:
-    * `Polygon(name, role, vertices)`
+    * `Polygon(name, role, vertices, parent, z)`
     """
 
     # Constructor arguments:
     name: str = field(init=True)
     role: Role = field(init=True)
     vertices: list[str] = field(init=True, default_factory=list)
+    parent: str = field(init=True, default="")
+    z: str = field(init=True, default="")
+
+
+# Class `Circle`:
+@dataclass(slots=True)
+class Circle:
+    """A round polygon of a flat outline, for a hole or a peg
+    (`T.sa~6.11` #789): a counterbore is two, nested.
+
+    Attributes:
+    * `name` (`str`): Its name, unique among the outline's polygons
+      and circles.
+    * `role` (`Role`): What it is for.
+    * `center` (`str`): Its center vertex's name (placed by the
+      dimensions, as a corner is).
+    * `diameter` (`str`): Its diameter, a formula in the letters.
+    * `parent` (`str`): The polygon (or circle) it stands on, "" for
+      none.
+    * `z` (`str`): The height it is extruded to, a formula.
+
+    Constructor:
+    * `Circle(name, role, center, diameter, parent, z)`
+    """
+
+    # Constructor arguments:
+    name: str = field(init=True)
+    role: Role = field(init=True)
+    center: str = field(init=True)
+    diameter: str = field(init=True)
+    parent: str = field(init=True, default="")
+    z: str = field(init=True, default="")
+
+
+# Class `Cut`:
+@dataclass(slots=True)
+class Cut:
+    """A cut line of a flat outline (`T.sa~6.11` #776, #861): the
+    section through it is drawn beside the outline.
+
+    Attributes:
+    * `name` (`str`): Its letter, `A` for "SECTION A-A".
+    * `vertices` (`list[str]`): Its two ends' names, then a point's
+      on the side the section looks toward; dragged as corners, and
+      not dimensioned.
+
+    Constructor:
+    * `Cut(name, vertices)`
+    """
+
+    # Constructor arguments:
+    name: str = field(init=True)
+    vertices: list[str] = field(init=True, default_factory=list)
+
+
+# A cut line's name: capital letters (#776).
+CUT_NAME: re.Pattern[str] = re.compile(r"[A-Z]+")
 
 
 # The name of the polygon a drawing starts with.
@@ -197,7 +267,7 @@ FIRST_POLYGON: str = "outline"
 
 
 # Class `Outline`:
-# One attribute per field of the file, which has nine.
+# One attribute per field of the file, which has thirteen.
 @dataclass(slots=True)
 class Outline:  # pylint: disable=too-many-instance-attributes
     """What an outline file holds.
@@ -220,10 +290,14 @@ class Outline:  # pylint: disable=too-many-instance-attributes
       (#787); missing ones are given `V1`, `V2`, ... unused.
     * `polygons` (`list[Polygon]`): The polygons (#765); with none
       given, one through every corner in order.
+    * `circles` (`list[Circle]`): The round polygons (`T.sa~6.11`
+      #789).
+    * `cuts` (`list[Cut]`): The cut lines (#776, #861).
 
     Constructor:
     * `Outline(points, letters, dimensions, revolve, note_radius,
-      hides, text_height, turns, holes, names, polygons)`
+      hides, text_height, turns, holes, names, polygons, circles,
+      cuts)`
     """
 
     # Constructor arguments:
@@ -238,6 +312,8 @@ class Outline:  # pylint: disable=too-many-instance-attributes
     holes: list[Hole] = field(init=True, default_factory=list)
     names: list[str] = field(init=True, default_factory=list)
     polygons: list[Polygon] = field(init=True, default_factory=list)
+    circles: list[Circle] = field(init=True, default_factory=list)
+    cuts: list[Cut] = field(init=True, default_factory=list)
 
     # Method `Outline.__post_init__()`:
     def __post_init__(self) -> None:
@@ -341,11 +417,116 @@ class Outline:  # pylint: disable=too-many-instance-attributes
         Returns:
         * (`str`): The name.
         """
-        used: set[str] = {polygon.name for polygon in self.polygons}
+        return self._new_name("P")
+
+    # Method `Outline.new_circle_name()`:
+    def new_circle_name(self) -> str:
+        """Return a name for a new circle: `C2`, `C3`, ... unused by
+        any polygon or circle.
+
+        Returns:
+        * (`str`): The name.
+        """
+        return self._new_name("C")
+
+    # Method `Outline._new_name()`:
+    def _new_name(self, prefix: str) -> str:
+        """Return `PREFIX2`, `PREFIX3`, ... the first not used by a
+        polygon or circle.
+
+        Arguments:
+        * `prefix` (`str`): The name's letter.
+
+        Returns:
+        * (`str`): The name.
+        """
+        used: set[str] = self.shape_names()
         number: int = 2
-        while f"P{number}" in used:
+        while f"{prefix}{number}" in used:
             number += 1
-        return f"P{number}"
+        return f"{prefix}{number}"
+
+    # Method `Outline.shape_names()`:
+    def shape_names(self) -> set[str]:
+        """Return the names of every polygon and circle.
+
+        Returns:
+        * (`set[str]`): The names.
+        """
+        return {polygon.name for polygon in self.polygons} | {
+            circle.name for circle in self.circles
+        }
+
+    # Method `Outline.solid_corners()`:
+    def solid_corners(self) -> set[int]:
+        """Return the corners a solid is made from: its polygons' and
+        its circles' centers, not the cut lines' (#861).
+
+        Returns:
+        * (`set[int]`): Their indices.
+        """
+        found: set[int] = {at for loop in self.loops() for at in loop}
+        found.update(
+            self.names.index(circle.center)
+            for circle in self.circles
+            if circle.center in self.names
+        )
+        return found
+
+    # Method `Outline.new_cut_name()`:
+    def new_cut_name(self) -> str:
+        """Return a name for a new cut line: `A`, `B`, ... unused.
+
+        Returns:
+        * (`str`): The name.
+        """
+        used: set[str] = {cut.name for cut in self.cuts}
+        letter: str = "A"
+        while letter in used:
+            letter = chr(ord(letter) + 1) if letter < "Z" else letter + "A"
+        return letter
+
+    # Method `Outline.nested()`:
+    def nested(self, one: str, other: str) -> bool:
+        """Return whether one polygon (or circle) stands on the other,
+        or the other on it, through any chain of parents: such a pair
+        overlaps by design (`T.sa~6.11` #790).
+
+        Arguments:
+        * `one` (`str`): A polygon's or circle's name.
+        * `other` (`str`): Another's.
+
+        Returns:
+        * (`bool`): True when either is an ancestor of the other.
+        """
+        parents: dict[str, str] = self.parents()
+
+        # Function `above()`:
+        def above(low: str, high: str) -> bool:
+            """Return whether `high` is among `low`'s parents."""
+            seen: set[str] = set()
+            here: str = parents.get(low, "")
+            while here and here not in seen:
+                if here == high:
+                    return True
+                seen.add(here)
+                here = parents.get(here, "")
+            return False
+
+        return above(one, other) or above(other, one)
+
+    # Method `Outline.parents()`:
+    def parents(self) -> dict[str, str]:
+        """Return each polygon's and circle's parent ("" for none).
+
+        Returns:
+        * (`dict[str, str]`): The parent's name, by name.
+        """
+        found: dict[str, str] = {
+            polygon.name: polygon.parent for polygon in self.polygons
+        }
+        found.update({circle.name: circle.parent for circle in self.circles})
+        return found
 
     # Method `Outline.neighbours()`:
     def neighbours(self, corner: int) -> tuple[int, int]:
@@ -537,6 +718,28 @@ def outline_text(outline: Outline) -> str:
             + ", ".join(_string(name) for name in polygon.vertices)
             + "]"
         )
+        lines += _tree_lines(polygon.parent, polygon.z)
+    circle: Circle
+    for circle in outline.circles:
+        lines += [
+            "",
+            "[[circles]]",
+            f"name = {_string(circle.name)}",
+            f"role = {_string(circle.role.value)}",
+            f"center = {_string(circle.center)}",
+            f"diameter = {_string(circle.diameter)}",
+        ]
+        lines += _tree_lines(circle.parent, circle.z)
+    cut: Cut
+    for cut in outline.cuts:
+        lines += [
+            "",
+            "[[cuts]]",
+            f"name = {_string(cut.name)}",
+            "vertices = ["
+            + ", ".join(_string(name) for name in cut.vertices)
+            + "]",
+        ]
     dimension: Dimension
     for dimension in outline.dimensions:
         lines += _dimension_lines(dimension, outline)
@@ -547,6 +750,26 @@ def outline_text(outline: Outline) -> str:
     for hole in outline.holes:
         lines += _hole_lines(hole)
     return "\n".join(lines) + "\n"
+
+
+# Function `_tree_lines()`:
+def _tree_lines(parent: str, z: str) -> list[str]:
+    """Return a polygon's or circle's `parent` and `z` lines, each
+    only when given.
+
+    Arguments:
+    * `parent` (`str`): Its parent's name, or "".
+    * `z` (`str`): Its height's formula, or "".
+
+    Returns:
+    * (`list[str]`): The lines.
+    """
+    lines: list[str] = []
+    if parent:
+        lines.append(f"parent = {_string(parent)}")
+    if z:
+        lines.append(f"z = {_string(z)}")
+    return lines
 
 
 # Function `_letter_lines()`:
@@ -815,6 +1038,9 @@ class _Reader:
         # The file's polygons, not the one a new outline is given.
         outline.polygons.clear()
         self.polygons(data.get("polygons"), outline)
+        self.circles(data.get("circles", []), outline)
+        self.cuts(data.get("cuts", []), outline)
+        self.tree(outline)
         problem: str
         for problem in letter_scope_problems(outline):
             self.note("letters", problem)
@@ -940,9 +1166,161 @@ class _Reader:
                     " vertices' names, none twice",
                 )
             else:
+                parent: str
+                z: str
+                parent, z = self.parent_z(where, table)
                 outline.polygons.append(
-                    Polygon(name, Role(role), list(vertices))
+                    Polygon(name, Role(role), list(vertices), parent, z)
                 )
+
+    # Method `_Reader.parent_z()`:
+    def parent_z(
+        self, where: str, table: dict[str, object]
+    ) -> tuple[str, str]:
+        """Read a polygon's or circle's `parent` and `z` (`T.sa~6.11`
+        #766), each a string when given.
+
+        Arguments:
+        * `where` (`str`): The entry, for messages.
+        * `table` (`dict[str, object]`): Its table.
+
+        Returns:
+        * (`tuple[str, str]`): Its parent and `z`, "" when not given
+          or bad.
+        """
+        found: list[str] = []
+        key: str
+        for key in ("parent", "z"):
+            value: object = table.get(key, "")
+            if not isinstance(value, str):
+                self.note(where, f"{key} = {value!r}: is not a string")
+                value = ""
+            found.append(value)
+        return found[0], found[1]
+
+    # Method `_Reader.circles()`:
+    def circles(self, found: object, outline: Outline) -> None:
+        """Read the circles (`T.sa~6.11` #789): each a unique `name`,
+        a `role`, a `center` vertex and a `diameter`.
+
+        Arguments:
+        * `found` (`object`): The file's `circles`.
+        * `outline` (`Outline`): Given the good ones.
+        """
+        if not isinstance(found, list):
+            self.note("circles", "is not a list of tables")
+            return
+        roles: str = ", ".join(role.value for role in Role)
+        index: int
+        table: object
+        for index, table in enumerate(found):
+            where: str = f"circles[{index}]"
+            if not isinstance(table, dict):
+                self.note(where, "is not a table")
+                continue
+            name: object = table.get("name")
+            role: object = table.get("role")
+            center: object = table.get("center")
+            diameter: object = table.get("diameter")
+            if not isinstance(name, str) or not VERTEX_NAME.fullmatch(name):
+                self.note(
+                    where,
+                    f"name = {name!r}: not a letter, then"
+                    " letters, digits or _",
+                )
+            elif name in outline.shape_names():
+                self.note(where, f"name = {name!r}: is used twice")
+            elif not isinstance(role, str) or role not in tuple(Role):
+                self.note(where, f"role = {role!r}: not one of {roles}")
+            elif not isinstance(center, str) or center not in self.corners:
+                self.note(where, f"center = {center!r}: is not a vertex")
+            elif not isinstance(diameter, str) or not diameter.strip():
+                self.note(where, f"diameter = {diameter!r}: is not a formula")
+            else:
+                parent: str
+                z: str
+                parent, z = self.parent_z(where, table)
+                outline.circles.append(
+                    Circle(name, Role(role), center, diameter, parent, z)
+                )
+
+    # Method `_Reader.cuts()`:
+    def cuts(self, found: object, outline: Outline) -> None:
+        """Read the cut lines (#776, #861): each a unique name of
+        capital letters and three different vertices; none in a
+        revolved outline (its drawing is its own section, #782).
+
+        Arguments:
+        * `found` (`object`): The file's `cuts`.
+        * `outline` (`Outline`): Given the good ones.
+        """
+        if not isinstance(found, list):
+            self.note("cuts", "is not a list of tables")
+            return
+        if found and outline.revolve:
+            self.note("cuts", "a revolved outline is its own section")
+            return
+        index: int
+        table: object
+        for index, table in enumerate(found):
+            where: str = f"cuts[{index}]"
+            if not isinstance(table, dict):
+                self.note(where, "is not a table")
+                continue
+            name: object = table.get("name")
+            vertices: object = table.get("vertices")
+            if not isinstance(name, str) or not CUT_NAME.fullmatch(name):
+                self.note(where, f"name = {name!r}: not capital letters")
+            elif any(cut.name == name for cut in outline.cuts):
+                self.note(where, f"name = {name!r}: is used twice")
+            elif not (
+                isinstance(vertices, list)
+                and len(vertices) == 3
+                and all(vertex in self.corners for vertex in vertices)
+                and len(set(vertices)) == 3
+            ):
+                self.note(
+                    where,
+                    "needs vertices: its two ends and a point on the"
+                    " side it looks toward, three different vertices",
+                )
+            else:
+                outline.cuts.append(Cut(name, list(vertices)))
+
+    # Method `_Reader.tree()`:
+    def tree(self, outline: Outline) -> None:
+        """Check the polygons' and circles' tree (`T.sa~6.11` #766):
+        each parent is another of them and no chain of parents loops;
+        a revolved outline has neither parents, heights nor circles.
+
+        Arguments:
+        * `outline` (`Outline`): The outline read so far.
+        """
+        parents: dict[str, str] = outline.parents()
+        if outline.revolve:
+            if outline.circles:
+                self.note("circles", "a revolved outline has no circles")
+            if any(
+                polygon.parent or polygon.z for polygon in outline.polygons
+            ):
+                self.note(
+                    "polygons",
+                    "a revolved outline's polygons have no parent or z",
+                )
+            return
+        name: str
+        parent: str
+        for name, parent in parents.items():
+            if parent and parent not in parents:
+                self.note(name, f"parent = {parent!r}: is not a polygon")
+                continue
+            seen: set[str] = {name}
+            while parent in parents and parent:
+                if parent in seen:
+                    self.note(name, "its parents go round in a loop")
+                    break
+                seen.add(parent)
+                parent = parents[parent]
 
     # Method `_Reader.holes()`:
     def holes(self, found: object, outline: Outline) -> None:

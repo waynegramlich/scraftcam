@@ -14,7 +14,7 @@ Expressions are read by `ast`, allowing only numbers, the letters,
 import ast
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 
 from ..model import MM_PER, Angle, Length
 from .dimensions import (
@@ -39,10 +39,34 @@ FUNCTIONS: dict[str, Callable[..., float]] = {
     "sqrt": math.sqrt,
     "abs": abs,
 }
-UNITS: dict[str, float] = {"deg": math.pi / 180.0, "mm": 1.0}
+# `in` is Python's word, so an inch is `in_` once read
+# (`T.sa~6.11` #862).
+UNITS: dict[str, float] = {"deg": math.pi / 180.0, "mm": 1.0, "in_": 25.4}
 
-# A number written before a unit (`90 deg`) is a product.
-NUMBER_UNIT: re.Pattern[str] = re.compile(r"(\d)\s+(deg|mm)\b")
+# A number written before a unit (`90 deg`, `1/2 in`) is a product.
+NUMBER_UNIT: re.Pattern[str] = re.compile(r"(\d)\s+(deg|mm|in)\b")
+
+
+# Function `_python()`:
+def _python(formula: str) -> str:
+    """Return a formula as Python reads it: a number before a unit
+    times the unit (an inch `in_`), `^` a power.
+
+    Arguments:
+    * `formula` (`str`): The formula (`1/2 in + D`).
+
+    Returns:
+    * (`str`): The Python expression (`1/2 * in_ + D`).
+    """
+
+    # Function `product()`:
+    def product(found: re.Match[str]) -> str:
+        """Return a number and unit as a product."""
+        unit: str = found.group(2)
+        return f"{found.group(1)} * {'in_' if unit == 'in' else unit}"
+
+    return NUMBER_UNIT.sub(product, formula).replace("^", "**")
+
 
 # Fillets may use up an edge, within this much (mm, #114).
 FIT_SLACK: float = 1e-9
@@ -91,7 +115,7 @@ def formula_names(formula: str) -> list[str]:
     * (`list[str]`): The names that are not functions or units; empty
       when the formula cannot be read.
     """
-    text: str = NUMBER_UNIT.sub(r"\1 * \2", formula).replace("^", "**")
+    text: str = _python(formula)
     try:
         tree: ast.Expression = ast.parse(text, mode="eval")
     except SyntaxError:
@@ -260,7 +284,7 @@ def evaluate(expression: str, values: dict[str, float]) -> float:
     * `ValueError`: When it names something unknown, or cannot be
       worked out.
     """
-    text: str = NUMBER_UNIT.sub(r"\1 * \2", expression).replace("^", "**")
+    text: str = _python(expression)
     try:
         tree: ast.Expression = ast.parse(text, mode="eval")
         return float(_value(tree.body, values))
@@ -336,6 +360,8 @@ def real_corners(
     letters: list[Letter],
     dimensions: list[Dimension],
     loops: Loops = None,
+    *,
+    needed: Collection[int] | None = None,
 ) -> list[tuple[float, float]] | None:
     """Return the corners at their real places (mm), from the letters.
 
@@ -345,13 +371,17 @@ def real_corners(
     * `dimensions` (`list[Dimension]`): The dimensions.
     * `loops` (`Loops`): Each polygon's corners (`T.sa~6.11` #765),
       or `None` for one ring through them all.
+    * `needed` (`Collection[int] | None`): The corners that must be
+      placed (`None`: all); another not placed is given as drawn
+      (a cut line's ends, `T.sa~6.11` #861).
 
     Returns:
     * (`list[tuple[float, float]] | None`): The corners; `None` while a
-      corner is not dimensioned or a value is bad.
+      needed corner is not dimensioned or a value is bad.
     """
     solution: Solution = solve(points, dimensions, loops)
-    if solution.missing(len(points)):
+    must: set[int] = set(range(len(points)) if needed is None else needed)
+    if any(corner in must for corner, _ in solution.missing(len(points))):
         return None
     values: dict[str, float] = letter_values(letters)
     try:
@@ -360,6 +390,8 @@ def real_corners(
                 evaluate(str(solution.x[corner]), values),
                 evaluate(str(solution.y[corner]), values),
             )
+            if corner in must
+            else points[corner]
             for corner in range(len(points))
         ]
     except ValueError:

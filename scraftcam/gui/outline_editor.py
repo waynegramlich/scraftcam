@@ -96,6 +96,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 from ..appearance import Color, Hatch, material_look  # noqa: E402
 from ..diagram import FONT_STEP, TEXT, Stroke, Weight, svg  # noqa: E402
 from ..geometry import ArcSegment, LineSegment, XYSegment  # noqa: E402
+from ..model import MM_PER  # noqa: E402
 from ..model_cache import Cacheable  # noqa: E402
 from ..shops import OUTLINE_SUFFIX, material_looks, shop_of  # noqa: E402
 from . import theme  # noqa: E402
@@ -156,6 +157,8 @@ from .outline_diagram import edge_arc as shared_arc  # noqa: E402
 from .outline_file import (  # noqa: E402
     ENDS,
     VERTEX_NAME,
+    Circle,
+    Cut,
     Hole,
     Outline,
     Polygon,
@@ -164,7 +167,7 @@ from .outline_file import (  # noqa: E402
     outline_from_text,
     outline_text,
 )
-from .outline_polygon import outline_cacheable  # noqa: E402
+from .outline_polygon import outline_cacheable, outline_unit  # noqa: E402
 from .outline_values import (  # noqa: E402
     DEFAULT_TOOL_MATERIAL,
     ToolValues,
@@ -244,6 +247,8 @@ BUTTON_WORDS: tuple[str, ...] = (
     "Redo",
     "New Letter",
     "New Polygon",
+    "New Circle",
+    "Cut Line",
     "Show Marks",
     "Show Names",
 )
@@ -256,6 +261,8 @@ CHANGE_WORDS: tuple[str, ...] = (
     "Dim. Kind",
     "New Letter",
     "New Polygon",
+    "New Circle",
+    "Cut Line",
     "Revolve",
     "Hide",
     "Rotate Diagram",
@@ -306,6 +313,8 @@ BUTTON_TABS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "Dim. Kind",
             "New Letter",
             "New Polygon",
+            "New Circle",
+            "Cut Line",
             "Revolve",
         ),
     ),
@@ -466,10 +475,14 @@ class Snapshot:  # pylint: disable=too-many-instance-attributes
     * `names` (`tuple[str, ...]`): The corners' names (#787).
     * `polygons` (`tuple[Polygon, ...]`): Copies of the polygons
       (#765).
+    * `circles` (`tuple[Circle, ...]`): Copies of the circles
+      (`T.sa~6.11` #789).
+    * `cuts` (`tuple[Cut, ...]`): Copies of the cut lines (#861).
 
     Constructor:
     * `Snapshot(points, dimensions, letters, revolve, note_radius,
-      hides, turns, text_height, holes, names, polygons)`
+      hides, turns, text_height, holes, names, polygons, circles,
+      cuts)`
     """
 
     # Constructor arguments:
@@ -484,6 +497,8 @@ class Snapshot:  # pylint: disable=too-many-instance-attributes
     holes: tuple[Hole, ...] = field(init=True, default=())
     names: tuple[str, ...] = field(init=True, default=())
     polygons: tuple[Polygon, ...] = field(init=True, default=())
+    circles: tuple[Circle, ...] = field(init=True, default=())
+    cuts: tuple[Cut, ...] = field(init=True, default=())
 
 
 # Function `_reached()`:
@@ -543,7 +558,8 @@ class Drawing(Outline):
 
     Constructor:
     * `Drawing(points, letters, dimensions, revolve, note_radius,
-      hides, text_height, turns, holes, names, polygons)`
+      hides, text_height, turns, holes, names, polygons, circles,
+      cuts)`
     """
 
     # Remaining attributes (alphabetized):
@@ -572,6 +588,10 @@ class Drawing(Outline):
             tuple(replace(hole) for hole in self.holes),
             tuple(self.names),
             tuple(_copied(polygon) for polygon in self.polygons),
+            tuple(replace(circle) for circle in self.circles),
+            tuple(
+                replace(cut, vertices=list(cut.vertices)) for cut in self.cuts
+            ),
         )
 
     # Method `Drawing.restore()`:
@@ -595,6 +615,10 @@ class Drawing(Outline):
         self.names[:] = snapshot.names
         self.fill_names()
         self.polygons[:] = [_copied(polygon) for polygon in snapshot.polygons]
+        self.circles[:] = [replace(circle) for circle in snapshot.circles]
+        self.cuts[:] = [
+            replace(cut, vertices=list(cut.vertices)) for cut in snapshot.cuts
+        ]
 
     # Method `Drawing.follow_angles()`:
     def follow_angles(self) -> None:
@@ -733,6 +757,112 @@ class Drawing(Outline):
         )
         return polygon
 
+    # Method `Drawing.new_circle()`:
+    def new_circle(self, corner: int) -> str:
+        """Add a circle (`T.sa~6.11` #789) standing on the first
+        polygon through a corner: its center a new vertex at the
+        polygon's middle, its diameter a sixth of the polygon's
+        smaller side as drawn, at the drawing's scale when known.
+
+        Arguments:
+        * `corner` (`int`): A corner of the polygon.
+
+        Returns:
+        * (`str`): The new circle's name; "" when the outline is
+          revolved or no polygon has the corner (nothing changed).
+        """
+        if self.revolve:
+            return ""
+        loops: list[list[int]] = self.loops()
+        found: list[int] = [
+            index for index, loop in enumerate(loops) if corner in loop
+        ]
+        if not found:
+            return ""
+        ring: list[tuple[float, float]] = [
+            self.points[at] for at in loops[found[0]]
+        ]
+        xs: list[float] = [x for x, _ in ring]
+        ys: list[float] = [y for _, y in ring]
+        self.points.append((sum(xs) / len(xs), sum(ys) / len(ys)))
+        center: str = self.new_name()
+        self.names.append(center)
+        span: float = min(max(xs) - min(xs), max(ys) - min(ys)) / 6.0
+        unit: str = outline_unit(self)
+        size: float = span / self.scale if self.scale > 0.0 else span
+        per: float = float(MM_PER[unit])
+        name: str = self.new_circle_name()
+        self.circles.append(
+            Circle(
+                name,
+                Role.OTHER,
+                center,
+                f"{size / per:.4g} {unit}",
+                self.polygons[found[0]].name,
+            )
+        )
+        return name
+
+    # Method `Drawing.new_cut()`:
+    def new_cut(self, corner: int) -> str:
+        """Add a cut line (`T.sa~6.11` #776, #861) across the middle
+        of the first polygon through a corner, left to right and a
+        little beyond, looking toward -Y; its three vertices are made
+        last, with no dimensions.
+
+        Arguments:
+        * `corner` (`int`): A corner of the polygon.
+
+        Returns:
+        * (`str`): The cut's name; "" when the outline is revolved or
+          no polygon has the corner (nothing changed).
+        """
+        if self.revolve:
+            return ""
+        loops: list[list[int]] = self.loops()
+        found: list[int] = [
+            index for index, loop in enumerate(loops) if corner in loop
+        ]
+        if not found:
+            return ""
+        xs: list[float] = [self.points[at][0] for at in loops[found[0]]]
+        ys: list[float] = [self.points[at][1] for at in loops[found[0]]]
+        middle: float = (min(ys) + max(ys)) / 2.0
+        beyond: float = (max(xs) - min(xs)) / 8.0
+        places: list[tuple[float, float]] = [
+            (min(xs) - beyond, middle),
+            (max(xs) + beyond, middle),
+            ((min(xs) + max(xs)) / 2.0, middle - beyond),
+        ]
+        names: list[str] = []
+        place: tuple[float, float]
+        for place in places:
+            self.points.append(place)
+            names.append(self.new_name())
+            self.names.append(names[-1])
+        name: str = self.new_cut_name()
+        self.cuts.append(Cut(name, names))
+        return name
+
+    # Method `Drawing.forget_vertex()`:
+    def forget_vertex(self, gone: str) -> None:
+        """Take away the circles about a deleted vertex, what stood on
+        them standing on their parents, and the cut lines through it
+        (`T.sa~6.11` #861).
+
+        Arguments:
+        * `gone` (`str`): The vertex's name.
+        """
+        circle: Circle
+        for circle in [each for each in self.circles if each.center == gone]:
+            self.circles.remove(circle)
+            shapes: list[Polygon | Circle] = [*self.polygons, *self.circles]
+            shape: Polygon | Circle
+            for shape in shapes:
+                if shape.parent == circle.name:
+                    shape.parent = circle.parent
+        self.cuts[:] = [cut for cut in self.cuts if gone not in cut.vertices]
+
     # Method `Drawing.explicit_angles()`:
     def explicit_angles(self) -> None:
         """Give every angle's edges both their corners, so that none
@@ -784,6 +914,7 @@ class Drawing(Outline):
         for polygon in self.polygons:
             if gone in polygon.vertices:
                 polygon.vertices.remove(gone)
+        self.forget_vertex(gone)
         self.dimensions[:] = [
             dimension
             for dimension in self.dimensions
@@ -4064,6 +4195,21 @@ class OutlineView(QGraphicsView):
             self.make_squares()
             self.letters_changed()
 
+    # Method `OutlineView.loose_corners()`:
+    def loose_corners(self) -> set[int]:
+        """Return the corners a solid needs that are not dimensioned
+        yet; a cut line's need none (`T.sa~6.11` #861).
+
+        Returns:
+        * (`set[int]`): Their indices.
+        """
+        needed: set[int] = self.drawing.solid_corners()
+        return {
+            corner
+            for corner, _ in self.solution.missing(len(self.drawing.points))
+            if corner in needed
+        }
+
     # Method `OutlineView.restyle()`:
     def restyle(self) -> None:
         """Color everything for the scheme in use (light or dark)."""
@@ -4092,10 +4238,7 @@ class OutlineView(QGraphicsView):
         thick.setCosmetic(True)
         self.origin.setPen(thick if ORIGIN in self.chosen_points else pen)
         self.origin.setBrush(QBrush(QColor(scheme.ink)))
-        missing: set[int] = {
-            corner
-            for corner, _ in self.solution.missing(len(self.drawing.points))
-        }
+        missing: set[int] = self.loose_corners()
         square: CornerCircle
         for square in self.squares + self.mirror_squares:
             loose: bool = bool(self.drawing.dimensions) and (
@@ -4280,6 +4423,64 @@ class OutlineView(QGraphicsView):
                     "Those two corners are not an edge of one polygon,"
                     " outside every other: choose the ends of an edge."
                 )
+        self.message = problem
+        if not problem:
+            self.make_squares()
+            self.restyle()
+        self.scene().update()
+
+    # Method `OutlineView.new_circle()`:
+    def new_circle(self) -> None:
+        """[New Circle] (`T.sa~6.11` #789): a circle in the middle of
+        the polygon through the last corner chosen, standing on it;
+        one change.  Its `z` and diameter are set in [Polygons]."""
+        corners: list[int] = [
+            real_point(code)
+            for code in self.chosen_points
+            if real_point(code) >= 0
+        ]
+        problem: str = ""
+        if self.read_only:
+            problem = self.read_only_message
+        elif self.drawing.revolve:
+            problem = "A revolved outline has no circles."
+        elif not corners:
+            problem = "Choose a corner of the polygon for [New Circle]."
+        if not problem:
+            before: Snapshot = self.drawing.snapshot()
+            if self.drawing.new_circle(corners[-1]):
+                self.history.remember(before)
+            else:
+                problem = "That corner is in no polygon."
+        self.message = problem
+        if not problem:
+            self.make_squares()
+            self.restyle()
+        self.scene().update()
+
+    # Method `OutlineView.new_cut()`:
+    def new_cut(self) -> None:
+        """[Cut Line] (`T.sa~6.11` #776, #861): a cut line across the
+        polygon through the last corner chosen; one change.  Its ends
+        and side point are dragged like corners."""
+        corners: list[int] = [
+            real_point(code)
+            for code in self.chosen_points
+            if real_point(code) >= 0
+        ]
+        problem: str = ""
+        if self.read_only:
+            problem = self.read_only_message
+        elif self.drawing.revolve:
+            problem = "A revolved outline is its own section."
+        elif not corners:
+            problem = "Choose a corner of the polygon for [Cut Line]."
+        if not problem:
+            before: Snapshot = self.drawing.snapshot()
+            if self.drawing.new_cut(corners[-1]):
+                self.history.remember(before)
+            else:
+                problem = "That corner is in no polygon."
         self.message = problem
         if not problem:
             self.make_squares()
@@ -4928,6 +5129,8 @@ class OutlineEditor(QWidget):
             "Redo": self.view.redo,
             "New Letter": self.values.new_letter,
             "New Polygon": self.view.new_polygon,
+            "New Circle": self.view.new_circle,
+            "Cut Line": self.view.new_cut,
         }
         does_it: Callable[[], None]
         for word, does_it in does.items():
@@ -5007,7 +5210,6 @@ class OutlineEditor(QWidget):
         # [Solid] shows a round tool in SolidCraft (`T.sa~6.11` #819).
         self.solid_button: QPushButton = QPushButton("Solid")
         self.solid_button.setToolTip("Show this as a solid in SolidCraft")
-        self.solid_button.setVisible(self.drawing.revolve)
         self.solid_button.clicked.connect(self.show_solid)
         row: QHBoxLayout = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -5231,8 +5433,6 @@ class OutlineEditor(QWidget):
         """Make the solid's `.step` in the background, so that [Solid]
         finds it made (`T.sa~6.11` #843); a failure is left for [Solid]
         to say."""
-        if not self.drawing.revolve:
-            return
         try:
             model: Cacheable = self.solid_model()
         except ValueError:
@@ -5355,13 +5555,16 @@ class OutlineEditor(QWidget):
         * (`str`): The problem, naming the first pair.
         """
         drawing: Drawing = self.view.drawing
-        found: list[tuple[int, int]] = overlaps(
-            drawing.points, drawing.loops()
-        )
+        names: list[str] = [polygon.name for polygon in drawing.polygons]
+        found: list[tuple[int, int]] = [
+            (one, other)
+            for one, other in overlaps(drawing.points, drawing.loops())
+            if not drawing.nested(names[one], names[other])
+        ]
         if not found:
             return ""
-        first: str = drawing.polygons[found[0][0]].name
-        second: str = drawing.polygons[found[0][1]].name
+        first: str = names[found[0][0]]
+        second: str = names[found[0][1]]
         return (
             f"Polygons {first} and {second} overlap: move a corner so"
             " they only touch."
@@ -5526,4 +5729,6 @@ def drawing_from_text(text: str, source: str = "") -> Drawing:
         outline.holes,
         outline.names,
         outline.polygons,
+        outline.circles,
+        outline.cuts,
     )

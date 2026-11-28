@@ -71,6 +71,7 @@ from scraftcam.gui.values import crossings
 from scraftcam.model_cache import Cacheable
 from scraftcam.shops import EXAMPLE_SHOP
 from tests import qt_app
+from tests.qt.shapes import HOUSE
 
 
 # Function `cell()`:
@@ -2463,14 +2464,7 @@ class PolygonsTest(unittest.TestCase):
     def test_polygons_cross(self) -> None:
         """Edges of two polygons that cross are found, each by its
         corners (#797); a shared edge is not a crossing."""
-        points: list[tuple[float, float]] = [
-            (0.0, 0.0),
-            (4.0, 0.0),
-            (4.0, 4.0),
-            (0.0, 4.0),
-            (2.0, 6.0),
-            (2.0, -2.0),
-        ]
+        points: list[tuple[float, float]] = [*HOUSE, (2.0, -2.0)]
         self.assertEqual(crossings(points, [[0, 1, 2, 3], [3, 2, 4]]), [])
         self.assertEqual(
             crossings(points, [[0, 1, 2, 3], [4, 5, 2]]),
@@ -2657,7 +2651,9 @@ class PolygonsTest(unittest.TestCase):
         self.assertFalse(values.table.isVisibleTo(values))
         self.assertTrue(table.isVisibleTo(values))
         self.assertEqual(table.rowCount(), 2)
-        corners: QTableWidgetItem | None = table.item(1, 2)
+        corners: QTableWidgetItem | None = table.item(
+            1, outline_values.SHAPE_COLUMN
+        )
         assert corners is not None
         self.assertEqual(corners.text(), "V4 V3 V5")
 
@@ -2680,7 +2676,8 @@ class PolygonsTest(unittest.TestCase):
     def test_solid_button(self) -> None:
         """[Solid] shows a revolved outline's solid, named after the
         outline, or after a tool (a letter first), in HSS (#819, #827,
-        #846); a flat outline has none."""
+        #846); a flat outline has one too (`T.sa~6.11` #S5), which says
+        why when its corners are not dimensioned."""
         path: Path = EXAMPLE_SHOP / "tools" / "drills" / "drill.outline.toml"
         editor: OutlineEditor = OutlineEditor(drawing_from(path), path=path)
         shown: list[Cacheable] = []
@@ -2704,7 +2701,9 @@ class PolygonsTest(unittest.TestCase):
         self.assertEqual(editor.view.message, "")
         self.assertTrue(editor.solid_button.isVisibleTo(editor))
         flat: OutlineEditor = OutlineEditor(Drawing())
-        self.assertFalse(flat.solid_button.isVisibleTo(flat))
+        self.assertTrue(flat.solid_button.isVisibleTo(flat))
+        flat.solid_button.click()
+        self.assertIn("No solid", flat.view.message)
         flat.deleteLater()
         editor.deleteLater()
         qt_app.process_events()

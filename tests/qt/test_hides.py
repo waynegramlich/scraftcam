@@ -11,6 +11,7 @@ from scraftcam.gui.hides import (
     minus,
     strip,
 )
+from tests.qt.shapes import HOUSE
 
 # Half a drill: tip at the origin, shoulder at 1.2, shank to 8.
 DRILL: list[tuple[float, float]] = [
@@ -59,13 +60,7 @@ class HidesTest(unittest.TestCase):
 
         # Two polygons, a box and a roof on it (`T.sa~6.11` #765):
         # across the roof only its stretch, across both their union.
-        house: list[tuple[float, float]] = [
-            (0.0, 0.0),
-            (4.0, 0.0),
-            (4.0, 4.0),
-            (0.0, 4.0),
-            (2.0, 6.0),
-        ]
+        house: list[tuple[float, float]] = list(HOUSE)
         loops: list[list[int]] = [[0, 1, 2, 3], [3, 2, 4]]
         self.assertEqual(
             inside_spans(house, HIDE_Y, 5.0, loops=loops), [(1.0, 3.0)]

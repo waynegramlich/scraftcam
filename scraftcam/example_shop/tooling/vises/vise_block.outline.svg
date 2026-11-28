@@ -1,0 +1,241 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="238.8929mm" height="96mm" viewBox="-12.2619 -51 159.2619 64">
+<rect x="-12.2619" y="-51" width="159.2619" height="64" class="paper" fill="white"/>
+<defs>
+<pattern id="hatch1" patternUnits="userSpaceOnUse" width="1.3333" height="1.3333" patternTransform="rotate(-45)"><line x1="0" y1="0.6667" x2="1.3333" y2="0.6667" stroke="black" stroke-width="0.1667"/></pattern>
+</defs>
+<path d="M 0 0 L 60 0 L 60 -40 L 0 -40 L 0 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 12.5 -13.75 L 47.5 -13.75 L 47.5 -26.25 L 12.5 -26.25 L 12.5 -13.75" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.5 -20 L 67.5 -20" class="ink" fill="none" stroke="black" stroke-dasharray="2 1" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 10.3125 -20 A 4.0625 4.0625 0 0 0 2.1875 -20 A 4.0625 4.0625 0 0 0 10.3125 -20" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.9062 -20 A 2.6562 2.6562 0 0 0 3.5938 -20 A 2.6562 2.6562 0 0 0 8.9062 -20" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 57.8125 -20 A 4.0625 4.0625 0 0 0 49.6875 -20 A 4.0625 4.0625 0 0 0 57.8125 -20" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 56.4062 -20 A 2.6562 2.6562 0 0 0 51.0938 -20 A 2.6562 2.6562 0 0 0 56.4062 -20" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.5 -20 L -5.5 -20" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.5 -20 L -7.5 -24" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.5 -24 L -7 -22.4 L -8 -22.4 L -7.5 -24" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.5 -27 L -8.2619 -25" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.5 -27 L -6.7381 -25" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -7.9762 -25.6667 L -7.0238 -25.6667" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 67.5 -20 L 65.5 -20" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 67.5 -20 L 67.5 -24" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 67.5 -24 L 68 -22.4 L 67 -22.4 L 67.5 -24" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 67.5 -27 L 66.7381 -25" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 67.5 -27 L 68.2619 -25" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 67.0238 -25.6667 L 67.9762 -25.6667" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 83 0 L 85.1875 0 L 85.1875 -15 L 83 -15 L 83 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 85.1875 0 L 86.5938 0 L 86.5938 -10 L 85.1875 -10 L 85.1875 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 91.9062 0 L 93.3125 0 L 93.3125 -10 L 91.9062 -10 L 91.9062 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 93.3125 0 L 95.5 0 L 95.5 -15 L 93.3125 -15 L 93.3125 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 95.5 0 L 130.5 0 L 130.5 -10 L 95.5 -10 L 95.5 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 130.5 0 L 132.6875 0 L 132.6875 -15 L 130.5 -15 L 130.5 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 132.6875 0 L 134.0938 0 L 134.0938 -10 L 132.6875 -10 L 132.6875 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 139.4062 0 L 140.8125 0 L 140.8125 -10 L 139.4062 -10 L 139.4062 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 140.8125 0 L 143 0 L 143 -15 L 140.8125 -15 L 140.8125 0" class="hatch" fill="url(#hatch1)" stroke="none"/>
+<path d="M 83 0 L 85.1875 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 83 -15 L 85.1875 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 85.1875 0 L 86.5938 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 85.1875 -10 L 86.5938 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 91.9062 0 L 93.3125 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 91.9062 -10 L 93.3125 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 93.3125 0 L 95.5 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 93.3125 -15 L 95.5 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 95.5 0 L 130.5 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 95.5 -10 L 130.5 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 130.5 0 L 132.6875 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 130.5 -15 L 132.6875 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 132.6875 0 L 134.0938 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 132.6875 -10 L 134.0938 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 139.4062 0 L 140.8125 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 139.4062 -10 L 140.8125 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 140.8125 0 L 143 0" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 140.8125 -15 L 143 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 83 0 L 83 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 85.1875 -10 L 85.1875 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 86.5938 0 L 86.5938 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 91.9062 0 L 91.9062 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 93.3125 -10 L 93.3125 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 95.5 -10 L 95.5 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 130.5 -10 L 130.5 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 132.6875 -10 L 132.6875 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 134.0938 0 L 134.0938 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 139.4062 0 L 139.4062 -10" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 140.8125 -10 L 140.8125 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 143 0 L 143 -15" class="ink" fill="none" stroke="black" stroke-width="0.4" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 104.8095 3.2857 L 104.619 3.0952 L 104.3333 3 L 103.9524 3 L 103.6667 3.0952 L 103.4762 3.2857 L 103.4762 3.4762 L 103.5714 3.6667 L 103.6667 3.7619 L 103.8571 3.8571 L 104.4286 4.0476 L 104.619 4.1429 L 104.7143 4.2381 L 104.8095 4.4286 L 104.8095 4.7143 L 104.619 4.9048 L 104.3333 5 L 103.9524 5 L 103.6667 4.9048 L 103.4762 4.7143" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 105.4762 3 L 105.4762 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 105.4762 3 L 106.7143 3" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 105.4762 3.9524 L 106.2381 3.9524" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 105.4762 5 L 106.7143 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 108.619 3.4762 L 108.5238 3.2857 L 108.3333 3.0952 L 108.1429 3 L 107.7619 3 L 107.5714 3.0952 L 107.381 3.2857 L 107.2857 3.4762 L 107.1905 3.7619 L 107.1905 4.2381 L 107.2857 4.5238 L 107.381 4.7143 L 107.5714 4.9048 L 107.7619 5 L 108.1429 5 L 108.3333 4.9048 L 108.5238 4.7143 L 108.619 4.5238" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 109.6667 3 L 109.6667 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 109 3 L 110.3333 3" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 110.8095 3 L 110.8095 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 112.0476 3 L 111.8571 3.0952 L 111.6667 3.2857 L 111.5714 3.4762 L 111.4762 3.7619 L 111.4762 4.2381 L 111.5714 4.5238 L 111.6667 4.7143 L 111.8571 4.9048 L 112.0476 5 L 112.4286 5 L 112.619 4.9048 L 112.8095 4.7143 L 112.9048 4.5238 L 113 4.2381 L 113 3.7619 L 112.9048 3.4762 L 112.8095 3.2857 L 112.619 3.0952 L 112.4286 3 L 112.0476 3" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 113.6667 3 L 113.6667 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 113.6667 3 L 115 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 115 3 L 115 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 117.7619 3 L 117 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 117.7619 3 L 118.5238 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 117.2857 4.3333 L 118.2381 4.3333" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 119 4.1429 L 120.7143 4.1429" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 121.9524 3 L 121.1905 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 121.9524 3 L 122.7143 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 121.4762 4.3333 L 122.4286 4.3333" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -20 L 7.25 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 7.75 -20 L 11.3125 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -20 L 6.25 -21" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -21.5 L 6.25 -25.0625" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -20 L 5.25 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.75 -20 L 1.1875 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -20 L 6.25 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -18.5 L 6.25 -14.9375" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -20 L 7.25 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 7.75 -20 L 9.9062 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -20 L 6.25 -21" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -21.5 L 6.25 -23.6562" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -20 L 5.25 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.75 -20 L 2.5938 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -20 L 6.25 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -18.5 L 6.25 -16.3438" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -20 L 54.75 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 55.25 -20 L 58.8125 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -20 L 53.75 -21" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -21.5 L 53.75 -25.0625" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -20 L 52.75 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 52.25 -20 L 48.6875 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -20 L 53.75 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -18.5 L 53.75 -14.9375" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -20 L 54.75 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 55.25 -20 L 57.4062 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -20 L 53.75 -21" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -21.5 L 53.75 -23.6562" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -20 L 52.75 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 52.25 -20 L 50.0938 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -20 L 53.75 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -18.5 L 53.75 -16.3438" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 1 L 0 9" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 60 1 L 60 9" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 8 L 28.1905 8" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 31.8095 8 L 60 8" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 8 L 2 7.6667 L 2 8.3333 L 0 8" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 60 8 L 58 8.3333 L 58 7.6667 L 60 8" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>L: Length = 6 in.  The block&#x27;s length, along its slot.</title>
+<rect x="27.5714" y="5" width="5.1429" height="6" fill="none" pointer-events="all"/>
+<path d="M 29.5714 7 L 29.5714 9" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 29.5714 9 L 30.7143 9" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 61 0 L 69 0" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 61 -40 L 69 -40" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 68 0 L 68 -18" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 68 -22 L 68 -40" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 68 0 L 67.6667 -2 L 68.3333 -2 L 68 0" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 68 -40 L 68.3333 -38 L 67.6667 -38 L 68 -40" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>W: Width = 4 in.  The block&#x27;s width, across its slot.</title>
+<rect x="65.0476" y="-23" width="5.9048" height="6" fill="none" pointer-events="all"/>
+<path d="M 67.0476 -21 L 67.5238 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 68 -21 L 67.5238 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 68 -21 L 68.4762 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 68.9524 -21 L 68.4762 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 0 1 L 0 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 12.5 -12.75 L 12.5 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 4 L 4.3452 4" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 8.1548 4 L 12.5 4" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 4 L 2 3.6667 L 2 4.3333 L 0 4" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 12.5 4 L 10.5 4.3333 L 10.5 3.6667 L 12.5 4" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>E: End = 1-1/4 in.  From each end of the block to its slot.</title>
+<rect x="3.7262" y="1" width="5.2381" height="6" fill="none" pointer-events="all"/>
+<path d="M 5.7262 3 L 5.7262 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.7262 3 L 6.9643 3" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.7262 3.9524 L 6.4881 3.9524" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.7262 5 L 6.9643 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 1 0 L 6 0" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 11.5 -13.75 L 4 -13.75" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5 0 L 5 -4.875" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5 -8.875 L 5 -13.75" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5 0 L 4.6667 -2 L 5.3333 -2 L 5 0" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5 -13.75 L 5.3333 -11.75 L 4.6667 -11.75 L 5 -13.75" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>SY: Slot side = (W - SW) / 2.  From the block&#x27;s side to its slot.</title>
+<rect x="1.4762" y="-9.875" width="7.2381" height="6" fill="none" pointer-events="all"/>
+<path d="M 4.8095 -7.5893 L 4.619 -7.7798 L 4.3333 -7.875 L 3.9524 -7.875 L 3.6667 -7.7798 L 3.4762 -7.5893 L 3.4762 -7.3988 L 3.5714 -7.2083 L 3.6667 -7.1131 L 3.8571 -7.0179 L 4.4286 -6.8274 L 4.619 -6.7321 L 4.7143 -6.6369 L 4.8095 -6.4464 L 4.8095 -6.1607 L 4.619 -5.9702 L 4.3333 -5.875 L 3.9524 -5.875 L 3.6667 -5.9702 L 3.4762 -6.1607" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.1905 -7.875 L 5.9524 -6.9226 L 5.9524 -5.875" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.7143 -7.875 L 5.9524 -6.9226" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 12.5 -12.75 L 12.5 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 47.5 -12.75 L 47.5 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 12.5 4 L 27.2381 4" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 32.7619 4 L 47.5 4" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 12.5 4 L 14.5 3.6667 L 14.5 4.3333 L 12.5 4" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 47.5 4 L 45.5 4.3333 L 45.5 3.6667 L 47.5 4" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>SL: Slot length = L - 2 * E.  The slot&#x27;s length.</title>
+<rect x="26.5238" y="1" width="7.1429" height="6" fill="none" pointer-events="all"/>
+<path d="M 29.8571 3.2857 L 29.6667 3.0952 L 29.381 3 L 29 3 L 28.7143 3.0952 L 28.5238 3.2857 L 28.5238 3.4762 L 28.619 3.6667 L 28.7143 3.7619 L 28.9048 3.8571 L 29.4762 4.0476 L 29.6667 4.1429 L 29.7619 4.2381 L 29.8571 4.4286 L 29.8571 4.7143 L 29.6667 4.9048 L 29.381 5 L 29 5 L 28.7143 4.9048 L 28.5238 4.7143" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 30.5238 3 L 30.5238 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 30.5238 5 L 31.6667 5" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 11.5 -13.75 L -5 -13.75" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 11.5 -26.25 L -5 -26.25" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -4 -13.75 L -4 -18" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -4 -22 L -4 -26.25" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -4 -13.75 L -4.3333 -15.75 L -3.6667 -15.75 L -4 -13.75" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -4 -26.25 L -3.6667 -24.25 L -4.3333 -24.25 L -4 -26.25" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>SW: Slot width = 1-1/4 in.  The slot&#x27;s width.</title>
+<rect x="-7.8095" y="-23" width="7.7143" height="6" fill="none" pointer-events="all"/>
+<path d="M -4.4762 -20.7143 L -4.6667 -20.9048 L -4.9524 -21 L -5.3333 -21 L -5.619 -20.9048 L -5.8095 -20.7143 L -5.8095 -20.5238 L -5.7143 -20.3333 L -5.619 -20.2381 L -5.4286 -20.1429 L -4.8571 -19.9524 L -4.6667 -19.8571 L -4.5714 -19.7619 L -4.4762 -19.5714 L -4.4762 -19.2857 L -4.6667 -19.0952 L -4.9524 -19 L -5.3333 -19 L -5.619 -19.0952 L -5.8095 -19.2857" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -4 -21 L -3.5238 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -3.0476 -21 L -3.5238 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -3.0476 -21 L -2.5714 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M -2.0952 -21 L -2.5714 -19" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 0 -1 L 0 -47" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -21 L 6.25 -47" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 -46 L 0.125 -46" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.125 -46 L 6.25 -46" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 -46 L 2 -46.3333 L 2 -45.6667 L 0 -46" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -46 L 4.25 -45.6667 L 4.25 -46.3333 L 6.25 -46" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>HX: Hole in = E / 2.  From the block&#x27;s end to a hole&#x27;s center.</title>
+<rect x="-0.494" y="-49" width="7.3333" height="6" fill="none" pointer-events="all"/>
+<path d="M 1.506 -47 L 1.506 -45" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 2.8393 -47 L 2.8393 -45" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1.506 -46.0476 L 2.8393 -46.0476" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.506 -47 L 4.8393 -45" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.8393 -47 L 3.506 -45" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 1 0 L 5 0" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.25 -20 L 3 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4 0 L 4 -8" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4 -12 L 4 -20" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4 0 L 3.6667 -2 L 4.3333 -2 L 4 0" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4 -20 L 4.3333 -18 L 3.6667 -18 L 4 -20" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>HY: Hole side = W / 2.  From the block&#x27;s side to the holes&#x27; centers.</title>
+<rect x="0.4762" y="-13" width="7.3333" height="6" fill="none" pointer-events="all"/>
+<path d="M 2.4762 -11 L 2.4762 -9" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.8095 -11 L 3.8095 -9" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 2.4762 -10.0476 L 3.8095 -10.0476" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.2857 -11 L 5.0476 -10.0476 L 5.0476 -9" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 5.8095 -11 L 5.0476 -10.0476" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 6.25 -21 L 6.25 -27" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -21 L 53.75 -27" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -26 L 27 -26" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 33 -26 L 53.75 -26" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 6.25 -26 L 8.25 -26.3333 L 8.25 -25.6667 L 6.25 -26" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 53.75 -26 L 51.75 -25.6667 L 51.75 -26.3333 L 53.75 -26" class="ink solid" fill="black" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>HS: Hole spacing = L - E.  Between the holes&#x27; centers.</title>
+<rect x="26.381" y="-29" width="7.3333" height="6" fill="none" pointer-events="all"/>
+<path d="M 28.381 -27 L 28.381 -25" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 29.7143 -27 L 29.7143 -25" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 28.381 -26.0476 L 29.7143 -26.0476" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 31.7143 -26.7143 L 31.5238 -26.9048 L 31.2381 -27 L 30.8571 -27 L 30.5714 -26.9048 L 30.381 -26.7143 L 30.381 -26.5238 L 30.4762 -26.3333 L 30.5714 -26.2381 L 30.7619 -26.1429 L 31.3333 -25.9524 L 31.5238 -25.8571 L 31.619 -25.7619 L 31.7143 -25.5714 L 31.7143 -25.2857 L 31.5238 -25.0952 L 31.2381 -25 L 30.8571 -25 L 30.5714 -25.0952 L 30.381 -25.2857" class="ink" fill="none" stroke="black" stroke-width="0.2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

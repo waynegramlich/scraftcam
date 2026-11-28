@@ -29,6 +29,7 @@ from scraftcam.gui.dimensions import (
     tip_on_origin,
     total,
 )
+from tests.qt.shapes import HOUSE
 
 # An L bracket, counterclockwise from the origin: W wide, H high, its
 # leg T thick.
@@ -163,13 +164,7 @@ class DimensionsTest(unittest.TestCase):
         corner in `points`, places its far corner (`T.sa~6.11` #797);
         taken as the next in `points` it is one too many instead."""
         # A 4 x 4 box from the origin, a roof on its top edge.
-        house: list[tuple[float, float]] = [
-            (0.0, 0.0),
-            (4.0, 0.0),
-            (4.0, 4.0),
-            (0.0, 4.0),
-            (2.0, 6.0),
-        ]
+        house: list[tuple[float, float]] = list(HOUSE)
         loops: list[list[int]] = [[0, 1, 2, 3], [3, 2, 4]]
         dimensions: list[Dimension] = [
             Dimension("", VERTICAL, ORIGIN, 0),

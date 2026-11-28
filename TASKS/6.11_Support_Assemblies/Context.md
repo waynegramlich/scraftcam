@@ -8,8 +8,9 @@ commits `52529b5`, `587c97a`, `56c63fd`, `c60b13d` and #S4's).
 Issue numbers are shared by every task; the next is in
 `TASKS/Issue_Counter.md`.
 
-**Where we are (2026-11-25):** #S1-#S4 done.  Next: #S5 (extruded
-trees, circles, cut lines, the section view).  Deferred: the ISO
+**Where we are (2026-11-27):** #S1-#S5 done (#S5 built 2026-11-27,
+after the user's Kubuntu 26.04.1 upgrade; checkers clean, outline
+tests pass).  Next: #S6 (assembly files).  Deferred: the ISO
 chain line on cutting edges (#830, "fun to have"); a revolved
 outline's mirror half is not hatched (#782).  The user is short of
 weekly tokens: small chunks, timed with `date`.
@@ -61,20 +62,40 @@ weekly tokens: small chunks, timed with `date`.
   SolidCraft answering or launches `solidcraft --control 8080`;
   `show(model)` inserts the cached `.step`, replaces a changed
   shape, hides the others (#832, #855); stopped at exit if started
-  here (#844).  [Solid] (`OutlineEditor.solid_button`, revolved
-  only) -> `show_solid()`; a tool's solid is named after its file
+  here (#844).  [Solid] (`OutlineEditor.solid_button`, any
+  outline since #S5) -> `show_solid()`; a tool's solid is named after its file
   (`drill_15_64_in_hss_jobber_drill`); `prepare_solid()` builds in a
   background thread when a tool opens (#843).  Checked live over
   MCP (`exposed.client start FILE`, `call solid`).
 
+* #S5 (2026-11-27): a flat outline is a tree.  `Polygon.parent`,
+  `Polygon.z` (a formula; file keys `parent`, `z`, written only when
+  set); `[[circles]]` (`Circle`: name, role, `center` vertex,
+  `diameter` formula, parent, z, #789); `[[cuts]]` (`Cut`: capital
+  letters, 3 vertices: ends, then a point on the side it looks
+  toward, #776, #861).  The reader checks parents exist and do not
+  loop; revolved outlines refuse parents, z, circles and cuts.
+  `Outline.nested()` spares parent/child from the overlap warning;
+  `solid_corners()` (polygons' corners, circles' centers): cut
+  vertices need no dimensions (`real_corners(..., needed=)`, the
+  editor's orange rings).  `outline_extruded()` /
+  `outline_solid()` (`outline_polygon.py`) build `Layer` trees into
+  `SolidRoundedPolygon` (several roots: an assembly); cached
+  (`"outline_extruded"`).  `gui/outline_section.py` (no Qt): spans,
+  material per slab, hatched section beside the plan ("SECTION
+  A-A", turned to look toward the side point), cut line marks.
+  Editor: [New Circle], [Cut Line] (Draw tab), [Polygons] tab
+  columns Name, Role, Parent, Z, Corners / Diameter; deleting a
+  center takes its circle (children move to its parent), a cut's
+  vertex its cut; [Solid] on flat outlines too.  #862 formulas take
+  inches (`1/2 in`; `in_` inside, `values._python()`).  Shipped
+  `example_shop/tooling/vises/vise_block.outline.toml` (+ `.svg`):
+  block, slot, two counterbored holes, cut A; its `.step` checked
+  headless (17 faces).  Tests: `tests/qt/test_outline_tree.py`.
+  The old `[[holes]]` remain, still refused by solids (#290).
+
 ## Decided, Not Yet Built
 
-* #766 extruded: each polygon names its parent and its `z` (a
-  formula in letters); #789 holes and pegs are circle polygons, a
-  counterbore two nested.  #790 a child lies wholly inside its
-  parent.  #776 sections: a cut line is a 3-vertex item ([Cut
-  Line], "Section A-A"), the section a second view, hatched; #782 a
-  revolved outline is its own section.
 * #769b mates: [Alignment] on two points, a point and a vector;
   extruded on the face at its `z`, revolved along the axis.
   #783k frames: extruded XY is solid XY; revolved, drawing Y is Z.
@@ -89,9 +110,7 @@ weekly tokens: small chunks, timed with `date`.
 
 ## Steps
 
-* #S1-#S4 done.
-* #S5 extruded trees, circles for holes and pegs, cut lines and the
-  section view (a vise block).
+* #S1-#S5 done.
 * #S6 assembly files: mates, keep-out polygons, `offers`,
   [Move]/[Rename], "used by" (the Z setter, then the vise).
 

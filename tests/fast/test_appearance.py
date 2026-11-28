@@ -2,7 +2,13 @@
 
 import unittest
 
-from scraftcam.appearance import STANDARD_HATCHES, Color, Hatch, Look, material_look
+from scraftcam.appearance import (
+    STANDARD_HATCHES,
+    Color,
+    Hatch,
+    Look,
+    material_look,
+)
 
 
 # Class `ColorTest`:

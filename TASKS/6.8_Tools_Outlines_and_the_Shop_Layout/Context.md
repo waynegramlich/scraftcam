@@ -10,8 +10,12 @@ by every task; the next is in `TASKS/Issue_Counter.md`.
 **Where we are (2026-11-24 late):** Steps #694, #S1-#S3, #S5-#S8
 done (#S4 dropped, #678).  Next: #726's declaration file (or a task
 of its own); then `T.tfo~6.5` reopens for the other round tools
-(#690, #727).  Round tool bits only for now; assemblies wait in
-`T.sa~6.11` (Suspended, #734).  The user has
+(#690, #727).  Round tool bits only for now.  `T.sa~6.11` was
+reopened by the user 2026-11-25 (#858): several polygons in one
+outline opened the door to assemblies, so what concerns polygons
+together (roles, shared edges, a solid per polygon, mates) is kept
+there; this task keeps where a tool's facts live and the outline as
+template.  The user has
 `scraftcam/example_shop/.allow_edits`.
 
 ## Open

@@ -1,0 +1,334 @@
+kind = "outline"
+version = 6
+revolve = false
+
+[letters.L]
+name = "Length"
+default = "6 in"
+help = "The block's length, along its slot."
+
+[letters.W]
+name = "Width"
+default = "4 in"
+help = "The block's width, across its slot."
+
+[letters.H]
+name = "Height"
+default = "1-1/2 in"
+help = "The block's height."
+
+[letters.E]
+name = "End"
+default = "1-1/4 in"
+help = "From each end of the block to its slot."
+
+[letters.SW]
+name = "Slot width"
+default = "1-1/4 in"
+help = "The slot's width."
+
+[letters.SD]
+name = "Slot depth"
+default = "1/2 in"
+help = "How deep the slot is cut."
+
+[letters.CB]
+name = "Counterbore"
+default = "13/16 in"
+help = "The counterbores' diameter (a 1/2 in socket head cap screw's)."
+
+[letters.CBD]
+name = "Counterbore depth"
+default = "1/2 in"
+help = "How deep the counterbores are cut."
+
+[letters.CH]
+name = "Clearance hole"
+default = "17/32 in"
+help = "The screws' clearance holes, through."
+
+[letters.SY]
+name = "Slot side"
+formula = "(W - SW) / 2"
+help = "From the block's side to its slot."
+
+[letters.SL]
+name = "Slot length"
+formula = "L - 2 * E"
+help = "The slot's length."
+
+[letters.HX]
+name = "Hole in"
+formula = "E / 2"
+help = "From the block's end to a hole's center."
+
+[letters.HY]
+name = "Hole side"
+formula = "W / 2"
+help = "From the block's side to the holes' centers."
+
+[letters.HS]
+name = "Hole spacing"
+formula = "L - E"
+help = "Between the holes' centers."
+
+[[vertices]]
+name = "V1"
+at = [0.0, 0.0]
+
+[[vertices]]
+name = "V2"
+at = [60.0, 0.0]
+
+[[vertices]]
+name = "V3"
+at = [60.0, 40.0]
+
+[[vertices]]
+name = "V4"
+at = [0.0, 40.0]
+
+[[vertices]]
+name = "V5"
+at = [12.5, 13.75]
+
+[[vertices]]
+name = "V6"
+at = [47.5, 13.75]
+
+[[vertices]]
+name = "V7"
+at = [47.5, 26.25]
+
+[[vertices]]
+name = "V8"
+at = [12.5, 26.25]
+
+[[vertices]]
+name = "V9"
+at = [6.25, 20.0]
+
+[[vertices]]
+name = "V10"
+at = [53.75, 20.0]
+
+[[vertices]]
+name = "V11"
+at = [-7.5, 20.0]
+
+[[vertices]]
+name = "V12"
+at = [67.5, 20.0]
+
+[[vertices]]
+name = "V13"
+at = [30.0, 30.0]
+
+[[polygons]]
+name = "block"
+role = "support"
+vertices = ["V1", "V2", "V3", "V4"]
+z = "H"
+
+[[polygons]]
+name = "slot"
+role = "other"
+vertices = ["V5", "V6", "V7", "V8"]
+parent = "block"
+z = "H - SD"
+
+[[circles]]
+name = "bore1"
+role = "other"
+center = "V9"
+diameter = "CB"
+parent = "block"
+z = "H - CBD"
+
+[[circles]]
+name = "hole1"
+role = "other"
+center = "V9"
+diameter = "CH"
+parent = "bore1"
+z = "0 in"
+
+[[circles]]
+name = "bore2"
+role = "other"
+center = "V10"
+diameter = "CB"
+parent = "block"
+z = "H - CBD"
+
+[[circles]]
+name = "hole2"
+role = "other"
+center = "V10"
+diameter = "CH"
+parent = "bore2"
+z = "0 in"
+
+[[cuts]]
+name = "A"
+vertices = ["V11", "V12", "V13"]
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = "V1"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "origin"
+to = "V1"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "L"
+kind = "horizontal"
+from = "V1"
+to = "V2"
+offset = -8.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V1"
+to = "V2"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "W"
+kind = "vertical"
+from = "V2"
+to = "V3"
+offset = 68.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "V2"
+to = "V3"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V3"
+to = "V4"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "V1"
+to = "V4"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "E"
+kind = "horizontal"
+from = "V1"
+to = "V5"
+offset = -4.0
+along = 0.5
+
+[[dimensions]]
+letter = "SY"
+kind = "vertical"
+from = "V1"
+to = "V5"
+offset = 5.0
+along = 0.5
+
+[[dimensions]]
+letter = "SL"
+kind = "horizontal"
+from = "V5"
+to = "V6"
+offset = -4.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V5"
+to = "V6"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "SW"
+kind = "vertical"
+from = "V6"
+to = "V7"
+offset = -4.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "V6"
+to = "V7"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V7"
+to = "V8"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "V5"
+to = "V8"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "HX"
+kind = "horizontal"
+from = "V1"
+to = "V9"
+offset = 46.0
+along = 0.5
+
+[[dimensions]]
+letter = "HY"
+kind = "vertical"
+from = "V1"
+to = "V9"
+offset = 4.0
+along = 0.5
+
+[[dimensions]]
+letter = "HS"
+kind = "horizontal"
+from = "V9"
+to = "V10"
+offset = 26.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V9"
+to = "V10"
+offset = 0.0
+along = 0.5

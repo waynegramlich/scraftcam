@@ -26,6 +26,7 @@ from scraftcam.gui.values import (
     set_letters,
     values_cross,
 )
+from tests.qt.shapes import HOUSE
 
 # A plate W by H from the origin, its top corners rounded.
 PLATE: list[tuple[float, float]] = [
@@ -234,11 +235,7 @@ class OverlapsTest(unittest.TestCase):
         three of a square's corners, a corner poking in, and crossing
         edges overlap."""
         points: list[tuple[float, float]] = [
-            (0.0, 0.0),
-            (4.0, 0.0),
-            (4.0, 4.0),
-            (0.0, 4.0),
-            (2.0, 6.0),
+            *HOUSE,
             (2.0, 2.0),
             (6.0, 2.0),
         ]

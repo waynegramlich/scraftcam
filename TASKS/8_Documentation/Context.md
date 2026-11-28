@@ -52,3 +52,8 @@ numbers are shared by every task; the next is in
   hatches its drawing, HSS by default); the drill is flutes and
   shank; [Solid] shows a round tool in SolidCraft (started if need
   be, `solid_viewer.py`), its `.step` cached headless.
+* `T.sa~6.11` #S5: flat outlines are trees (a polygon's parent and
+  `z`), circles for holes and pegs, cut lines and their sections
+  ([New Circle], [Cut Line], the [Polygons] tab's Parent, Z and
+  diameter); [Solid] for flat outlines; inches in formulas
+  (`1/2 in`); the vise block outline in `tooling/vises/`.
