@@ -100,6 +100,7 @@ from ..model import MM_PER  # noqa: E402
 from ..model_cache import Cacheable  # noqa: E402
 from ..shops import OUTLINE_SUFFIX, material_looks, shop_of  # noqa: E402
 from . import theme  # noqa: E402
+from .assembly_file import move_outline  # noqa: E402
 from .dimensions import (  # noqa: E402
     ANGLE,
     AXES,
@@ -145,6 +146,7 @@ from .letters import (  # noqa: E402
 from .outline_cuts import cut_pieces  # noqa: E402
 from .outline_diagram import (  # noqa: E402
     Fillet,
+    circle_radius,
     dimension_arc,
     dimension_strokes,
     fillet_arcs,
@@ -175,9 +177,11 @@ from .outline_values import (  # noqa: E402
 )
 from .solid_viewer import VIEWER, ViewerError  # noqa: E402
 from .values import (  # noqa: E402
+    circle_in_loop,
     crossings,
     overlaps,
     placed_corners,
+    poking_out,
     set_letters,
     values_cross,
 )
@@ -5001,6 +5005,14 @@ class OutlineEditor(QWidget):
     * `tab_bar` (`QTabBar`): [Drawing], [SVG], [Edit] (`ViewTab`).
     * `stack` (`QStackedWidget`): The view or the diagram.
     * `outline_link` (`QLabel`): "Edit the Drill outline", for a tool.
+    * `users_link` (`QLabel`): "Used by:" the assemblies using the
+      outline, each a link (`T.sa~6.11` #783h).
+    * `open_user` (`Callable[[str], None] | None`): Opens one of them,
+      by its path.
+    * `file_field` (`QLineEdit`): The outline's place in its shop,
+      typed over to move or rename it, in [Edit] (`T.sa~6.11` #783h).
+    * `moved` (`Callable[[Path], None] | None`): Shows the outline at
+      its new place.
     * `picture` (`QSvgWidget`): The diagram, in [SVG].
     * `splitter` (`QSplitter`): The drawing over the table.
     * `status` (`QLabel`): The last refusal, under the button tabs.
@@ -5030,6 +5042,8 @@ class OutlineEditor(QWidget):
         self.tool_material: str = ""
         self.tool_name: str = ""
         self.edit_outline: Callable[[], None] | None = None
+        self.open_user: Callable[[str], None] | None = None
+        self.moved: Callable[[Path], None] | None = None
         self.saved: str = file_text(path)
         self.setWindowTitle(
             "Outline Editor" if path is None else f"Outline Editor: {path}"
@@ -5207,6 +5221,16 @@ class OutlineEditor(QWidget):
         self.outline_link: QLabel = QLabel("")
         self.outline_link.setVisible(False)
         self.outline_link.linkActivated.connect(self.follow_outline_link)
+        self.users_link: QLabel = QLabel("")
+        self.users_link.setVisible(False)
+        self.users_link.linkActivated.connect(self.follow_user_link)
+        self.file_field: QLineEdit = QLineEdit()
+        self.file_field.setToolTip(
+            "This outline's place in the shop: type a new one and press"
+            " Enter to move or rename it; the assemblies using it follow"
+        )
+        self.file_field.setVisible(False)
+        self.file_field.returnPressed.connect(self.move_file)
         # [Solid] shows a round tool in SolidCraft (`T.sa~6.11` #819).
         self.solid_button: QPushButton = QPushButton("Solid")
         self.solid_button.setToolTip("Show this as a solid in SolidCraft")
@@ -5216,7 +5240,9 @@ class OutlineEditor(QWidget):
         row.addWidget(self.tab_bar)
         row.addWidget(self.solid_button)
         row.addWidget(self.outline_link)
+        row.addWidget(self.users_link)
         row.addStretch(1)
+        row.addWidget(self.file_field)
         self.stack: QStackedWidget = QStackedWidget()
         self.stack.addWidget(self.view)
         self.stack.addWidget(self.picture)
@@ -5290,6 +5316,34 @@ class OutlineEditor(QWidget):
             "[Edit] tab."
         )
         self.outline_link.setVisible(True)
+
+    # Method `OutlineEditor.offer_users()`:
+    def offer_users(
+        self, users: list[tuple[str, str]], open_user: Callable[[str], None]
+    ) -> None:
+        """Say which assemblies use this outline, each a link that opens
+        it (`T.sa~6.11` #783h); nothing when none do.
+
+        Arguments:
+        * `users` (`list[tuple[str, str]]`): Each one's name, as "Z
+          setter assembly", and its path.
+        * `open_user` (`Callable[[str], None]`): Opens one, by path.
+        """
+        self.open_user = open_user
+        self.users_link.setText(
+            "Used by: "
+            + ", ".join(f'<a href="{path}">{name}</a>' for name, path in users)
+        )
+        self.users_link.setToolTip(
+            "Changing this outline changes these assemblies too."
+        )
+        self.users_link.setVisible(bool(users))
+
+    # Method `OutlineEditor.follow_user_link()`:
+    def follow_user_link(self, link: str) -> None:
+        """Open an assembly using this outline (its link's path)."""
+        if self.open_user is not None:
+            self.open_user(link)
 
     # Method `OutlineEditor.follow_outline_link()`:
     def follow_outline_link(self, _link: str) -> None:
@@ -5524,7 +5578,73 @@ class OutlineEditor(QWidget):
             self.values.table.setCurrentCell(-1, -1)
             self.arm(None)
         self.values.show_rows()
+        self.show_file_field()
         self.show_message()
+
+    # Method `OutlineEditor.show_file_field()`:
+    def show_file_field(self) -> None:
+        """Show the outline's place in its shop, to move it, only in
+        an [Edit] that may change it (`T.sa~6.11` #783h)."""
+        place: str = self.shop_place()
+        shown: bool = bool(place) and not self.read_only
+        self.file_field.setVisible(shown)
+        if shown:
+            self.file_field.setText(place)
+
+    # Method `OutlineEditor.shop_place()`:
+    def shop_place(self) -> str:
+        """Return the outline's place from its shop's top, without
+        `.outline.toml`; "" when it has no file or is in no shop.
+
+        Returns:
+        * (`str`): The place, as `tooling/z_setters/z_setter_block`.
+        """
+        if self.path is None:
+            return ""
+        try:
+            return (
+                self.path.resolve()
+                .relative_to(shop_of(self.path))
+                .as_posix()
+                .removesuffix(OUTLINE_SUFFIX)
+            )
+        except ValueError:
+            return ""
+
+    # Method `OutlineEditor.move_file()`:
+    def move_file(self) -> None:
+        """Move or rename the outline to the place typed (from the
+        shop's top, without `.outline.toml`), its `.svg` and the
+        assemblies using it following; a bad place is refused."""
+        if self.path is None or self.read_only or not self.shop_place():
+            return
+        shop: Path = shop_of(self.path)
+        text: str = self.file_field.text().strip().strip("/")
+        new: Path = shop / f"{text}{OUTLINE_SUFFIX}"
+        if new.resolve() == self.path.resolve():
+            return
+        problem: str = ""
+        if not re.fullmatch(r"[A-Za-z0-9_]+(/[A-Za-z0-9_]+)*", text):
+            problem = (
+                f"{text!r} is not a place for an outline: names of"
+                " letters, digits and _, joined by /."
+            )
+        else:
+            try:
+                move_outline(self.path, new, shop)
+            except OSError as error:
+                problem = f"Not moved: {error}"
+        if problem:
+            self.view.message = problem
+            self.show_file_field()
+            self.show_message()
+            return
+        self.path = new
+        self.saved = new.read_text(encoding="utf-8")
+        self.view.message = ""
+        self.show_message()
+        if self.moved is not None:
+            self.moved(new)
 
     # Method `OutlineEditor.save()`:
     def save(self) -> None:
@@ -5562,13 +5682,84 @@ class OutlineEditor(QWidget):
             if not drawing.nested(names[one], names[other])
         ]
         if not found:
-            return ""
+            return self.parent_problem()
         first: str = names[found[0][0]]
         second: str = names[found[0][1]]
         return (
             f"Polygons {first} and {second} overlap: move a corner so"
             " they only touch."
         )
+
+    # Method `OutlineEditor.parent_problem()`:
+    def parent_problem(self) -> str:
+        """Say which polygon or circle is not wholly inside its parent
+        (`T.sa~6.11` #790, #868), as drawn, or "".
+
+        Returns:
+        * (`str`): The problem, naming the first.
+        """
+        drawing: Drawing = self.view.drawing
+        loops: dict[str, list[int]] = dict(
+            zip(
+                [polygon.name for polygon in drawing.polygons],
+                drawing.loops(),
+                strict=True,
+            )
+        )
+        circles: dict[str, tuple[tuple[float, float], float]] = {
+            circle.name: (
+                drawing.points[drawing.names.index(circle.center)],
+                circle_radius(drawing, circle, drawing.scale),
+            )
+            for circle in drawing.circles
+        }
+        child: str
+        parent: str
+        for child, parent in drawing.parents().items():
+            if parent and not self.inside(child, parent, loops, circles):
+                return (
+                    f"{child} is not wholly inside its parent {parent}:"
+                    " move it in, or choose another parent."
+                )
+        return ""
+
+    # Method `OutlineEditor.inside()`:
+    def inside(
+        self,
+        child: str,
+        parent: str,
+        loops: dict[str, list[int]],
+        circles: dict[str, tuple[tuple[float, float], float]],
+    ) -> bool:
+        """Return whether a polygon or circle lies wholly inside
+        another, as drawn, touching allowed (#868).
+
+        Arguments:
+        * `child` (`str`): Its name.
+        * `parent` (`str`): The other's name.
+        * `loops` (`dict[str, list[int]]`): Each polygon's corners.
+        * `circles` (`dict[str, tuple[tuple[float, float], float]]`):
+          Each circle's center and radius, as drawn.
+
+        Returns:
+        * (`bool`): Whether it is inside (True when either is unknown).
+        """
+        points: list[tuple[float, float]] = self.view.drawing.points
+        slack: float = 1e-9
+        if child in loops and parent in loops:
+            return not poking_out(points, loops[child], loops[parent])
+        if child in circles and parent in loops:
+            return circle_in_loop(*circles[child], points, loops[parent])
+        if child in circles and parent in circles:
+            (center, radius), (outer, room) = circles[child], circles[parent]
+            return math.dist(center, outer) + radius <= room + slack
+        if child in loops and parent in circles:
+            outer, room = circles[parent]
+            return all(
+                math.dist(points[corner], outer) <= room + slack
+                for corner in loops[child]
+            )
+        return True
 
     # Method `OutlineEditor.show_message()`:
     def show_message(self, *_regions: object) -> None:

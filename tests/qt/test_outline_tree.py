@@ -26,7 +26,13 @@ from scraftcam.gui.outline_section import (
     section_strokes,
     spans,
 )
-from scraftcam.gui.values import evaluate, formula_names, real_corners
+from scraftcam.gui.values import (
+    circle_in_loop,
+    evaluate,
+    formula_names,
+    poking_out,
+    real_corners,
+)
 from scraftcam.shops import EXAMPLE_SHOP
 from scraftcam.solid import Solid, SolidAssembly, SolidRoundedPolygon
 from tests import qt_app
@@ -249,6 +255,46 @@ class EditorTest(unittest.TestCase):
         )
         drawing.remove(drawing.names.index("V11"))
         self.assertEqual([cut.name for cut in drawing.cuts], ["B"])
+
+    def test_outside_parent(self) -> None:
+        """A slot dragged past its block's edge, or a bore too big for
+        it, is named in red until it is back inside (#868)."""
+        editor: OutlineEditor = OutlineEditor(
+            drawing_from_text(VISE_BLOCK.read_text(), "vise")
+        )
+        drawing: Drawing = editor.view.drawing
+        self.assertEqual(editor.parent_problem(), "")
+        slot: int = drawing.names.index("V6")
+        x: float
+        y: float
+        x, y = drawing.points[slot]
+        drawing.points[slot] = (x + 100.0, y)
+        self.assertIn(
+            "slot is not wholly inside its parent block",
+            editor.parent_problem(),
+        )
+        drawing.points[slot] = (x, y)
+        drawing.scale = 10.0 / 25.4
+        drawing.circles[0].diameter = "3 in"
+        self.assertIn("bore1 is not wholly inside", editor.parent_problem())
+        editor.deleteLater()
+        qt_app.process_events()
+
+    def test_poking_out(self) -> None:
+        """A child touching its parent's edge is inside; one corner
+        out is not."""
+        points: list[tuple[float, float]] = [
+            *SQUARE,
+            (0.0, 2.0),
+            (5.0, 2.0),
+            (5.0, 5.0),
+            (12.0, 5.0),
+        ]
+        parent: list[int] = [0, 1, 2, 3]
+        self.assertFalse(poking_out(points, [4, 5, 6], parent))
+        self.assertTrue(poking_out(points, [4, 5, 7], parent))
+        self.assertTrue(circle_in_loop((5.0, 5.0), 5.0, points, parent))
+        self.assertFalse(circle_in_loop((5.0, 5.0), 5.5, points, parent))
 
     def test_nested_do_not_overlap(self) -> None:
         """A slot inside its block is not called an overlap."""

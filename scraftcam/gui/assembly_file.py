@@ -4,7 +4,7 @@ An assembly file, `KIND.assembly.toml`, is needed only when parts
 move, mix kinds (revolved and flat), repeat, or come from a `.step`
 (#783a).  It has its own letters, the ones it exports (#783b), and
 its parts, each an outline file with its letters given as formulas
-in the assembly's:
+in the assembly's, or a `.step` from elsewhere, as it is (#783f):
 
 ```
 kind = "assembly"
@@ -34,33 +34,50 @@ A part with `on` stands on that earlier part (#769b): its origin at
 the parent's vertex `at` (its real place), lifted to the `z` of the
 parent's polygon or circle `face` (absent: 0, its base), its +Z the
 parent's (`flip = true`: the parent's -Z), turned `turn` (a formula,
-an angle) about it.  An extruded outline's +Z is its extrusion; a
+an angle) about it, then slid `slide` (a formula) along its own X: a
+part that moves is moved by a letter (#783d).  `keep_out` polygons
+and circles of flat parts are its keep-outs (`keep_out_zones()`,
+#783g).  An extruded outline's +Z is its extrusion; a
 revolved one's is its axis (#783k).  A part with no `on` sits at the
-assembly's origin.  `outline` is relative to the assembly file.  No
+assembly's origin.  `outline` is relative to the assembly file, or
+`library:PATH`, relative to the shipped example shop (#791).  No
 Qt.
 """
 
 import math
 import os
-import tomllib
 from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
 
+from .. import geometry
 from ..appearance import Color
+from ..geometry import Corner
 from ..model import Angle, Length, Placement, Rotation
 from ..model_cache import Cacheable
-from ..shops import ASSEMBLY_SUFFIX
-from ..solid import Placed, Solid, SolidAssembly
+from ..shops import ASSEMBLY_SUFFIX, EXAMPLE_SHOP
+from ..solid import (
+    STEP_SUFFIXES,
+    Layer,
+    Placed,
+    Solid,
+    SolidAssembly,
+    SolidRoundedPolygon,
+    SolidStep,
+)
 from .letters import Letter
 from .outline_file import (
     VERTEX_NAME,
+    Circle,
     Outline,
     OutlineError,
+    Polygon,
+    Role,
     _letter_lines,
     _Reader,
     _string,
     outline_from_text,
+    toml_reader,
 )
 from .outline_polygon import outline_solid, solid_cacheable
 from .values import evaluate, letter_values, real_corners, set_letters
@@ -70,7 +87,7 @@ ASSEMBLY_VERSION: int = 1
 
 
 # Class `Part`:
-# One attribute per key of its table, which has eight.
+# One attribute per key of its table, which has nine.
 @dataclass(slots=True)
 class Part:  # pylint: disable=too-many-instance-attributes
     """One part of an assembly: an outline, its letters and its mate.
@@ -87,9 +104,12 @@ class Part:  # pylint: disable=too-many-instance-attributes
     * `turn` (`str`): How far it is turned about its +Z, a formula
       ("" for none).
     * `flip` (`bool`): True to stand it upside down (+Z down).
+    * `slide` (`str`): How far it is moved along its own X once
+      turned, a formula ("" for none): with `turn`, how a part moves
+      (#783d), as a vise's jaw opening.
 
     Constructor:
-    * `Part(name, outline, letters, on, at, face, turn, flip)`
+    * `Part(name, outline, letters, on, at, face, turn, flip, slide)`
     """
 
     # Constructor arguments:
@@ -101,6 +121,7 @@ class Part:  # pylint: disable=too-many-instance-attributes
     face: str = field(init=True, default="")
     turn: str = field(init=True, default="")
     flip: bool = field(init=True, default=False)
+    slide: str = field(init=True, default="")
 
 
 # Class `Assembly`:
@@ -137,11 +158,9 @@ def assembly_from_text(text: str, source: str = "") -> Assembly:
     Raises:
     * `OutlineError`: Every problem found, a line each.
     """
-    try:
-        data: dict[str, object] = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
-        raise OutlineError(f"{source}: {error}") from error
-    reader: _Reader = _Reader(source)
+    data: dict[str, object]
+    reader: _Reader
+    data, reader = toml_reader(text, source)
     if data.get("kind") != "assembly":
         reader.note("kind", 'is not "assembly"')
     if data.get("version") != ASSEMBLY_VERSION:
@@ -204,6 +223,7 @@ def assembly_text(assembly: Assembly) -> str:
             ("at", part.at),
             ("face", part.face),
             ("turn", part.turn),
+            ("slide", part.slide),
         ):
             if value:
                 lines.append(f"{key} = {_string(value)}")
@@ -235,7 +255,7 @@ def used_by(outline: Path, shop: Path) -> list[Path]:
         except (OSError, OutlineError):
             continue
         if any(
-            (path.parent / part.outline).resolve() == outline.resolve()
+            outline_path(part, path.parent).resolve() == outline.resolve()
             for part in assembly.parts
         ):
             found.append(path)
@@ -274,7 +294,7 @@ def move_outline(old: Path, new: Path, shop: Path) -> list[Path]:
         )
         part: Part
         for part in assembly.parts:
-            if (path.parent / part.outline).resolve() == old.resolve():
+            if outline_path(part, path.parent).resolve() == old.resolve():
                 part.outline = os.path.relpath(new, path.parent)
         path.write_text(assembly_text(assembly), encoding="utf-8")
     return users
@@ -300,7 +320,7 @@ def _part(
         return None
     strings: dict[str, str] = {}
     key: str
-    for key in ("name", "outline", "on", "at", "face", "turn"):
+    for key in ("name", "outline", "on", "at", "face", "turn", "slide"):
         value: object = table.get(key, "")
         if not isinstance(value, str):
             reader.note(where, f"{key} = {value!r}: is not a string")
@@ -343,7 +363,28 @@ def _part(
         strings["face"],
         strings["turn"],
         bool(flip),
+        strings["slide"],
     )
+
+
+# A part's outline shipped with `scraftcam` starts so (#791).
+LIBRARY: str = "library:"
+
+
+# Function `outline_path()`:
+def outline_path(part: Part, directory: Path) -> Path:
+    """Return the file a part's outline names.
+
+    Arguments:
+    * `part` (`Part`): The part.
+    * `directory` (`Path`): The assembly file's directory.
+
+    Returns:
+    * (`Path`): Beside the assembly, or in the shipped library.
+    """
+    if part.outline.startswith(LIBRARY):
+        return EXAMPLE_SHOP / part.outline.removeprefix(LIBRARY)
+    return directory / part.outline
 
 
 # Function `part_outline()`:
@@ -363,7 +404,7 @@ def part_outline(assembly: Assembly, part: Part, directory: Path) -> Outline:
     * `ValueError`: If a formula can not be worked out, or names a
       letter the outline does not have.
     """
-    path: Path = directory / part.outline
+    path: Path = outline_path(part, directory)
     try:
         text: str = path.read_text(encoding="utf-8")
     except OSError as error:
@@ -434,19 +475,133 @@ def assembly_solid(
     placed: list[Placed] = []
     part: Part
     for part in assembly.parts:
-        outline: Outline = part_outline(assembly, part, directory)
-        outlines[part.name] = outline
         here: Placement = Placement()
         if part.on:
+            if part.on not in outlines:
+                raise ValueError(
+                    f"{part.name}: {part.on} is a .step: nothing stands"
+                    " on one yet (#783f)"
+                )
             here = places[part.on].compose(
                 _mate(assembly, part, outlines[part.on])
             )
         places[part.name] = here
-        solid: Solid = outline_solid(
-            outline, f"{name}_{part.name}", color=color
-        )
+        solid: Solid
+        if part.outline.lower().endswith(STEP_SUFFIXES):
+            # A vendor's model, as it is (#783f).
+            solid = SolidStep(
+                f"{name}_{part.name}", outline_path(part, directory)
+            )
+        else:
+            outline: Outline = part_outline(assembly, part, directory)
+            outlines[part.name] = outline
+            solid = outline_solid(outline, f"{name}_{part.name}", color=color)
         placed.append(Placed(solid, here))
     return SolidAssembly(name, placed)
+
+
+# Function `keep_out_zones()`:
+def keep_out_zones(
+    assembly: Assembly, directory: Path
+) -> list[geometry.RoundedPolygon]:
+    """Return an assembly's keep-outs (`T.sa~6.11` #783g): each flat
+    part's `keep_out` polygon or circle, placed, from its parent's `z`
+    to its own, as `keepout.py` checks them (which grows each by the
+    cutter's radius).
+
+    Arguments:
+    * `assembly` (`Assembly`): The assembly.
+    * `directory` (`Path`): The assembly file's directory.
+
+    Returns:
+    * (`list[geometry.RoundedPolygon]`): The zones, in millimeters in
+      the assembly's frame, each named `PART_SHAPE`.
+
+    Raises:
+    * `OutlineError`: As `assembly_solid()`.
+    * `ValueError`: As `assembly_solid()`.
+    """
+    solid: SolidAssembly = assembly_solid(assembly, "zone", directory)
+    zones: list[geometry.RoundedPolygon] = []
+    part: Part
+    placed: Placed
+    for part, placed in zip(assembly.parts, solid.parts, strict=True):
+        if not isinstance(placed.solid, SolidRoundedPolygon):
+            continue
+        outline: Outline = part_outline(assembly, part, directory)
+        shapes: list[Polygon | Circle] = [
+            *outline.polygons,
+            *outline.circles,
+        ]
+        roles: dict[str, Role] = {each.name: each.role for each in shapes}
+        prefix: str = f"{placed.solid.name}_"
+        layer: Layer
+        base: float
+        for layer, base in _layers(placed.solid.root, 0.0):
+            shape: str = layer.polygon.name.removeprefix(prefix)
+            if roles.get(shape) is Role.KEEP_OUT:
+                zones.append(
+                    _zone(f"{part.name}_{shape}", layer, base, placed)
+                )
+    return zones
+
+
+# Function `_layers()`:
+def _layers(layer: Layer, base: float) -> list[tuple[Layer, float]]:
+    """Return a layer and every layer on it, each with its parent's
+    `z` (mm).
+
+    Arguments:
+    * `layer` (`Layer`): The layer.
+    * `base` (`float`): Its parent's `z` (0 for the root).
+
+    Returns:
+    * (`list[tuple[Layer, float]]`): In tree order.
+    """
+    found: list[tuple[Layer, float]] = [(layer, base)]
+    child: Layer
+    for child in layer.children:
+        found += _layers(child, layer.z.mm())
+    return found
+
+
+# Function `_zone()`:
+def _zone(
+    name: str, layer: Layer, base: float, placed: Placed
+) -> geometry.RoundedPolygon:
+    """Return one layer as a zone, placed in the assembly.
+
+    Arguments:
+    * `name` (`str`): The zone's name.
+    * `layer` (`Layer`): The layer (its own frame is its part's).
+    * `base` (`float`): Its parent's `z` (mm).
+    * `placed` (`Placed`): Its part's placement.
+
+    Returns:
+    * (`geometry.RoundedPolygon`): The zone, sharp or rounded as the
+      layer is, between its two heights.
+    """
+    turned: list[tuple[float, float, float]] = [
+        placed.placement.rotation.apply((each.x, each.y, 0.0))
+        for each in layer.polygon.corners
+    ]
+    dx: float
+    dy: float
+    dz: float
+    dx, dy, dz = placed.placement.mm()
+    heights: list[float] = [
+        placed.placement.rotation.apply((0.0, 0.0, level))[2] + dz
+        for level in (base, layer.z.mm())
+    ]
+    return geometry.RoundedPolygon(
+        name,
+        [
+            Corner(point[0] + dx, point[1] + dy, each.radius)
+            for point, each in zip(turned, layer.polygon.corners, strict=True)
+        ],
+        min(heights),
+        max(heights),
+    )
 
 
 # Function `assembly_cacheable()`:
@@ -522,10 +677,12 @@ def _mate(assembly: Assembly, part: Part, parent: Outline) -> Placement:
         rotation = Rotation.about((1.0, 0.0, 0.0), Angle(Fraction(180))) * (
             rotation
         )
-    return Placement(
-        (_mm(x), _mm(y), _mm(z)),
-        rotation,
-    )
+    slide: float = evaluate(part.slide, values) if part.slide else 0.0
+    dx: float
+    dy: float
+    dz: float
+    dx, dy, dz = rotation.apply((slide, 0.0, 0.0))
+    return Placement((_mm(x + dx), _mm(y + dy), _mm(z + dz)), rotation)
 
 
 # Function `_face_height()`:

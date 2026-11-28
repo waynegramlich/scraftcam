@@ -928,15 +928,35 @@ def outline_from_text(text: str, source: str = "") -> Outline:
     * `OutlineError`: Every problem found, a line each, naming the
       file and the entry.
     """
-    try:
-        data: dict[str, object] = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
-        raise OutlineError(f"{source}: {error}") from error
-    reader: _Reader = _Reader(source)
+    data: dict[str, object]
+    reader: _Reader
+    data, reader = toml_reader(text, source)
     outline: Outline = reader.outline(data)
     if reader.problems:
         raise OutlineError("\n".join(reader.problems))
     return outline
+
+
+# Function `toml_reader()`:
+def toml_reader(text: str, source: str) -> tuple[dict[str, object], "_Reader"]:
+    """Return a file's TOML tables and a reader to note problems in
+    them (for outline and assembly files, `T.sa~6.11` #S6).
+
+    Arguments:
+    * `text` (`str`): The file's text.
+    * `source` (`str`): The file's name, for messages.
+
+    Returns:
+    * (`tuple[dict[str, object], _Reader]`): The tables and the reader.
+
+    Raises:
+    * `OutlineError`: When the text is not TOML.
+    """
+    try:
+        data: dict[str, object] = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as error:
+        raise OutlineError(f"{source}: {error}") from error
+    return data, _Reader(source)
 
 
 # Class `_Reader`:

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="201.7714mm" height="146.7mm" viewBox="-0.8333 -13.3333 28.0238 20.375">
+<rect x="-0.8333" y="-13.3333" width="28.0238" height="20.375" class="paper" fill="white"/>
+<path d="M 0 0 L 7.5 0 L 7.5 -12.5 L 0 -12.5 L 0 0" class="ink" fill="none" stroke="black" stroke-width="0.0833" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 0.2083 L 0 6.2083" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 7.5 0.2083 L 7.5 6.2083" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 6 L 3.2242 6" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 4.2758 6 L 7.5 6" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 0 6 L 0.4167 5.9306 L 0.4167 6.0694 L 0 6" class="ink solid" fill="black" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 7.5 6 L 7.0833 6.0694 L 7.0833 5.9306 L 7.5 6" class="ink solid" fill="black" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>JT: Thickness = 3/4 in.  The jaw&#x27;s thickness, along the slot.</title>
+<rect x="3.0556" y="5.375" width="1.4087" height="1.25" fill="none" pointer-events="all"/>
+<path d="M 3.6706 5.7917 L 3.6706 6.1091 L 3.6508 6.1687 L 3.631 6.1885 L 3.5913 6.2083 L 3.5516 6.2083 L 3.5119 6.1885 L 3.4921 6.1687 L 3.4722 6.1091 L 3.4722 6.0694" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.9087 5.7917 L 3.9087 6.2083" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 3.7698 5.7917 L 4.0476 5.7917" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<path d="M 7.7083 0 L 26.2083 0" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 7.7083 -12.5 L 26.2083 -12.5" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 26 0 L 26 -5.8333" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 26 -6.6667 L 26 -12.5" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 26 0 L 25.9306 -0.4167 L 26.0694 -0.4167 L 26 0" class="ink solid" fill="black" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 26 -12.5 L 26.0694 -12.0833 L 25.9306 -12.0833 L 26 -12.5" class="ink solid" fill="black" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<g>
+<title>JW: Width = 1-1/4 in.  The jaw&#x27;s width, across the slot.</title>
+<rect x="25.2262" y="-6.875" width="1.5476" height="1.25" fill="none" pointer-events="all"/>
+<path d="M 25.8413 -6.4583 L 25.8413 -6.1409 L 25.8214 -6.0813 L 25.8016 -6.0615 L 25.7619 -6.0417 L 25.7222 -6.0417 L 25.6825 -6.0615 L 25.6627 -6.0813 L 25.6429 -6.1409 L 25.6429 -6.1806" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 25.9603 -6.4583 L 26.0595 -6.0417" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 26.1587 -6.4583 L 26.0595 -6.0417" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 26.1587 -6.4583 L 26.2579 -6.0417" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 26.3571 -6.4583 L 26.2579 -6.0417" class="ink" fill="none" stroke="black" stroke-width="0.0417" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

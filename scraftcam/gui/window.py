@@ -1001,6 +1001,11 @@ class Window(QWidget):
         item: QTreeWidgetItem | None = self.tree.item_at_path(
             Path(path).resolve()
         )
+        # A file just made or moved (`T.sa~6.11` #783h): read the
+        # trees again, then look once more.
+        if item is None and Path(path).exists():
+            self.model.reload_tree()
+            item = self.tree.item_at_path(Path(path).resolve())
         if item is not None:
             self.tree.setCurrentItem(item)
             self.select_item(item)

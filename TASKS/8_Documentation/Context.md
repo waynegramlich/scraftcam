@@ -62,3 +62,7 @@ numbers are shared by every task; the next is in
   `face`, `turn`, `flip`); the Z setter assembly in
   `tooling/z_setters/`; the tree's "... assembly" item with its
   [Assembly] tab and [Solid].
+* `T.sa~6.11` #S6: assembly motions (`slide`), `.step` parts,
+  `library:` outlines, keep-out zones; the vise assembly; an
+  outline's "Used by" links and File field (move or rename); a
+  child outside its parent named in red.

@@ -1,0 +1,104 @@
+kind = "outline"
+version = 6
+revolve = false
+
+[letters.JT]
+name = "Thickness"
+default = "3/4 in"
+help = "The jaw's thickness, along the slot."
+
+[letters.JW]
+name = "Width"
+default = "1-1/4 in"
+help = "The jaw's width, across the slot."
+
+[letters.JH]
+name = "Height"
+default = "1 in"
+help = "The jaw's height."
+
+[[vertices]]
+name = "V1"
+at = [0.0, 0.0]
+
+[[vertices]]
+name = "V2"
+at = [7.5, 0.0]
+
+[[vertices]]
+name = "V3"
+at = [7.5, 12.5]
+
+[[vertices]]
+name = "V4"
+at = [0.0, 12.5]
+
+[[polygons]]
+name = "jaw"
+role = "keep_out"
+vertices = ["V1", "V2", "V3", "V4"]
+z = "JH"
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "origin"
+to = "V1"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "origin"
+to = "V1"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "JT"
+kind = "horizontal"
+from = "V1"
+to = "V2"
+offset = -6.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V1"
+to = "V2"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = "JW"
+kind = "vertical"
+from = "V2"
+to = "V3"
+offset = 26.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "V2"
+to = "V3"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "vertical"
+from = "V3"
+to = "V4"
+offset = 0.0
+along = 0.5
+
+[[dimensions]]
+letter = ""
+kind = "horizontal"
+from = "V1"
+to = "V4"
+offset = 0.0
+along = 0.5

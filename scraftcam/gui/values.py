@@ -827,6 +827,91 @@ def overlaps(
     return pairs
 
 
+# Function `poking_out()`:
+def poking_out(
+    points: list[tuple[float, float]], inner: list[int], outer: list[int]
+) -> bool:
+    """Return whether a child polygon is not wholly inside its parent
+    (`T.sa~6.11` #790, #868): their edges cross, or a corner of it lies
+    outside; touching the parent's edges is fine.
+
+    Arguments:
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `inner` (`list[int]`): The child's corners.
+    * `outer` (`list[int]`): The parent's.
+
+    Returns:
+    * (`bool`): Whether some of the child is outside.
+    """
+    if crossings(points, [inner, outer]):
+        return True
+    return any(
+        not _inside(points[corner], points, outer)
+        and not _on_edge(points[corner], points, outer)
+        for corner in inner
+        if corner not in outer
+    )
+
+
+# Function `circle_in_loop()`:
+def circle_in_loop(
+    center: tuple[float, float],
+    radius: float,
+    points: list[tuple[float, float]],
+    loop: list[int],
+) -> bool:
+    """Return whether a circle lies wholly inside a polygon (#868),
+    touching allowed.
+
+    Arguments:
+    * `center` (`tuple[float, float]`): The circle's center.
+    * `radius` (`float`): Its radius.
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `loop` (`list[int]`): The polygon's corners.
+
+    Returns:
+    * (`bool`): Whether it is inside.
+    """
+    if not _inside(center, points, loop):
+        return False
+    spot: int
+    corner: int
+    for spot, corner in enumerate(loop):
+        start: tuple[float, float] = points[corner]
+        end: tuple[float, float] = points[loop[(spot + 1) % len(loop)]]
+        if _distance_to_edge(center, start, end) < radius - 1e-9:
+            return False
+    return True
+
+
+# Function `_distance_to_edge()`:
+def _distance_to_edge(
+    point: tuple[float, float],
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> float:
+    """Return how far a point is from an edge (a line segment).
+
+    Arguments:
+    * `point` (`tuple[float, float]`): The point.
+    * `start` (`tuple[float, float]`): The edge's start.
+    * `end` (`tuple[float, float]`): Its end.
+
+    Returns:
+    * (`float`): The distance.
+    """
+    dx: float = end[0] - start[0]
+    dy: float = end[1] - start[1]
+    length: float = dx * dx + dy * dy
+    along: float = 0.0
+    if length > 0.0:
+        along = (
+            (point[0] - start[0]) * dx + (point[1] - start[1]) * dy
+        ) / length
+        along = min(1.0, max(0.0, along))
+    return math.dist(point, (start[0] + along * dx, start[1] + along * dy))
+
+
 # Function `_within()`:
 def _within(
     points: list[tuple[float, float]], inner: list[int], outer: list[int]
@@ -876,6 +961,9 @@ def _inside(
     Returns:
     * (`bool`): Whether it is strictly inside.
     """
+    # On an edge: not inside.
+    if _on_edge(point, points, loop):
+        return False
     x: float
     y: float
     x, y = point
@@ -889,16 +977,35 @@ def _inside(
         by: float
         ax, ay = points[corner]
         bx, by = points[loop[(spot + 1) % len(loop)]]
-        # On the edge: not inside.
-        if (
-            abs((bx - ax) * (y - ay) - (by - ay) * (x - ax)) <= 1e-9
-            and min(ax, bx) - 1e-9 <= x <= max(ax, bx) + 1e-9
-            and min(ay, by) - 1e-9 <= y <= max(ay, by) + 1e-9
-        ):
-            return False
         if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
             inside = not inside
     return inside
+
+
+# Function `_on_edge()`:
+def _on_edge(
+    point: tuple[float, float],
+    points: list[tuple[float, float]],
+    loop: list[int],
+) -> bool:
+    """Return whether a point lies on one of a polygon's edges.
+
+    Arguments:
+    * `point` (`tuple[float, float]`): The point.
+    * `points` (`list[tuple[float, float]]`): The corners.
+    * `loop` (`list[int]`): The polygon's corners.
+
+    Returns:
+    * (`bool`): Whether it is on an edge.
+    """
+    spot: int
+    corner: int
+    for spot, corner in enumerate(loop):
+        start: tuple[float, float] = points[corner]
+        end: tuple[float, float] = points[loop[(spot + 1) % len(loop)]]
+        if _distance_to_edge(point, start, end) <= 1e-9:
+            return True
+    return False
 
 
 # Function `_segments_cross()`:

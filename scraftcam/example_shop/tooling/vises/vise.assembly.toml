@@ -1,0 +1,69 @@
+kind = "assembly"
+version = 1
+
+[letters.L]
+name = "Length"
+default = "6 in"
+help = "The body's length, along its slot."
+
+[letters.W]
+name = "Width"
+default = "4 in"
+help = "The body's width."
+
+[letters.H]
+name = "Height"
+default = "1-1/2 in"
+help = "The body's height."
+
+[letters.E]
+name = "End"
+default = "1-1/4 in"
+help = "From each end of the body to its slot."
+
+[letters.SW]
+name = "Slot width"
+default = "1-1/4 in"
+help = "The slot's width, and the jaws'."
+
+[letters.SD]
+name = "Slot depth"
+default = "1/2 in"
+help = "How deep the slot is; the jaws stand on its floor."
+
+[letters.JT]
+name = "Jaw thickness"
+default = "3/4 in"
+help = "Each jaw's thickness, along the slot."
+
+[letters.JH]
+name = "Jaw height"
+default = "1 in"
+help = "Each jaw's height above the slot's floor."
+
+[letters.OPEN]
+name = "Opening"
+default = "2 in"
+help = "Between the jaws."
+
+[[parts]]
+name = "body"
+outline = "vise_block.outline.toml"
+letters = { L = "L", W = "W", H = "H", E = "E", SW = "SW", SD = "SD" }
+
+[[parts]]
+name = "fixed_jaw"
+outline = "vise_jaw.outline.toml"
+letters = { JT = "JT", JW = "SW", JH = "JH" }
+on = "body"
+at = "V5"
+face = "slot"
+
+[[parts]]
+name = "moving_jaw"
+outline = "vise_jaw.outline.toml"
+letters = { JT = "JT", JW = "SW", JH = "JH" }
+on = "body"
+at = "V5"
+face = "slot"
+slide = "JT + OPEN"

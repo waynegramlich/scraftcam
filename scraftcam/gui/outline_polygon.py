@@ -36,6 +36,7 @@ from ..solid import (
     SolidAssembly,
     SolidRevolved,
     SolidRoundedPolygon,
+    SolidStep,
 )
 from .dimensions import RADIUS, Dimension
 from .letters import Letter
@@ -451,13 +452,17 @@ def _part_shape(part: Solid) -> JSON:
     """Return what shapes one part, for the cache's hash.
 
     Arguments:
-    * `part` (`Solid`): A `SolidRevolved` or `SolidRoundedPolygon`.
+    * `part` (`Solid`): A `SolidRevolved`, `SolidRoundedPolygon` or
+      `SolidStep`.
 
     Returns:
     * (`JSON`): Its name and corners (and, extruded, its tree).
     """
     if isinstance(part, SolidRoundedPolygon):
         return {"name": part.name, "root": _layer_shape(part.root)}
+    if isinstance(part, SolidStep):
+        # A vendor's `.step`, by what is in it (`T.sa~6.11` #783f).
+        return {"name": part.name, "step": source_digest([part.path])}
     return {
         "name": part.name,
         "corners": _corner_list(cast(SolidRevolved, part).profile),

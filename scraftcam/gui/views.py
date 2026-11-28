@@ -33,6 +33,7 @@ from ..shops import (
     is_read_only,
     measurement_problem,
     not_initialized,
+    shop_of,
     vendor_triple,
 )
 from .app import App
@@ -76,6 +77,7 @@ from .tree import (
     SHOP,
     Kind,
     Node,
+    assembly_node,
     docstring,
     edit_path,
     shop_relative,
@@ -963,9 +965,34 @@ class Panel(QFrame):
             editor.offer_outline(
                 kind.replace("_", " ").capitalize(), open_outline
             )
+        self.offer_users(editor, path)
         exposed.EDITORS.add(editor)
         self.outline = editor
         self.tabs.addTab(editor, "Outline")
+
+    def offer_users(self, editor: "OutlineEditor", path: Path) -> None:
+        """Show which of the shop's assemblies use an outline, each
+        opening in this window when clicked (`T.sa~6.11` #783h).
+
+        Arguments:
+        * `editor` (`OutlineEditor`): The outline's editor.
+        * `path` (`Path`): The outline file.
+        """
+        files: ModuleType = importlib.import_module(
+            f"{__package__}.assembly_file"
+        )
+        users: list[Path] = files.used_by(path, shop_of(path))
+        editor.offer_users(
+            [(assembly_node(user).label(), str(user)) for user in users],
+            self.open_path,
+        )
+
+        # Function `moved()`:
+        def moved(new: Path) -> None:
+            """Show the outline at its new place (the tree read again)."""
+            self.open_path(str(new))
+
+        editor.moved = moved
 
     def show_tool_values(self, editor: "OutlineEditor") -> None:
         """Show this tool's values in its kind's outline (#735, #736).
